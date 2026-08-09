@@ -170,6 +170,21 @@ public class PostServiceImpl implements PostService {
 
     @Override
     @Transactional
+    public PostDetailResponse publishPost(String authenticatedEmail, Long postId) {
+        resolveActiveAuthor(authenticatedEmail);
+        PostEntity post = postRepository.findActiveByIdForUpdate(postId)
+                .orElseThrow(this::postNotFound);
+
+        if (post.getStatus() != PostStatus.APPROVED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only approved posts can be published");
+        }
+
+        post.publish(Instant.now());
+        return toDetailResponse(post, findCategoryResponse(post.getCategoryId()));
+    }
+
+    @Override
+    @Transactional
     public void deletePost(String authenticatedEmail, Long id) {
         UserEntity author = resolveActiveAuthor(authenticatedEmail);
         Instant transitionInstant = Instant.now();
