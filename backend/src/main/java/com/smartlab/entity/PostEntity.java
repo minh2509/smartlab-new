@@ -2,6 +2,7 @@ package com.smartlab.entity;
 
 import com.smartlab.enums.PostStatus;
 import com.smartlab.enums.PostVisibility;
+import com.smartlab.enums.ReviewDecision;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -21,6 +22,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 @Entity
 @Getter
@@ -121,6 +123,42 @@ public class PostEntity {
         this.visibility = visibility;
         this.categoryId = categoryId;
         this.updatedAt = updatedAt;
+    }
+
+    public void submitForReview(Instant mutationInstant) {
+        Objects.requireNonNull(mutationInstant, "Mutation instant is required");
+        if (status != PostStatus.DRAFT) {
+            throw new IllegalStateException("Only draft posts can be submitted for review");
+        }
+
+        this.status = PostStatus.PENDING_REVIEW;
+        this.updatedAt = mutationInstant;
+    }
+
+    public void applyReviewDecision(ReviewDecision decision, Instant mutationInstant) {
+        Objects.requireNonNull(decision, "Review decision is required");
+        Objects.requireNonNull(mutationInstant, "Mutation instant is required");
+        if (status != PostStatus.PENDING_REVIEW) {
+            throw new IllegalStateException("Only pending-review posts can be reviewed");
+        }
+
+        this.status = switch (decision) {
+            case APPROVED -> PostStatus.APPROVED;
+            case REVISION_REQUIRED -> PostStatus.REVISION_REQUIRED;
+            case REJECTED -> PostStatus.REJECTED;
+        };
+        this.updatedAt = mutationInstant;
+    }
+
+    public void publish(Instant mutationInstant) {
+        Objects.requireNonNull(mutationInstant, "Mutation instant is required");
+        if (status != PostStatus.APPROVED) {
+            throw new IllegalStateException("Only approved posts can be published");
+        }
+
+        this.status = PostStatus.PUBLISHED;
+        this.publishedAt = mutationInstant;
+        this.updatedAt = mutationInstant;
     }
 
     private static Map<String, Object> copyJsonObject(Map<String, Object> source) {
