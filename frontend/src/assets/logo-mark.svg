@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" role="img" aria-label="Smart Lab">
+  <defs>
+    <linearGradient id="slMark" x1="8" y1="2" x2="40" y2="46" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FF9147"/>
+      <stop offset=".55" stop-color="#F2711C"/>
+      <stop offset="1" stop-color="#D9530A"/>
+    </linearGradient>
+  </defs>
+  <!-- Khối lục giác: ẩn dụ phòng thí nghiệm / cấu trúc phân tử -->
+  <path fill="url(#slMark)"
+        d="M21.2 1.73a5.6 5.6 0 0 1 5.6 0l14.4 8.31a5.6 5.6 0 0 1 2.8 4.85v16.62a5.6 5.6 0 0 1-2.8 4.85l-14.4 8.31a5.6 5.6 0 0 1-5.6 0L6.8 36.36A5.6 5.6 0 0 1 4 31.51V14.89a5.6 5.6 0 0 1 2.8-4.85z"/>
+  <!-- Mạng nút: 3 lĩnh vực AI · Robotics · SE hội tụ về lõi Lab -->
+  <g stroke="#fff" stroke-width="2" stroke-linecap="round" opacity=".92">
+    <path d="M24 13.6v6.6M27.9 26.2l5.1 2.9M20.1 26.2l-5.1 2.9"/>
+  </g>
+  <g fill="#fff">
+    <circle cx="24" cy="24" r="4.2"/>
+    <circle cx="24" cy="11.4" r="2.9"/>
+    <circle cx="34.9" cy="30.3" r="2.9"/>
+    <circle cx="13.1" cy="30.3" r="2.9"/>
+  </g>
+  <circle cx="24" cy="24" r="1.7" fill="#F2711C"/>
+</svg>
