@@ -1,0 +1,46 @@
+package com.smartlab.entity;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
+@Entity
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
+@Builder
+@Table(name = "content_categories")
+public class ContentCategoryEntity {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false, unique = true, length = 80)
+    private String code;
+
+    @Column(nullable = false, length = 150)
+    private String name;
+
+    @Column(length = 500)
+    private String description;
+
+    @Column(name = "is_active", nullable = false)
+    private Boolean isActive;
+
+    public static ContentCategoryEntity create(String code, String name, String description) {
+        return ContentCategoryEntity.builder()
+                .code(code)
+                .name(name)
+                .description(description)
+                .isActive(true)
+                .build();
+    }
+}
