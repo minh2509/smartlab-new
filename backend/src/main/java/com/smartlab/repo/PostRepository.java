@@ -15,6 +15,8 @@ import java.util.Optional;
 @Repository
 public interface PostRepository extends JpaRepository<PostEntity, Long> {
 
+    boolean existsBySlug(String slug);
+
     @Query("""
             select p from PostEntity p
             where p.deletedAt is null
