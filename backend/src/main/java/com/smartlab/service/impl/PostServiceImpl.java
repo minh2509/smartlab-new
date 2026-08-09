@@ -120,6 +120,24 @@ public class PostServiceImpl implements PostService {
 
     @Override
     @Transactional
+    public PostDetailResponse submitForReview(String authenticatedEmail, Long id) {
+        UserEntity author = resolveActiveAuthor(authenticatedEmail);
+        PostEntity post = postRepository.findActiveByIdForUpdate(id)
+                .orElseThrow(this::postNotFound);
+
+        if (post.getAuthorUserId() == null || !post.getAuthorUserId().equals(author.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Post is not owned by authenticated user");
+        }
+        if (post.getStatus() != PostStatus.DRAFT) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only draft posts can be submitted for review");
+        }
+
+        post.submitForReview(Instant.now());
+        return toDetailResponse(post, findCategoryResponse(post.getCategoryId()));
+    }
+
+    @Override
+    @Transactional
     public void deletePost(String authenticatedEmail, Long id) {
         UserEntity author = resolveActiveAuthor(authenticatedEmail);
         Instant transitionInstant = Instant.now();
