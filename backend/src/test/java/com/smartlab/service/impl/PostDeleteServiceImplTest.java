@@ -57,17 +57,25 @@ class PostDeleteServiceImplTest {
     private PostRepository postRepository;
     @Mock
     private PostSlugGenerator postSlugGenerator;
+    @Mock
+    private PostCreateAttemptService postCreateAttemptService;
 
     private PostService postService;
 
     @BeforeEach
     void setUp() {
-        postService = new PostServiceImpl(userRepository, contentCategoryRepository, postRepository, postSlugGenerator);
+        postService = new PostServiceImpl(
+                userRepository,
+                contentCategoryRepository,
+                postRepository,
+                postSlugGenerator,
+                postCreateAttemptService
+        );
     }
 
     @AfterEach
     void deleteNeverUsesEntityMutationOrPhysicalDeleteApis() {
-        verifyNoInteractions(contentCategoryRepository, postSlugGenerator);
+        verifyNoInteractions(contentCategoryRepository, postSlugGenerator, postCreateAttemptService);
         verify(postRepository, never()).save(any(PostEntity.class));
         verify(postRepository, never()).delete(any(PostEntity.class));
         verify(postRepository, never()).deleteById(any());

@@ -38,9 +38,9 @@ public class PostServiceImpl implements PostService {
     private final ContentCategoryRepository contentCategoryRepository;
     private final PostRepository postRepository;
     private final PostSlugGenerator postSlugGenerator;
+    private final PostCreateAttemptService postCreateAttemptService;
 
     @Override
-    @Transactional
     public PostDetailResponse createPost(String authenticatedEmail, CreatePostRequest request) {
         UserEntity author = resolveActiveAuthor(authenticatedEmail);
         ContentCategoryEntity category = resolveActiveCategory(request.getCategoryId());
@@ -49,18 +49,30 @@ public class PostServiceImpl implements PostService {
                 : request.getContentJson();
         PostVisibility visibility = request.getVisibility() == null ? PostVisibility.LAB : request.getVisibility();
         Instant creationTime = Instant.now();
-        PostEntity post = PostEntity.createDraft(
-                author.getId(),
-                request.getTitle(),
-                postSlugGenerator.generateUniqueSlug(request.getTitle()),
-                request.getExcerpt(),
-                contentJson,
-                visibility,
-                category == null ? null : category.getId(),
-                creationTime
-        );
+        for (int candidateNumber = 1; candidateNumber <= postSlugGenerator.maxCandidates(); candidateNumber++) {
+            String candidate = postSlugGenerator.candidateFor(request.getTitle(), candidateNumber);
+            if (postRepository.existsBySlug(candidate)) {
+                continue;
+            }
 
-        return toDetailResponse(postRepository.save(post), category);
+            PostEntity post = PostEntity.createDraft(
+                    author.getId(),
+                    request.getTitle(),
+                    candidate,
+                    request.getExcerpt(),
+                    contentJson,
+                    visibility,
+                    category == null ? null : category.getId(),
+                    creationTime
+            );
+            try {
+                return toDetailResponse(postCreateAttemptService.persist(post), category);
+            } catch (PostSlugCollisionException ignored) {
+                // The isolated attempt has rolled back; advance to the next bounded candidate.
+            }
+        }
+
+        throw new ResponseStatusException(HttpStatus.CONFLICT, "Unable to allocate a unique post slug");
     }
 
     @Override

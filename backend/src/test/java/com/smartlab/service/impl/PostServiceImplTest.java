@@ -20,6 +20,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.lang.reflect.Field;
@@ -31,6 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -50,24 +53,33 @@ class PostServiceImplTest {
     @Mock
     private PostSlugGenerator postSlugGenerator;
 
+    @Mock
+    private PostCreateAttemptService postCreateAttemptService;
+
     private PostServiceImpl postService;
 
     @BeforeEach
     void setUp() {
-        postService = new PostServiceImpl(userRepository, contentCategoryRepository, postRepository, postSlugGenerator);
+        postService = new PostServiceImpl(
+                userRepository,
+                contentCategoryRepository,
+                postRepository,
+                postSlugGenerator,
+                postCreateAttemptService
+        );
     }
 
     @Test
     void resolvesTrustedEmailToCanonicalActiveAuthorAndCreatesDraftWithDefaults() {
         CreatePostRequest request = request("My Post", null, null, null, null);
         when(userRepository.findByEmail("member@example.edu")).thenReturn(Optional.of(activeUser(41L)));
-        when(postSlugGenerator.generateUniqueSlug("My Post")).thenReturn("my-post");
+        when(postSlugGenerator.candidateFor("My Post", 1)).thenReturn("my-post");
         saveWithId(88L);
 
         PostDetailResponse response = postService.createPost("member@example.edu", request);
 
         ArgumentCaptor<PostEntity> savedPost = ArgumentCaptor.forClass(PostEntity.class);
-        verify(postRepository).save(savedPost.capture());
+        verify(postCreateAttemptService).persist(savedPost.capture());
         PostEntity post = savedPost.getValue();
         assertThat(post.getAuthorUserId()).isEqualTo(41L);
         assertThat(post.getContentJson()).isNotNull().isEmpty();
@@ -89,13 +101,13 @@ class PostServiceImplTest {
     void preservesSuppliedContentJsonAndPublicVisibility() {
         JsonNode content = JsonNodeFactory.instance.objectNode().put("type", "doc");
         when(userRepository.findByEmail("member@example.edu")).thenReturn(Optional.of(activeUser(41L)));
-        when(postSlugGenerator.generateUniqueSlug("Public Post")).thenReturn("public-post");
+        when(postSlugGenerator.candidateFor("Public Post", 1)).thenReturn("public-post");
         saveWithId(89L);
 
         postService.createPost("member@example.edu", request("Public Post", "Excerpt", content, PostVisibility.PUBLIC, null));
 
         ArgumentCaptor<PostEntity> savedPost = ArgumentCaptor.forClass(PostEntity.class);
-        verify(postRepository).save(savedPost.capture());
+        verify(postCreateAttemptService).persist(savedPost.capture());
         assertThat(savedPost.getValue().getContentJson()).isSameAs(content);
         assertThat(savedPost.getValue().getVisibility()).isEqualTo(PostVisibility.PUBLIC);
         assertThat(savedPost.getValue().getExcerpt()).isEqualTo("Excerpt");
@@ -106,13 +118,13 @@ class PostServiceImplTest {
         ContentCategoryEntity category = category(7L, "NEWS", "News");
         when(userRepository.findByEmail("member@example.edu")).thenReturn(Optional.of(activeUser(41L)));
         when(contentCategoryRepository.findByIdAndIsActiveTrue(7L)).thenReturn(Optional.of(category));
-        when(postSlugGenerator.generateUniqueSlug("Categorized Post")).thenReturn("categorized-post");
+        when(postSlugGenerator.candidateFor("Categorized Post", 1)).thenReturn("categorized-post");
         saveWithId(90L);
 
         PostDetailResponse response = postService.createPost("member@example.edu", request("Categorized Post", null, null, null, 7L));
 
         ArgumentCaptor<PostEntity> savedPost = ArgumentCaptor.forClass(PostEntity.class);
-        verify(postRepository).save(savedPost.capture());
+        verify(postCreateAttemptService).persist(savedPost.capture());
         assertThat(savedPost.getValue().getCategoryId()).isEqualTo(7L);
         assertThat(response.getCategory())
                 .extracting(categoryResponse -> categoryResponse.getId(), categoryResponse -> categoryResponse.getCode(), categoryResponse -> categoryResponse.getName())
@@ -122,13 +134,13 @@ class PostServiceImplTest {
     @Test
     void createsAnUncategorizedDraftWhenCategoryIsAbsentFromRequest() {
         when(userRepository.findByEmail("member@example.edu")).thenReturn(Optional.of(activeUser(41L)));
-        when(postSlugGenerator.generateUniqueSlug("Uncategorized")).thenReturn("uncategorized");
+        when(postSlugGenerator.candidateFor("Uncategorized", 1)).thenReturn("uncategorized");
         saveWithId(91L);
 
         PostDetailResponse response = postService.createPost("member@example.edu", request("Uncategorized", null, null, null, null));
 
         ArgumentCaptor<PostEntity> savedPost = ArgumentCaptor.forClass(PostEntity.class);
-        verify(postRepository).save(savedPost.capture());
+        verify(postCreateAttemptService).persist(savedPost.capture());
         assertThat(savedPost.getValue().getCategoryId()).isNull();
         assertThat(response.getCategory()).isNull();
         verifyNoInteractions(contentCategoryRepository);
@@ -143,7 +155,7 @@ class PostServiceImplTest {
                 .isInstanceOfSatisfying(ResponseStatusException.class,
                         exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
 
-        verify(postRepository, never()).save(any(PostEntity.class));
+        verifyNoInteractions(postCreateAttemptService);
         verifyNoInteractions(postSlugGenerator);
     }
 
@@ -156,7 +168,7 @@ class PostServiceImplTest {
                 .isInstanceOfSatisfying(ResponseStatusException.class,
                         exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
 
-        verify(postRepository, never()).save(any(PostEntity.class));
+        verifyNoInteractions(postCreateAttemptService);
         verifyNoInteractions(postSlugGenerator);
     }
 
@@ -168,7 +180,7 @@ class PostServiceImplTest {
                 .isInstanceOfSatisfying(ResponseStatusException.class,
                         exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED));
 
-        verifyNoInteractions(contentCategoryRepository, postSlugGenerator, postRepository);
+        verifyNoInteractions(contentCategoryRepository, postCreateAttemptService, postRepository);
     }
 
     @Test
@@ -179,7 +191,7 @@ class PostServiceImplTest {
                 .isInstanceOfSatisfying(ResponseStatusException.class,
                         exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED));
 
-        verifyNoInteractions(contentCategoryRepository, postSlugGenerator, postRepository);
+        verifyNoInteractions(contentCategoryRepository, postCreateAttemptService, postRepository);
     }
 
     @Test
@@ -188,14 +200,100 @@ class PostServiceImplTest {
                 .doesNotContain("authorUserId", "id", "slug", "status");
     }
 
+    @Test
+    void createOrchestrationHasNoOuterTransaction() throws Exception {
+        Transactional transactional = PostServiceImpl.class
+                .getMethod("createPost", String.class, CreatePostRequest.class)
+                .getAnnotation(Transactional.class);
+
+        assertThat(transactional).isNull();
+    }
+
+    @Test
+    void retriesNextCandidateAfterExactSlugCollision() {
+        when(userRepository.findByEmail("member@example.edu")).thenReturn(Optional.of(activeUser(41L)));
+        when(postSlugGenerator.maxCandidates()).thenReturn(1_000);
+        when(postSlugGenerator.candidateFor("Same Title", 1)).thenReturn("same-title");
+        when(postSlugGenerator.candidateFor("Same Title", 2)).thenReturn("same-title-2");
+        when(postCreateAttemptService.persist(any(PostEntity.class)))
+                .thenThrow(new PostSlugCollisionException(new DataIntegrityViolationException("slug collision")))
+                .thenAnswer(invocation -> assignId(invocation.getArgument(0), 92L));
+
+        PostDetailResponse response = postService.createPost(
+                "member@example.edu",
+                request("Same Title", null, null, null, null)
+        );
+
+        assertThat(response.getSlug()).isEqualTo("same-title-2");
+        verify(postCreateAttemptService, times(2)).persist(any(PostEntity.class));
+    }
+
+    @Test
+    void skipsPreexistingBaseAndRetriesCollisionOnSecondCandidate() {
+        when(userRepository.findByEmail("member@example.edu")).thenReturn(Optional.of(activeUser(41L)));
+        when(postSlugGenerator.maxCandidates()).thenReturn(1_000);
+        when(postSlugGenerator.candidateFor("Same Title", 1)).thenReturn("same-title");
+        when(postSlugGenerator.candidateFor("Same Title", 2)).thenReturn("same-title-2");
+        when(postSlugGenerator.candidateFor("Same Title", 3)).thenReturn("same-title-3");
+        when(postRepository.existsBySlug("same-title")).thenReturn(true);
+        when(postCreateAttemptService.persist(any(PostEntity.class)))
+                .thenThrow(new PostSlugCollisionException(new DataIntegrityViolationException("slug collision")))
+                .thenAnswer(invocation -> assignId(invocation.getArgument(0), 93L));
+
+        PostDetailResponse response = postService.createPost(
+                "member@example.edu",
+                request("Same Title", null, null, null, null)
+        );
+
+        assertThat(response.getSlug()).isEqualTo("same-title-3");
+        verify(postCreateAttemptService, times(2)).persist(any(PostEntity.class));
+    }
+
+    @Test
+    void propagatesNonSlugDataIntegrityViolationWithoutRetry() {
+        when(userRepository.findByEmail("member@example.edu")).thenReturn(Optional.of(activeUser(41L)));
+        when(postSlugGenerator.maxCandidates()).thenReturn(1_000);
+        when(postSlugGenerator.candidateFor("Invalid FK", 1)).thenReturn("invalid-fk");
+        DataIntegrityViolationException exception = new DataIntegrityViolationException("foreign key failure");
+        when(postCreateAttemptService.persist(any(PostEntity.class))).thenThrow(exception);
+
+        assertThatThrownBy(() -> postService.createPost(
+                "member@example.edu",
+                request("Invalid FK", null, null, null, null)
+        )).isSameAs(exception);
+
+        verify(postCreateAttemptService).persist(any(PostEntity.class));
+    }
+
+    @Test
+    void returnsConflictWhenAllBoundedCandidatesAreOccupied() {
+        when(userRepository.findByEmail("member@example.edu")).thenReturn(Optional.of(activeUser(41L)));
+        when(postSlugGenerator.maxCandidates()).thenReturn(3);
+        when(postSlugGenerator.candidateFor("Occupied", 1)).thenReturn("occupied");
+        when(postSlugGenerator.candidateFor("Occupied", 2)).thenReturn("occupied-2");
+        when(postSlugGenerator.candidateFor("Occupied", 3)).thenReturn("occupied-3");
+        when(postRepository.existsBySlug(any(String.class))).thenReturn(true);
+
+        assertThatThrownBy(() -> postService.createPost(
+                "member@example.edu",
+                request("Occupied", null, null, null, null)
+        )).isInstanceOfSatisfying(ResponseStatusException.class,
+                exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+
+        verifyNoInteractions(postCreateAttemptService);
+    }
+
     private void saveWithId(Long id) {
-        when(postRepository.save(any(PostEntity.class))).thenAnswer(invocation -> {
-            PostEntity post = invocation.getArgument(0);
-            Field field = PostEntity.class.getDeclaredField("id");
-            field.setAccessible(true);
-            field.set(post, id);
-            return post;
-        });
+        when(postSlugGenerator.maxCandidates()).thenReturn(1_000);
+        when(postCreateAttemptService.persist(any(PostEntity.class)))
+                .thenAnswer(invocation -> assignId(invocation.getArgument(0), id));
+    }
+
+    private PostEntity assignId(PostEntity post, Long id) throws ReflectiveOperationException {
+        Field field = PostEntity.class.getDeclaredField("id");
+        field.setAccessible(true);
+        field.set(post, id);
+        return post;
     }
 
     private static UserEntity activeUser(Long id) {

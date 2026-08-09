@@ -29,6 +29,17 @@ public class PostSlugGenerator {
         throw new ResponseStatusException(HttpStatus.CONFLICT, "Unable to allocate a unique post slug");
     }
 
+    public String candidateFor(String title, int candidateNumber) {
+        if (candidateNumber < 1 || candidateNumber > MAX_CANDIDATES) {
+            throw new IllegalArgumentException("Slug candidate number is outside the bounded allocation range");
+        }
+        return candidate(normalize(title), candidateNumber);
+    }
+
+    public int maxCandidates() {
+        return MAX_CANDIDATES;
+    }
+
     private String normalize(String title) {
         String normalized = Normalizer.normalize(title == null ? "" : title, Normalizer.Form.NFD)
                 .replace('đ', 'd')

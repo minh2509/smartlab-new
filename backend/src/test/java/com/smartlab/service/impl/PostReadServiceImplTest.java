@@ -53,12 +53,20 @@ class PostReadServiceImplTest {
     private PostRepository postRepository;
     @Mock
     private PostSlugGenerator postSlugGenerator;
+    @Mock
+    private PostCreateAttemptService postCreateAttemptService;
 
     private PostServiceImpl postService;
 
     @BeforeEach
     void setUp() {
-        postService = new PostServiceImpl(userRepository, contentCategoryRepository, postRepository, postSlugGenerator);
+        postService = new PostServiceImpl(
+                userRepository,
+                contentCategoryRepository,
+                postRepository,
+                postSlugGenerator,
+                postCreateAttemptService
+        );
     }
 
     @Test

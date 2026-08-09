@@ -81,6 +81,16 @@ class PostSlugGeneratorTest {
                         exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
     }
 
+    @Test
+    void everyBoundedRetryCandidateRespectsMaximumLength() {
+        PostSlugGenerator generator = generator();
+        String title = "a".repeat(500);
+
+        for (int candidateNumber = 1; candidateNumber <= generator.maxCandidates(); candidateNumber++) {
+            assertThat(generator.candidateFor(title, candidateNumber)).hasSizeLessThanOrEqualTo(260);
+        }
+    }
+
     private PostSlugGenerator generator() {
         return new PostSlugGenerator(postRepository);
     }
