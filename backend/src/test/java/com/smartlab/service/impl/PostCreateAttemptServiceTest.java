@@ -8,8 +8,8 @@ import static org.mockito.Mockito.when;
 
 import java.sql.SQLException;
 import java.time.Instant;
+import java.util.Map;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smartlab.entity.PostEntity;
 import com.smartlab.enums.PostVisibility;
 import com.smartlab.repo.PostRepository;
@@ -71,7 +71,7 @@ class PostCreateAttemptServiceTest {
                 "R14 title",
                 slug,
                 null,
-                new ObjectMapper().createObjectNode(),
+                Map.of(),
                 PostVisibility.LAB,
                 null,
                 Instant.parse("2026-08-09T00:00:00Z")

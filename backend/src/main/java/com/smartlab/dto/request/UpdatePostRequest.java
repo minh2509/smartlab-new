@@ -2,9 +2,10 @@ package com.smartlab.dto.request;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonSetter;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.smartlab.enums.PostVisibility;
 import jakarta.validation.constraints.AssertTrue;
+
+import java.util.Map;
 
 public class UpdatePostRequest {
 
@@ -21,7 +22,7 @@ public class UpdatePostRequest {
     @JsonIgnore
     private boolean contentJsonPresent;
 
-    private JsonNode contentJson;
+    private Map<String, Object> contentJson;
 
     @JsonIgnore
     private boolean visibilityPresent;
@@ -61,14 +62,14 @@ public class UpdatePostRequest {
         return excerptPresent;
     }
 
-    public JsonNode getContentJson() {
+    public Map<String, Object> getContentJson() {
         return contentJson;
     }
 
     @JsonSetter("contentJson")
-    public void setContentJson(JsonNode contentJson) {
+    public void setContentJson(Map<String, Object> contentJson) {
         this.contentJsonPresent = true;
-        this.contentJson = contentJson != null && contentJson.isNull() ? null : contentJson;
+        this.contentJson = contentJson;
     }
 
     public boolean hasContentJson() {
@@ -119,12 +120,6 @@ public class UpdatePostRequest {
     @JsonIgnore
     public boolean isExcerptValid() {
         return !excerptPresent || excerpt == null || excerpt.length() <= 500;
-    }
-
-    @AssertTrue(message = "contentJson must be a JSON object when provided")
-    @JsonIgnore
-    public boolean isContentJsonValid() {
-        return !contentJsonPresent || contentJson == null || contentJson.isObject();
     }
 
     @AssertTrue(message = "visibility must be PUBLIC or LAB when provided")

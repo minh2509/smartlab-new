@@ -1,7 +1,5 @@
 package com.smartlab.service.impl;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.smartlab.dto.request.CreatePostRequest;
 import com.smartlab.dto.response.PostDetailResponse;
 import com.smartlab.entity.ContentCategoryEntity;
@@ -27,6 +25,8 @@ import org.springframework.web.server.ResponseStatusException;
 import java.lang.reflect.Field;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -99,7 +99,9 @@ class PostServiceImplTest {
 
     @Test
     void preservesSuppliedContentJsonAndPublicVisibility() {
-        JsonNode content = JsonNodeFactory.instance.objectNode().put("type", "doc");
+        Map<String, Object> content = new LinkedHashMap<>();
+        content.put("type", "doc");
+        content.put("nested", new LinkedHashMap<>(Map.of("enabled", true)));
         when(userRepository.findByEmail("member@example.edu")).thenReturn(Optional.of(activeUser(41L)));
         when(postSlugGenerator.candidateFor("Public Post", 1)).thenReturn("public-post");
         saveWithId(89L);
@@ -108,9 +110,15 @@ class PostServiceImplTest {
 
         ArgumentCaptor<PostEntity> savedPost = ArgumentCaptor.forClass(PostEntity.class);
         verify(postCreateAttemptService).persist(savedPost.capture());
-        assertThat(savedPost.getValue().getContentJson()).isSameAs(content);
+        assertThat(savedPost.getValue().getContentJson()).isEqualTo(content).isNotSameAs(content);
         assertThat(savedPost.getValue().getVisibility()).isEqualTo(PostVisibility.PUBLIC);
         assertThat(savedPost.getValue().getExcerpt()).isEqualTo("Excerpt");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> requestNested = (Map<String, Object>) content.get("nested");
+        requestNested.put("enabled", false);
+        assertThat(((Map<?, ?>) savedPost.getValue().getContentJson().get("nested")).get("enabled"))
+                .isEqualTo(true);
     }
 
     @Test
@@ -308,7 +316,8 @@ class PostServiceImplTest {
         return ContentCategoryEntity.builder().id(id).code(code).name(name).isActive(true).build();
     }
 
-    private static CreatePostRequest request(String title, String excerpt, JsonNode contentJson, PostVisibility visibility, Long categoryId) {
+    private static CreatePostRequest request(String title, String excerpt, Map<String, Object> contentJson,
+                                             PostVisibility visibility, Long categoryId) {
         CreatePostRequest request = new CreatePostRequest();
         request.setTitle(title);
         request.setExcerpt(excerpt);

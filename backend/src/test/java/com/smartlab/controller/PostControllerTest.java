@@ -1,6 +1,5 @@
 package com.smartlab.controller;
 
-import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.smartlab.dto.request.CreatePostRequest;
 import com.smartlab.dto.request.UpdatePostRequest;
 import com.smartlab.dto.response.PostDetailResponse;
@@ -28,6 +27,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+
+import java.util.Map;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -251,7 +252,7 @@ class PostControllerTest {
     private static CreatePostRequest createRequest() {
         CreatePostRequest request = new CreatePostRequest();
         request.setTitle("Created post");
-        request.setContentJson(JsonNodeFactory.instance.objectNode().put("type", "doc"));
+        request.setContentJson(Map.of("type", "doc"));
         return request;
     }
 

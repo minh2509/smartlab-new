@@ -1,7 +1,5 @@
 package com.smartlab.service.impl;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.smartlab.dto.request.UpdatePostRequest;
 import com.smartlab.dto.response.PostDetailResponse;
 import com.smartlab.entity.ContentCategoryEntity;
@@ -32,6 +30,8 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Stream;
 
@@ -157,14 +157,14 @@ class PostPatchServiceImplTest {
     @Test
     void absentFieldsPreserveExcerptContentVisibilityAndCategory() {
         PostEntity post = draft();
-        JsonNode originalContent = post.getContentJson();
+        Map<String, Object> originalContent = post.getContentJson();
         Instant previousUpdatedAt = post.getUpdatedAt();
         stubOwnedDraft(post);
 
         postService.updatePost(OWNER_EMAIL, POST_ID, titleRequest("Only title changes"));
 
         assertThat(post.getExcerpt()).isEqualTo("Original excerpt");
-        assertThat(post.getContentJson()).isSameAs(originalContent);
+        assertThat(post.getContentJson()).isEqualTo(originalContent);
         assertThat(post.getVisibility()).isEqualTo(PostVisibility.LAB);
         assertThat(post.getCategoryId()).isNull();
         assertThat(post.getUpdatedAt()).isAfter(previousUpdatedAt);
@@ -200,7 +200,7 @@ class PostPatchServiceImplTest {
     @Test
     void explicitNullContentCreatesNewEmptyObjectWithoutMutatingRequest() {
         PostEntity post = draft();
-        JsonNode originalContent = post.getContentJson();
+        Map<String, Object> originalContent = post.getContentJson();
         UpdatePostRequest request = new UpdatePostRequest();
         request.setContentJson(null);
         stubOwnedDraft(post);
@@ -208,8 +208,7 @@ class PostPatchServiceImplTest {
         PostDetailResponse response = postService.updatePost(OWNER_EMAIL, POST_ID, request);
 
         assertThat((Object) post.getContentJson()).isNotNull().isNotSameAs(originalContent);
-        assertThat(post.getContentJson().isObject()).isTrue();
-        assertThat(post.getContentJson().size()).isZero();
+        assertThat(post.getContentJson()).isEmpty();
         assertThat(response.getContentJson()).isSameAs(post.getContentJson());
         assertThat(request.hasContentJson()).isTrue();
         assertThat(request.getContentJson()).isNull();
@@ -218,15 +217,15 @@ class PostPatchServiceImplTest {
     @Test
     void suppliedContentObjectReplacesExistingContentWithoutConversion() {
         PostEntity post = draft();
-        JsonNode replacement = JsonNodeFactory.instance.objectNode().put("type", "replacement");
+        Map<String, Object> replacement = new LinkedHashMap<>(Map.of("type", "replacement"));
         UpdatePostRequest request = new UpdatePostRequest();
         request.setContentJson(replacement);
         stubOwnedDraft(post);
 
         PostDetailResponse response = postService.updatePost(OWNER_EMAIL, POST_ID, request);
 
-        assertThat(post.getContentJson()).isSameAs(replacement);
-        assertThat(response.getContentJson()).isSameAs(replacement);
+        assertThat(post.getContentJson()).isEqualTo(replacement).isNotSameAs(replacement);
+        assertThat(response.getContentJson()).isSameAs(post.getContentJson());
         assertThat(request.getContentJson()).isSameAs(replacement);
     }
 
@@ -335,7 +334,7 @@ class PostPatchServiceImplTest {
         set(post, "coverFileId", 61L);
         set(post, "contentHtml", "<p>unchanged</p>");
         set(post, "publishedAt", publishedAt);
-        JsonNode replacement = JsonNodeFactory.instance.objectNode().put("type", "updated");
+        Map<String, Object> replacement = Map.of("type", "updated");
         UpdatePostRequest request = new UpdatePostRequest();
         request.setTitle("Updated title");
         request.setExcerpt("  exact excerpt  ");
@@ -360,7 +359,7 @@ class PostPatchServiceImplTest {
         assertThat(response.getTitle()).isEqualTo("Updated title");
         assertThat(response.getSlug()).isEqualTo("immutable-slug");
         assertThat(response.getExcerpt()).isEqualTo("  exact excerpt  ");
-        assertThat(response.getContentJson()).isSameAs(replacement);
+        assertThat(response.getContentJson()).isEqualTo(replacement);
         assertThat(response.getVisibility()).isEqualTo(PostVisibility.PUBLIC);
         assertThat(response.getStatus()).isEqualTo(PostStatus.DRAFT);
         assertThat(response.getCategory()).isNull();
@@ -449,7 +448,7 @@ class PostPatchServiceImplTest {
                     "Original title",
                     "immutable-slug",
                     "Original excerpt",
-                    JsonNodeFactory.instance.objectNode().put("type", "original"),
+                    Map.of("type", "original"),
                     PostVisibility.LAB,
                     null,
                     createdAt
@@ -494,7 +493,7 @@ class PostPatchServiceImplTest {
             String title,
             String slug,
             String excerpt,
-            JsonNode contentJson,
+            Map<String, Object> contentJson,
             String contentHtml,
             Long coverFileId,
             PostVisibility visibility,

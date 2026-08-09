@@ -1,6 +1,5 @@
 package com.smartlab.entity;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.smartlab.enums.PostStatus;
 import com.smartlab.enums.PostVisibility;
 import jakarta.persistence.Column;
@@ -25,6 +24,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.Map;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -73,10 +73,10 @@ class PostEntityMappingTest {
     }
 
     @Test
-    void mapsJsonNodeWithHibernateNativeJsonType() throws NoSuchFieldException {
+    void mapsJavaNeutralObjectMapWithHibernateNativeJsonType() throws NoSuchFieldException {
         Field contentJson = field("contentJson");
 
-        assertThat(contentJson.getType()).isEqualTo(JsonNode.class);
+        assertThat(contentJson.getType()).isEqualTo(Map.class);
         assertThat(contentJson.getAnnotation(Column.class).name()).isEqualTo("content_json");
         assertThat(contentJson.getAnnotation(Column.class).nullable()).isFalse();
         assertThat(contentJson.isAnnotationPresent(JdbcTypeCode.class)).isTrue();
@@ -131,7 +131,7 @@ class PostEntityMappingTest {
                 "Title",
                 "title",
                 null,
-                com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode(),
+                Map.of(),
                 PostVisibility.LAB,
                 null,
                 now
@@ -152,14 +152,13 @@ class PostEntityMappingTest {
         Instant publishedAt = Instant.parse("2026-08-03T10:00:00Z");
         Instant deletedAt = Instant.parse("2026-08-04T10:00:00Z");
         Instant transitionInstant = Instant.parse("2026-08-09T10:00:00Z");
-        JsonNode replacementContent = com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode()
-                .put("type", "doc");
+        Map<String, Object> replacementContent = Map.of("type", "doc");
         PostEntity post = PostEntity.createDraft(
                 10L,
                 "Original",
                 "immutable-slug",
                 "Original excerpt",
-                com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode(),
+                Map.of(),
                 PostVisibility.LAB,
                 7L,
                 createdAt
@@ -182,7 +181,7 @@ class PostEntityMappingTest {
 
         assertThat(post.getTitle()).isEqualTo("Updated");
         assertThat(post.getExcerpt()).isNull();
-        assertThat(post.getContentJson()).isSameAs(replacementContent);
+        assertThat(post.getContentJson()).isEqualTo(replacementContent).isNotSameAs(replacementContent);
         assertThat(post.getVisibility()).isEqualTo(PostVisibility.PUBLIC);
         assertThat(post.getCategoryId()).isNull();
         assertThat(post.getUpdatedAt()).isEqualTo(transitionInstant);

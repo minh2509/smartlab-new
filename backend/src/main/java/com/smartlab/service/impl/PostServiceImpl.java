@@ -1,7 +1,5 @@
 package com.smartlab.service.impl;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.smartlab.dto.request.CreatePostRequest;
 import com.smartlab.dto.request.UpdatePostRequest;
 import com.smartlab.dto.response.PostCategoryResponse;
@@ -25,6 +23,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -44,8 +43,8 @@ public class PostServiceImpl implements PostService {
     public PostDetailResponse createPost(String authenticatedEmail, CreatePostRequest request) {
         UserEntity author = resolveActiveAuthor(authenticatedEmail);
         ContentCategoryEntity category = resolveActiveCategory(request.getCategoryId());
-        JsonNode contentJson = request.getContentJson() == null
-                ? JsonNodeFactory.instance.objectNode()
+        Map<String, Object> contentJson = request.getContentJson() == null
+                ? new LinkedHashMap<>()
                 : request.getContentJson();
         PostVisibility visibility = request.getVisibility() == null ? PostVisibility.LAB : request.getVisibility();
         Instant creationTime = Instant.now();
@@ -98,8 +97,8 @@ public class PostServiceImpl implements PostService {
 
         String resolvedTitle = request.hasTitle() ? request.getTitle() : post.getTitle();
         String resolvedExcerpt = request.hasExcerpt() ? request.getExcerpt() : post.getExcerpt();
-        JsonNode resolvedContentJson = request.hasContentJson()
-                ? request.getContentJson() == null ? JsonNodeFactory.instance.objectNode() : request.getContentJson()
+        Map<String, Object> resolvedContentJson = request.hasContentJson()
+                ? request.getContentJson() == null ? new LinkedHashMap<>() : request.getContentJson()
                 : post.getContentJson();
         PostVisibility resolvedVisibility = request.hasVisibility() ? request.getVisibility() : post.getVisibility();
         Instant transitionInstant = Instant.now();

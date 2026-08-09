@@ -1,17 +1,19 @@
 package com.smartlab.dto.request;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.introspect.BeanPropertyDefinition;
 import com.smartlab.enums.PostVisibility;
+import com.fasterxml.jackson.annotation.JsonSetter;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import org.junit.jupiter.api.Test;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
+import java.util.Arrays;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class UpdatePostRequestValidationTest {
 
@@ -19,12 +21,12 @@ class UpdatePostRequestValidationTest {
     private static final Validator VALIDATOR = Validation.buildDefaultValidatorFactory().getValidator();
 
     @Test
-    void rejectsEmptyPatch() throws JsonProcessingException {
+    void rejectsEmptyPatch() throws JacksonException {
         assertInvalid(read("{}"));
     }
 
     @Test
-    void distinguishesAbsentTitle() throws JsonProcessingException {
+    void distinguishesAbsentTitle() throws JacksonException {
         UpdatePostRequest request = read("{\"excerpt\":null}");
 
         assertThat(request.hasTitle()).isFalse();
@@ -32,7 +34,7 @@ class UpdatePostRequestValidationTest {
     }
 
     @Test
-    void rejectsExplicitNullTitle() throws JsonProcessingException {
+    void rejectsExplicitNullTitle() throws JacksonException {
         UpdatePostRequest request = read("{\"title\":null}");
 
         assertThat(request.hasTitle()).isTrue();
@@ -40,7 +42,7 @@ class UpdatePostRequestValidationTest {
     }
 
     @Test
-    void acceptsPresentNonblankTitle() throws JsonProcessingException {
+    void acceptsPresentNonblankTitle() throws JacksonException {
         UpdatePostRequest request = read("{\"title\":\"Updated title\"}");
 
         assertThat(request.hasTitle()).isTrue();
@@ -49,22 +51,22 @@ class UpdatePostRequestValidationTest {
     }
 
     @Test
-    void rejectsBlankTitle() throws JsonProcessingException {
+    void rejectsBlankTitle() throws JacksonException {
         assertInvalid(read("{\"title\":\" \\t \"}"));
     }
 
     @Test
-    void acceptsTitleWithExactlyTwoHundredFiftyCharacters() throws JsonProcessingException {
+    void acceptsTitleWithExactlyTwoHundredFiftyCharacters() throws JacksonException {
         assertValid(read("{\"title\":\"" + "T".repeat(250) + "\"}"));
     }
 
     @Test
-    void rejectsTitleWithTwoHundredFiftyOneCharacters() throws JsonProcessingException {
+    void rejectsTitleWithTwoHundredFiftyOneCharacters() throws JacksonException {
         assertInvalid(read("{\"title\":\"" + "T".repeat(251) + "\"}"));
     }
 
     @Test
-    void distinguishesAbsentExcerpt() throws JsonProcessingException {
+    void distinguishesAbsentExcerpt() throws JacksonException {
         UpdatePostRequest request = read("{\"title\":\"Title\"}");
 
         assertThat(request.hasExcerpt()).isFalse();
@@ -72,7 +74,7 @@ class UpdatePostRequestValidationTest {
     }
 
     @Test
-    void distinguishesExplicitNullExcerpt() throws JsonProcessingException {
+    void distinguishesExplicitNullExcerpt() throws JacksonException {
         UpdatePostRequest request = read("{\"excerpt\":null}");
 
         assertThat(request.hasExcerpt()).isTrue();
@@ -81,22 +83,22 @@ class UpdatePostRequestValidationTest {
     }
 
     @Test
-    void acceptsBlankExcerpt() throws JsonProcessingException {
+    void acceptsBlankExcerpt() throws JacksonException {
         assertValid(read("{\"excerpt\":\" \\t \"}"));
     }
 
     @Test
-    void acceptsExcerptWithExactlyFiveHundredCharacters() throws JsonProcessingException {
+    void acceptsExcerptWithExactlyFiveHundredCharacters() throws JacksonException {
         assertValid(read("{\"excerpt\":\"" + "E".repeat(500) + "\"}"));
     }
 
     @Test
-    void rejectsExcerptWithFiveHundredOneCharacters() throws JsonProcessingException {
+    void rejectsExcerptWithFiveHundredOneCharacters() throws JacksonException {
         assertInvalid(read("{\"excerpt\":\"" + "E".repeat(501) + "\"}"));
     }
 
     @Test
-    void distinguishesAbsentContentJson() throws JsonProcessingException {
+    void distinguishesAbsentContentJson() throws JacksonException {
         UpdatePostRequest request = read("{\"title\":\"Title\"}");
 
         assertThat(request.hasContentJson()).isFalse();
@@ -104,7 +106,7 @@ class UpdatePostRequestValidationTest {
     }
 
     @Test
-    void distinguishesExplicitNullContentJson() throws JsonProcessingException {
+    void distinguishesExplicitNullContentJson() throws JacksonException {
         UpdatePostRequest request = read("{\"contentJson\":null}");
 
         assertThat(request.hasContentJson()).isTrue();
@@ -113,32 +115,40 @@ class UpdatePostRequestValidationTest {
     }
 
     @Test
-    void acceptsContentJsonObject() throws JsonProcessingException {
-        assertValid(read("{\"contentJson\":{\"type\":\"doc\"}}"));
+    void acceptsContentJsonObject() throws JacksonException {
+        UpdatePostRequest request = read("{\"contentJson\":{\"type\":\"doc\",\"nested\":{\"enabled\":true}}}");
+
+        assertThat(request.hasContentJson()).isTrue();
+        assertThat(request.getContentJson()).containsEntry("type", "doc");
+        assertValid(request);
     }
 
     @Test
-    void rejectsContentJsonArray() throws JsonProcessingException {
-        assertInvalid(read("{\"contentJson\":[]}"));
+    void rejectsContentJsonArray() {
+        assertThatThrownBy(() -> read("{\"contentJson\":[]}"))
+                .isInstanceOf(JacksonException.class);
     }
 
     @Test
-    void rejectsContentJsonString() throws JsonProcessingException {
-        assertInvalid(read("{\"contentJson\":\"content\"}"));
+    void rejectsContentJsonString() {
+        assertThatThrownBy(() -> read("{\"contentJson\":\"content\"}"))
+                .isInstanceOf(JacksonException.class);
     }
 
     @Test
-    void rejectsContentJsonNumber() throws JsonProcessingException {
-        assertInvalid(read("{\"contentJson\":1}"));
+    void rejectsContentJsonNumber() {
+        assertThatThrownBy(() -> read("{\"contentJson\":1}"))
+                .isInstanceOf(JacksonException.class);
     }
 
     @Test
-    void rejectsContentJsonBoolean() throws JsonProcessingException {
-        assertInvalid(read("{\"contentJson\":true}"));
+    void rejectsContentJsonBoolean() {
+        assertThatThrownBy(() -> read("{\"contentJson\":true}"))
+                .isInstanceOf(JacksonException.class);
     }
 
     @Test
-    void distinguishesAbsentVisibility() throws JsonProcessingException {
+    void distinguishesAbsentVisibility() throws JacksonException {
         UpdatePostRequest request = read("{\"title\":\"Title\"}");
 
         assertThat(request.hasVisibility()).isFalse();
@@ -146,7 +156,7 @@ class UpdatePostRequestValidationTest {
     }
 
     @Test
-    void rejectsExplicitNullVisibility() throws JsonProcessingException {
+    void rejectsExplicitNullVisibility() throws JacksonException {
         UpdatePostRequest request = read("{\"visibility\":null}");
 
         assertThat(request.hasVisibility()).isTrue();
@@ -154,7 +164,7 @@ class UpdatePostRequestValidationTest {
     }
 
     @Test
-    void acceptsPublicVisibility() throws JsonProcessingException {
+    void acceptsPublicVisibility() throws JacksonException {
         UpdatePostRequest request = read("{\"visibility\":\"PUBLIC\"}");
 
         assertThat(request.getVisibility()).isEqualTo(PostVisibility.PUBLIC);
@@ -162,7 +172,7 @@ class UpdatePostRequestValidationTest {
     }
 
     @Test
-    void acceptsLabVisibility() throws JsonProcessingException {
+    void acceptsLabVisibility() throws JacksonException {
         UpdatePostRequest request = read("{\"visibility\":\"LAB\"}");
 
         assertThat(request.getVisibility()).isEqualTo(PostVisibility.LAB);
@@ -170,12 +180,12 @@ class UpdatePostRequestValidationTest {
     }
 
     @Test
-    void rejectsProjectVisibility() throws JsonProcessingException {
+    void rejectsProjectVisibility() throws JacksonException {
         assertInvalid(read("{\"visibility\":\"PROJECT\"}"));
     }
 
     @Test
-    void distinguishesAbsentCategoryId() throws JsonProcessingException {
+    void distinguishesAbsentCategoryId() throws JacksonException {
         UpdatePostRequest request = read("{\"title\":\"Title\"}");
 
         assertThat(request.hasCategoryId()).isFalse();
@@ -183,7 +193,7 @@ class UpdatePostRequestValidationTest {
     }
 
     @Test
-    void distinguishesExplicitNullCategoryId() throws JsonProcessingException {
+    void distinguishesExplicitNullCategoryId() throws JacksonException {
         UpdatePostRequest request = read("{\"categoryId\":null}");
 
         assertThat(request.hasCategoryId()).isTrue();
@@ -192,28 +202,25 @@ class UpdatePostRequestValidationTest {
     }
 
     @Test
-    void acceptsPositiveCategoryId() throws JsonProcessingException {
+    void acceptsPositiveCategoryId() throws JacksonException {
         assertValid(read("{\"categoryId\":1}"));
     }
 
     @Test
-    void rejectsZeroCategoryId() throws JsonProcessingException {
+    void rejectsZeroCategoryId() throws JacksonException {
         assertInvalid(read("{\"categoryId\":0}"));
     }
 
     @Test
-    void rejectsNegativeCategoryId() throws JsonProcessingException {
+    void rejectsNegativeCategoryId() throws JacksonException {
         assertInvalid(read("{\"categoryId\":-1}"));
     }
 
     @Test
     void exposesOnlyApprovedMutableFieldsToJackson() {
-        Set<String> bindableFields = OBJECT_MAPPER.getDeserializationConfig()
-                .introspect(OBJECT_MAPPER.constructType(UpdatePostRequest.class))
-                .findProperties()
-                .stream()
-                .filter(BeanPropertyDefinition::couldDeserialize)
-                .map(BeanPropertyDefinition::getName)
+        Set<String> bindableFields = Arrays.stream(UpdatePostRequest.class.getDeclaredMethods())
+                .filter(method -> method.isAnnotationPresent(JsonSetter.class))
+                .map(method -> method.getAnnotation(JsonSetter.class).value())
                 .collect(java.util.stream.Collectors.toSet());
 
         assertThat(bindableFields).containsExactlyInAnyOrder(
@@ -225,7 +232,7 @@ class UpdatePostRequestValidationTest {
         );
     }
 
-    private static UpdatePostRequest read(String json) throws JsonProcessingException {
+    private static UpdatePostRequest read(String json) throws JacksonException {
         return OBJECT_MAPPER.readValue(json, UpdatePostRequest.class);
     }
 

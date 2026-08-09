@@ -1,7 +1,5 @@
 package com.smartlab.service.impl;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.smartlab.entity.PostEntity;
 import com.smartlab.entity.UserEntity;
 import com.smartlab.enums.PostStatus;
@@ -29,6 +27,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.time.Instant;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Stream;
 
@@ -201,7 +200,7 @@ class PostDeleteServiceImplTest {
                 "Title",
                 "slug",
                 "Excerpt",
-                JsonNodeFactory.instance.objectNode(),
+                Map.of(),
                 PostVisibility.LAB,
                 null,
                 Instant.parse("2026-08-01T10:00:00Z")
@@ -250,7 +249,7 @@ class PostDeleteServiceImplTest {
             String title,
             String slug,
             String excerpt,
-            JsonNode contentJson,
+            Map<String, Object> contentJson,
             String contentHtml,
             Long coverFileId,
             PostVisibility visibility,

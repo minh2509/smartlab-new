@@ -1,6 +1,5 @@
 package com.smartlab.entity;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.smartlab.enums.PostStatus;
 import com.smartlab.enums.PostVisibility;
 import jakarta.persistence.Column;
@@ -18,6 +17,10 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 @Entity
 @Getter
@@ -48,7 +51,7 @@ public class PostEntity {
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "content_json", nullable = false, columnDefinition = "jsonb")
-    private JsonNode contentJson;
+    private Map<String, Object> contentJson;
 
     @Column(name = "content_html", columnDefinition = "TEXT")
     private String contentHtml;
@@ -81,7 +84,7 @@ public class PostEntity {
             String title,
             String slug,
             String excerpt,
-            JsonNode contentJson,
+            Map<String, Object> contentJson,
             PostVisibility visibility,
             Long categoryId,
             Instant creationTime
@@ -91,7 +94,7 @@ public class PostEntity {
         post.title = title;
         post.slug = slug;
         post.excerpt = excerpt;
-        post.contentJson = contentJson;
+        post.contentJson = copyJsonObject(contentJson);
         post.visibility = visibility;
         post.categoryId = categoryId;
         post.status = PostStatus.DRAFT;
@@ -103,7 +106,7 @@ public class PostEntity {
     public void applyDraftUpdate(
             String title,
             String excerpt,
-            JsonNode contentJson,
+            Map<String, Object> contentJson,
             PostVisibility visibility,
             Long categoryId,
             Instant updatedAt
@@ -114,9 +117,38 @@ public class PostEntity {
 
         this.title = title;
         this.excerpt = excerpt;
-        this.contentJson = contentJson;
+        this.contentJson = copyJsonObject(contentJson);
         this.visibility = visibility;
         this.categoryId = categoryId;
         this.updatedAt = updatedAt;
+    }
+
+    private static Map<String, Object> copyJsonObject(Map<String, Object> source) {
+        if (source == null) {
+            return null;
+        }
+
+        Map<String, Object> copy = new LinkedHashMap<>();
+        source.forEach((key, value) -> copy.put(key, copyJsonValue(value)));
+        return copy;
+    }
+
+    private static Object copyJsonValue(Object value) {
+        if (value instanceof Map<?, ?> nestedMap) {
+            Map<String, Object> copy = new LinkedHashMap<>();
+            nestedMap.forEach((key, nestedValue) -> {
+                if (!(key instanceof String stringKey)) {
+                    throw new IllegalArgumentException("JSON object keys must be strings");
+                }
+                copy.put(stringKey, copyJsonValue(nestedValue));
+            });
+            return copy;
+        }
+        if (value instanceof List<?> list) {
+            List<Object> copy = new ArrayList<>(list.size());
+            list.forEach(item -> copy.add(copyJsonValue(item)));
+            return copy;
+        }
+        return value;
     }
 }

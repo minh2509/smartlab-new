@@ -1,12 +1,12 @@
 package com.smartlab.dto.response;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.smartlab.enums.PostStatus;
 import com.smartlab.enums.PostVisibility;
 import lombok.Builder;
 import lombok.Value;
 
 import java.time.Instant;
+import java.util.Map;
 
 @Value
 @Builder
@@ -15,7 +15,7 @@ public class PostDetailResponse {
     String title;
     String slug;
     String excerpt;
-    JsonNode contentJson;
+    Map<String, Object> contentJson;
     PostVisibility visibility;
     PostStatus status;
     PostCategoryResponse category;

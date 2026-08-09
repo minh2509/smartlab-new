@@ -1,7 +1,5 @@
 package com.smartlab.service.impl;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.smartlab.dto.response.PostDetailResponse;
 import com.smartlab.dto.response.PostSummaryResponse;
 import com.smartlab.entity.ContentCategoryEntity;
@@ -28,6 +26,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.lang.reflect.Field;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Stream;
 
@@ -218,14 +217,14 @@ class PostReadServiceImplTest {
 
     @Test
     void detailPreservesContentJsonWithoutExposingInternalPostFields() {
-        JsonNode content = JsonNodeFactory.instance.objectNode().put("type", "doc");
+        Map<String, Object> content = Map.of("type", "doc");
         PostEntity post = post(1L, VIEWER_ID, PostStatus.DRAFT, PostVisibility.LAB, null, "detail", 1, content);
         activeViewer();
         when(postRepository.findActiveBySlug("detail")).thenReturn(Optional.of(post));
 
         PostDetailResponse response = postService.getPostBySlug(VIEWER_EMAIL, "detail");
 
-        assertThat(response.getContentJson()).isSameAs(content);
+        assertThat(response.getContentJson()).isEqualTo(content);
         assertThat(PostDetailResponse.class.getDeclaredFields()).extracting(Field::getName)
                 .doesNotContain("authorUserId", "deletedAt", "contentHtml");
         verify(postRepository, never()).save(any(PostEntity.class));
@@ -260,11 +259,11 @@ class PostReadServiceImplTest {
 
     private static PostEntity post(Long id, Long authorId, PostStatus status, PostVisibility visibility, Long categoryId, String slug, int second) {
         return post(id, authorId, status, visibility, categoryId, slug, second,
-                JsonNodeFactory.instance.objectNode().put("id", id));
+                Map.of("id", id));
     }
 
     private static PostEntity post(Long id, Long authorId, PostStatus status, PostVisibility visibility, Long categoryId, String slug,
-                                   int second, JsonNode content) {
+                                   int second, Map<String, Object> content) {
         try {
             Instant createdAt = Instant.parse("2026-01-01T00:00:00Z").plusSeconds(second);
             PostEntity post = PostEntity.createDraft(authorId, "Title " + id, slug, "Excerpt", content,

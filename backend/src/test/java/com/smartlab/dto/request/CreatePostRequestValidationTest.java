@@ -1,22 +1,24 @@
 package com.smartlab.dto.request;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.smartlab.enums.PostStatus;
 import com.smartlab.enums.PostVisibility;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.Arrays;
+import java.util.Map;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class CreatePostRequestValidationTest {
 
     private static final Validator VALIDATOR = Validation.buildDefaultValidatorFactory().getValidator();
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @Test
     void postStatusContainsExactlyTheApprovedValues() {
@@ -100,33 +102,46 @@ class CreatePostRequestValidationTest {
     }
 
     @Test
+    void acceptsAbsentContentJson() {
+        assertValid(OBJECT_MAPPER.readValue("{\"title\":\"Title\"}", CreatePostRequest.class));
+    }
+
+    @Test
     void acceptsEmptyContentJsonObject() {
-        assertValid(request("Title", null, JsonNodeFactory.instance.objectNode(), null, null));
+        assertValid(request("Title", null, Map.of(), null, null));
     }
 
     @Test
     void acceptsNormalContentJsonObject() {
-        assertValid(request("Title", null, JsonNodeFactory.instance.objectNode().put("type", "doc"), null, null));
+        assertValid(request("Title", null, Map.of("type", "doc", "nested", Map.of("enabled", true)), null, null));
     }
 
     @Test
     void rejectsContentJsonArray() {
-        assertInvalid(request("Title", null, JsonNodeFactory.instance.arrayNode(), null, null));
+        assertThatThrownBy(() -> OBJECT_MAPPER.readValue(
+                "{\"title\":\"Title\",\"contentJson\":[]}", CreatePostRequest.class))
+                .isInstanceOf(tools.jackson.core.JacksonException.class);
     }
 
     @Test
     void rejectsContentJsonString() {
-        assertInvalid(request("Title", null, JsonNodeFactory.instance.textNode("content"), null, null));
+        assertThatThrownBy(() -> OBJECT_MAPPER.readValue(
+                "{\"title\":\"Title\",\"contentJson\":\"content\"}", CreatePostRequest.class))
+                .isInstanceOf(tools.jackson.core.JacksonException.class);
     }
 
     @Test
     void rejectsContentJsonNumber() {
-        assertInvalid(request("Title", null, JsonNodeFactory.instance.numberNode(1), null, null));
+        assertThatThrownBy(() -> OBJECT_MAPPER.readValue(
+                "{\"title\":\"Title\",\"contentJson\":1}", CreatePostRequest.class))
+                .isInstanceOf(tools.jackson.core.JacksonException.class);
     }
 
     @Test
     void rejectsContentJsonBoolean() {
-        assertInvalid(request("Title", null, JsonNodeFactory.instance.booleanNode(true), null, null));
+        assertThatThrownBy(() -> OBJECT_MAPPER.readValue(
+                "{\"title\":\"Title\",\"contentJson\":true}", CreatePostRequest.class))
+                .isInstanceOf(tools.jackson.core.JacksonException.class);
     }
 
     @Test
@@ -180,7 +195,7 @@ class CreatePostRequestValidationTest {
     private static CreatePostRequest request(
             String title,
             String excerpt,
-            JsonNode contentJson,
+            Map<String, Object> contentJson,
             PostVisibility visibility,
             Long categoryId
     ) {

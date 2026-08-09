@@ -1,10 +1,10 @@
 package com.smartlab.dto.response;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.Map;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -51,7 +51,7 @@ class PostResponseContractTest {
                 .filteredOn(field -> field.getName().equals("contentJson"))
                 .singleElement()
                 .extracting(field -> field.getType())
-                .isEqualTo(JsonNode.class);
+                .isEqualTo(Map.class);
     }
 
     @Test
