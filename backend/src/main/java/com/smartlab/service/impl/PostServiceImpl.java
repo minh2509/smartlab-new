@@ -108,6 +108,31 @@ public class PostServiceImpl implements PostService {
     }
 
     @Override
+    @Transactional
+    public void deletePost(String authenticatedEmail, Long id) {
+        UserEntity author = resolveActiveAuthor(authenticatedEmail);
+        Instant transitionInstant = Instant.now();
+        int affectedRows = postRepository.softDeleteOwnedDraft(id, author.getId(), transitionInstant);
+
+        if (affectedRows == 1) {
+            return;
+        }
+        if (affectedRows != 0) {
+            throw new IllegalStateException("Unexpected soft delete affected-row count: " + affectedRows);
+        }
+
+        PostEntity post = postRepository.findActiveById(id)
+                .orElseThrow(this::postNotFound);
+        if (post.getAuthorUserId() == null || !post.getAuthorUserId().equals(author.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Post is not owned by authenticated user");
+        }
+        if (post.getStatus() != PostStatus.DRAFT) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Post is not a draft");
+        }
+        throw new ResponseStatusException(HttpStatus.CONFLICT, "Post deletion did not complete");
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public List<PostSummaryResponse> getReadablePosts(String authenticatedEmail) {
         UserEntity viewer = resolveActiveAuthor(authenticatedEmail);

@@ -12,6 +12,8 @@ public interface PostService {
 
     PostDetailResponse updatePost(String authenticatedEmail, Long id, UpdatePostRequest request);
 
+    void deletePost(String authenticatedEmail, Long id);
+
     List<PostSummaryResponse> getReadablePosts(String authenticatedEmail);
 
     PostDetailResponse getPostBySlug(String authenticatedEmail, String slug);
