@@ -1,6 +1,7 @@
 package com.smartlab.controller;
 
 import com.smartlab.dto.request.CreatePostRequest;
+import com.smartlab.dto.request.ReviewPostRequest;
 import com.smartlab.dto.request.UpdatePostRequest;
 import com.smartlab.dto.response.PostDetailResponse;
 import com.smartlab.dto.response.PostSummaryResponse;
@@ -8,6 +9,7 @@ import com.smartlab.service.PostService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -30,6 +32,28 @@ public class PostController {
     @PostMapping
     public PostDetailResponse createPost(Authentication authentication, @Valid @RequestBody CreatePostRequest request) {
         return postService.createPost(authentication.getName(), request);
+    }
+
+    @PostMapping("/{id}/submit")
+    @PreAuthorize("hasAuthority('posts.submit')")
+    public PostDetailResponse submitPost(Authentication authentication, @PathVariable Long id) {
+        return postService.submitForReview(authentication.getName(), id);
+    }
+
+    @PostMapping("/{id}/reviews")
+    @PreAuthorize("hasAuthority('posts.review')")
+    public PostDetailResponse reviewPost(
+            Authentication authentication,
+            @PathVariable Long id,
+            @Valid @RequestBody ReviewPostRequest request
+    ) {
+        return postService.reviewPost(authentication.getName(), id, request);
+    }
+
+    @PostMapping("/{id}/publish")
+    @PreAuthorize("hasAuthority('posts.publish')")
+    public PostDetailResponse publishPost(Authentication authentication, @PathVariable Long id) {
+        return postService.publishPost(authentication.getName(), id);
     }
 
     @GetMapping
