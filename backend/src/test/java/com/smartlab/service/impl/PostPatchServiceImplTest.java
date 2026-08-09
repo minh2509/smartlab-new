@@ -9,6 +9,7 @@ import com.smartlab.enums.PostStatus;
 import com.smartlab.enums.PostVisibility;
 import com.smartlab.repo.ContentCategoryRepository;
 import com.smartlab.repo.PostRepository;
+import com.smartlab.repo.PostReviewRepository;
 import com.smartlab.repo.UserRepository;
 import com.smartlab.service.PostService;
 import com.smartlab.service.PostSlugGenerator;
@@ -57,6 +58,8 @@ class PostPatchServiceImplTest {
     @Mock
     private PostRepository postRepository;
     @Mock
+    private PostReviewRepository postReviewRepository;
+    @Mock
     private PostSlugGenerator postSlugGenerator;
     @Mock
     private PostCreateAttemptService postCreateAttemptService;
@@ -69,6 +72,7 @@ class PostPatchServiceImplTest {
                 userRepository,
                 contentCategoryRepository,
                 postRepository,
+                postReviewRepository,
                 postSlugGenerator,
                 postCreateAttemptService
         );

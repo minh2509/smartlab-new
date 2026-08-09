@@ -9,6 +9,7 @@ import com.smartlab.enums.PostStatus;
 import com.smartlab.enums.PostVisibility;
 import com.smartlab.repo.ContentCategoryRepository;
 import com.smartlab.repo.PostRepository;
+import com.smartlab.repo.PostReviewRepository;
 import com.smartlab.repo.UserRepository;
 import com.smartlab.service.PostSlugGenerator;
 import org.junit.jupiter.api.BeforeEach;
@@ -51,6 +52,9 @@ class PostServiceImplTest {
     private PostRepository postRepository;
 
     @Mock
+    private PostReviewRepository postReviewRepository;
+
+    @Mock
     private PostSlugGenerator postSlugGenerator;
 
     @Mock
@@ -64,6 +68,7 @@ class PostServiceImplTest {
                 userRepository,
                 contentCategoryRepository,
                 postRepository,
+                postReviewRepository,
                 postSlugGenerator,
                 postCreateAttemptService
         );

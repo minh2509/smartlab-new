@@ -1,17 +1,20 @@
 package com.smartlab.service.impl;
 
 import com.smartlab.dto.request.CreatePostRequest;
+import com.smartlab.dto.request.ReviewPostRequest;
 import com.smartlab.dto.request.UpdatePostRequest;
 import com.smartlab.dto.response.PostCategoryResponse;
 import com.smartlab.dto.response.PostDetailResponse;
 import com.smartlab.dto.response.PostSummaryResponse;
 import com.smartlab.entity.ContentCategoryEntity;
 import com.smartlab.entity.PostEntity;
+import com.smartlab.entity.PostReviewEntity;
 import com.smartlab.entity.UserEntity;
 import com.smartlab.enums.PostVisibility;
 import com.smartlab.enums.PostStatus;
 import com.smartlab.repo.ContentCategoryRepository;
 import com.smartlab.repo.PostRepository;
+import com.smartlab.repo.PostReviewRepository;
 import com.smartlab.repo.UserRepository;
 import com.smartlab.service.PostService;
 import com.smartlab.service.PostSlugGenerator;
@@ -36,6 +39,7 @@ public class PostServiceImpl implements PostService {
     private final UserRepository userRepository;
     private final ContentCategoryRepository contentCategoryRepository;
     private final PostRepository postRepository;
+    private final PostReviewRepository postReviewRepository;
     private final PostSlugGenerator postSlugGenerator;
     private final PostCreateAttemptService postCreateAttemptService;
 
@@ -133,6 +137,34 @@ public class PostServiceImpl implements PostService {
         }
 
         post.submitForReview(Instant.now());
+        return toDetailResponse(post, findCategoryResponse(post.getCategoryId()));
+    }
+
+    @Override
+    @Transactional
+    public PostDetailResponse reviewPost(String authenticatedEmail, Long postId, ReviewPostRequest request) {
+        UserEntity reviewer = resolveActiveAuthor(authenticatedEmail);
+        PostEntity post = postRepository.findActiveByIdForUpdate(postId)
+                .orElseThrow(this::postNotFound);
+
+        if (post.getAuthorUserId() != null && post.getAuthorUserId().equals(reviewer.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Post authors cannot review their own posts");
+        }
+        if (post.getStatus() != PostStatus.PENDING_REVIEW) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only pending-review posts can be reviewed");
+        }
+
+        Instant reviewInstant = Instant.now();
+        PostReviewEntity review = PostReviewEntity.create(
+                post.getId(),
+                reviewer.getId(),
+                request.decision(),
+                request.reason(),
+                reviewInstant
+        );
+        post.applyReviewDecision(request.decision(), reviewInstant);
+        postReviewRepository.saveAndFlush(review);
+
         return toDetailResponse(post, findCategoryResponse(post.getCategoryId()));
     }
 

@@ -1,6 +1,7 @@
 package com.smartlab.service;
 
 import com.smartlab.dto.request.CreatePostRequest;
+import com.smartlab.dto.request.ReviewPostRequest;
 import com.smartlab.dto.request.UpdatePostRequest;
 import com.smartlab.dto.response.PostDetailResponse;
 import com.smartlab.dto.response.PostSummaryResponse;
@@ -13,6 +14,8 @@ public interface PostService {
     PostDetailResponse updatePost(String authenticatedEmail, Long id, UpdatePostRequest request);
 
     PostDetailResponse submitForReview(String authenticatedEmail, Long id);
+
+    PostDetailResponse reviewPost(String authenticatedEmail, Long postId, ReviewPostRequest request);
 
     void deletePost(String authenticatedEmail, Long id);
 
