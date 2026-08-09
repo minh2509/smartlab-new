@@ -99,4 +99,24 @@ public class PostEntity {
         post.updatedAt = creationTime;
         return post;
     }
+
+    public void applyDraftUpdate(
+            String title,
+            String excerpt,
+            JsonNode contentJson,
+            PostVisibility visibility,
+            Long categoryId,
+            Instant updatedAt
+    ) {
+        if (status != PostStatus.DRAFT) {
+            throw new IllegalStateException("Only draft posts can be updated");
+        }
+
+        this.title = title;
+        this.excerpt = excerpt;
+        this.contentJson = contentJson;
+        this.visibility = visibility;
+        this.categoryId = categoryId;
+        this.updatedAt = updatedAt;
+    }
 }

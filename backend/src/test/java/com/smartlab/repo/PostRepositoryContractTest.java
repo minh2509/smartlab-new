@@ -1,8 +1,10 @@
 package com.smartlab.repo;
 
 import com.smartlab.entity.PostEntity;
+import jakarta.persistence.LockModeType;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
@@ -53,6 +55,17 @@ class PostRepositoryContractTest {
         assertThat(query).contains("p.authorUserId = :authorUserId");
         assertThat(query).contains("p.deletedAt is null");
         assertThat(query).contains("p.status = :status");
+    }
+
+    @Test
+    void patchLookupUsesPessimisticWriteLockAndExcludesDeletedPosts() throws NoSuchMethodException {
+        Method method = PostRepository.class.getMethod("findActiveByIdForUpdate", Long.class);
+        Lock lock = method.getAnnotation(Lock.class);
+        String query = method.getAnnotation(Query.class).value();
+
+        assertThat(lock).isNotNull();
+        assertThat(lock.value()).isEqualTo(LockModeType.PESSIMISTIC_WRITE);
+        assertThat(query).contains("p.id = :id", "p.deletedAt is null");
     }
 
     @Test

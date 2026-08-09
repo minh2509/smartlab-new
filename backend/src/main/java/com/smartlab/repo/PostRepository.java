@@ -2,7 +2,9 @@ package com.smartlab.repo;
 
 import com.smartlab.entity.PostEntity;
 import com.smartlab.enums.PostStatus;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -44,6 +46,14 @@ public interface PostRepository extends JpaRepository<PostEntity, Long> {
               and p.deletedAt is null
             """)
     Optional<PostEntity> findActiveById(@Param("id") Long id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select p from PostEntity p
+            where p.id = :id
+              and p.deletedAt is null
+            """)
+    Optional<PostEntity> findActiveByIdForUpdate(@Param("id") Long id);
 
     @Query("""
             select p from PostEntity p

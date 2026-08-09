@@ -145,6 +145,58 @@ class PostEntityMappingTest {
         assertThat(post.getDeletedAt()).isNull();
     }
 
+    @Test
+    void controlledDraftUpdateChangesOnlyApprovedFieldsAndUpdatedAt() throws IllegalAccessException {
+        Instant createdAt = Instant.parse("2026-08-01T10:00:00Z");
+        Instant previousUpdatedAt = Instant.parse("2026-08-02T10:00:00Z");
+        Instant publishedAt = Instant.parse("2026-08-03T10:00:00Z");
+        Instant deletedAt = Instant.parse("2026-08-04T10:00:00Z");
+        Instant transitionInstant = Instant.parse("2026-08-09T10:00:00Z");
+        JsonNode replacementContent = com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode()
+                .put("type", "doc");
+        PostEntity post = PostEntity.createDraft(
+                10L,
+                "Original",
+                "immutable-slug",
+                "Original excerpt",
+                com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode(),
+                PostVisibility.LAB,
+                7L,
+                createdAt
+        );
+        set(post, "projectId", 20L);
+        set(post, "coverFileId", 30L);
+        set(post, "contentHtml", "<p>rendered</p>");
+        set(post, "publishedAt", publishedAt);
+        set(post, "deletedAt", deletedAt);
+        set(post, "updatedAt", previousUpdatedAt);
+
+        post.applyDraftUpdate(
+                "Updated",
+                null,
+                replacementContent,
+                PostVisibility.PUBLIC,
+                null,
+                transitionInstant
+        );
+
+        assertThat(post.getTitle()).isEqualTo("Updated");
+        assertThat(post.getExcerpt()).isNull();
+        assertThat(post.getContentJson()).isSameAs(replacementContent);
+        assertThat(post.getVisibility()).isEqualTo(PostVisibility.PUBLIC);
+        assertThat(post.getCategoryId()).isNull();
+        assertThat(post.getUpdatedAt()).isEqualTo(transitionInstant);
+        assertThat(post.getSlug()).isEqualTo("immutable-slug");
+        assertThat(post.getAuthorUserId()).isEqualTo(10L);
+        assertThat(post.getStatus()).isEqualTo(PostStatus.DRAFT);
+        assertThat(post.getProjectId()).isEqualTo(20L);
+        assertThat(post.getCoverFileId()).isEqualTo(30L);
+        assertThat(post.getContentHtml()).isEqualTo("<p>rendered</p>");
+        assertThat(post.getPublishedAt()).isEqualTo(publishedAt);
+        assertThat(post.getDeletedAt()).isEqualTo(deletedAt);
+        assertThat(post.getCreatedAt()).isEqualTo(createdAt);
+    }
+
     private static Set<String> fieldNames() {
         return Arrays.stream(PostEntity.class.getDeclaredFields())
                 .map(Field::getName)
@@ -157,6 +209,12 @@ class PostEntityMappingTest {
         } catch (NoSuchFieldException exception) {
             throw new AssertionError(exception);
         }
+    }
+
+    private static void set(PostEntity post, String fieldName, Object value) throws IllegalAccessException {
+        Field field = field(fieldName);
+        field.setAccessible(true);
+        field.set(post, value);
     }
 
     private static void assertColumn(String fieldName, String columnName, boolean nullable, boolean unique, int length) throws NoSuchFieldException {

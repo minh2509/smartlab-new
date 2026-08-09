@@ -3,6 +3,7 @@ package com.smartlab.service.impl;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.smartlab.dto.request.CreatePostRequest;
+import com.smartlab.dto.request.UpdatePostRequest;
 import com.smartlab.dto.response.PostCategoryResponse;
 import com.smartlab.dto.response.PostDetailResponse;
 import com.smartlab.dto.response.PostSummaryResponse;
@@ -60,6 +61,50 @@ public class PostServiceImpl implements PostService {
         );
 
         return toDetailResponse(postRepository.save(post), category);
+    }
+
+    @Override
+    @Transactional
+    public PostDetailResponse updatePost(String authenticatedEmail, Long id, UpdatePostRequest request) {
+        UserEntity viewer = resolveActiveAuthor(authenticatedEmail);
+        PostEntity post = postRepository.findActiveByIdForUpdate(id)
+                .orElseThrow(this::postNotFound);
+
+        if (post.getAuthorUserId() == null || !post.getAuthorUserId().equals(viewer.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Post is not owned by authenticated user");
+        }
+        if (post.getStatus() != PostStatus.DRAFT) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only draft posts can be updated");
+        }
+
+        ContentCategoryEntity suppliedCategory = null;
+        Long resolvedCategoryId = post.getCategoryId();
+        if (request.hasCategoryId()) {
+            suppliedCategory = resolveActiveCategory(request.getCategoryId());
+            resolvedCategoryId = suppliedCategory == null ? null : suppliedCategory.getId();
+        }
+
+        String resolvedTitle = request.hasTitle() ? request.getTitle() : post.getTitle();
+        String resolvedExcerpt = request.hasExcerpt() ? request.getExcerpt() : post.getExcerpt();
+        JsonNode resolvedContentJson = request.hasContentJson()
+                ? request.getContentJson() == null ? JsonNodeFactory.instance.objectNode() : request.getContentJson()
+                : post.getContentJson();
+        PostVisibility resolvedVisibility = request.hasVisibility() ? request.getVisibility() : post.getVisibility();
+        Instant transitionInstant = Instant.now();
+
+        post.applyDraftUpdate(
+                resolvedTitle,
+                resolvedExcerpt,
+                resolvedContentJson,
+                resolvedVisibility,
+                resolvedCategoryId,
+                transitionInstant
+        );
+
+        PostCategoryResponse category = request.hasCategoryId()
+                ? toCategoryResponse(suppliedCategory)
+                : findCategoryResponse(resolvedCategoryId);
+        return toDetailResponse(post, category);
     }
 
     @Override
