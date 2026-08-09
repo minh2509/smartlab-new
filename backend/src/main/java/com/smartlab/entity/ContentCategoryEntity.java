@@ -34,4 +34,13 @@ public class ContentCategoryEntity {
 
     @Column(name = "is_active", nullable = false)
     private Boolean isActive;
+
+    public static ContentCategoryEntity create(String code, String name, String description) {
+        return ContentCategoryEntity.builder()
+                .code(code)
+                .name(name)
+                .description(description)
+                .isActive(true)
+                .build();
+    }
 }
