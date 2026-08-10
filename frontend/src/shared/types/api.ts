@@ -39,6 +39,39 @@ export type Permission = {
   isActive: boolean
 }
 
+export type FileResponse = {
+  id: number
+  originalName: string
+  mimeType: string
+  sizeBytes: number
+  accessScope: string
+  description?: string
+  createdAt?: string
+}
+
+export type ResearchField = {
+  id: number
+  code: string
+  name: string
+  description?: string
+  isActive: boolean
+}
+
+export type MemberProfile = {
+  userId: string
+  name: string
+  email?: string
+  publicEmail?: string
+  phone?: string
+  bio?: string
+  joinedLabAt?: string
+  activeStatus: string
+  isFeatured: boolean
+  featuredOrder?: number
+  avatar?: FileResponse
+  researchFields: ResearchField[]
+}
+
 export type ApiErrorPayload = {
   error?: boolean
   message?: string

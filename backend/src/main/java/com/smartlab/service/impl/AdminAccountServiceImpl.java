@@ -1,6 +1,7 @@
 package com.smartlab.service.impl;
 
 import com.smartlab.entity.AccountInvitationEntity;
+import com.smartlab.entity.MemberProfileEntity;
 import com.smartlab.entity.PermissionEntity;
 import com.smartlab.entity.RoleEntity;
 import com.smartlab.entity.UserEntity;
@@ -13,6 +14,7 @@ import com.smartlab.dto.request.InvitationAcceptRequest;
 import com.smartlab.dto.response.InvitationResponse;
 import com.smartlab.dto.request.PermissionOverrideRequest;
 import com.smartlab.repo.AccountInvitationRepository;
+import com.smartlab.repo.MemberProfileRepository;
 import com.smartlab.repo.PermissionRepository;
 import com.smartlab.repo.RoleRepository;
 import com.smartlab.repo.UserPermissionOverrideRepository;
@@ -56,6 +58,7 @@ public class AdminAccountServiceImpl implements AdminAccountService {
     private final UserRoleRepository userRoleRepository;
     private final UserPermissionOverrideRepository userPermissionOverrideRepository;
     private final AccountInvitationRepository accountInvitationRepository;
+    private final MemberProfileRepository memberProfileRepository;
     private final PermissionService permissionService;
     private final EmailService emailService;
     private final UserSessionService userSessionService;
@@ -93,11 +96,12 @@ public class AdminAccountServiceImpl implements AdminAccountService {
                 .name(request.getName())
                 .email(request.getEmail())
                 .password(passwordEncoder.encode(temporaryPassword))
-                .isActive(true)
+                .isActive(false)
                 .isAccountVerified(false)
                 .resetOtpExpireAt(0L)
                 .build();
         UserEntity savedUser = userRepository.save(user);
+        memberProfileRepository.save(MemberProfileEntity.create(savedUser));
         assignRoles(savedUser, request.getRoleCodes() == null || request.getRoleCodes().isEmpty()
                 ? Set.of("MEMBER")
                 : request.getRoleCodes(), adminUserId);
@@ -151,6 +155,10 @@ public class AdminAccountServiceImpl implements AdminAccountService {
         user.setIsActive(true);
         user.setIsAccountVerified(true);
         userRepository.save(user);
+        MemberProfileEntity profile = memberProfileRepository.findByUserId(user.getId())
+                .orElseGet(() -> MemberProfileEntity.create(user));
+        profile.setActiveStatus("ACTIVE");
+        memberProfileRepository.save(profile);
 
         invitation.setStatus(InvitationStatus.ACCEPTED);
         invitation.setAcceptedAt(Instant.now());
@@ -178,6 +186,10 @@ public class AdminAccountServiceImpl implements AdminAccountService {
         UserEntity user = getUserByUserId(userId);
         user.setIsActive(active);
         userRepository.save(user);
+        MemberProfileEntity profile = memberProfileRepository.findByUserId(user.getId())
+                .orElseGet(() -> MemberProfileEntity.create(user));
+        profile.setActiveStatus(active ? "ACTIVE" : "INACTIVE");
+        memberProfileRepository.save(profile);
         if (!active) {
             userSessionService.revokeAllByEmail(user.getEmail());
         }

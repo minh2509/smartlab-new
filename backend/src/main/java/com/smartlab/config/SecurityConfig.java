@@ -3,6 +3,7 @@ package com.smartlab.config;
 import com.smartlab.filter.JwtRequestFilter;
 import com.smartlab.service.AppUserDetailService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpMethod;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -42,15 +43,19 @@ public class SecurityConfig {
                                 "/login",
                                 "/send-reset-otp",
                                 "/verify-reset-otp",
-                                "/reset-password",
+                        "/reset-password",
                                 "/logout",
+                                "/error",
                                 "/invitations/accept",
-                                "/swagger-ui",
+                        "/research-fields",
+                        "/members",
+                        "/swagger-ui",
                                 "/swagger-ui/**",
                                 "/v3/api-docs",
                                 "/v3/api-docs/**",
-                                "/swagger-ui.html"
+                        "/swagger-ui.html"
                         ).permitAll()
+                        .requestMatchers(HttpMethod.GET, "/files/*").permitAll()
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
