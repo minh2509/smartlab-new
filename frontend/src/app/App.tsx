@@ -12,6 +12,8 @@ import { AdminRbacPage } from '../features/admin/pages/AdminRbacPage'
 import { ProfilePage } from '../features/profile/pages/ProfilePage'
 import { ResearchFieldsPage } from '../features/profile/pages/ResearchFieldsPage'
 import { AdminMembersPage } from '../features/profile/pages/AdminMembersPage'
+import { PostListPage } from '../features/posts/pages/PostListPage'
+import { PostDetailPage } from '../features/posts/pages/PostDetailPage'
 import { HomePage } from '../features/public/pages/HomePage'
 import { StaticPublicPage } from '../features/public/pages/StaticPublicPage'
 import { RequirePermissions } from './RequirePermissions'
@@ -74,6 +76,8 @@ export function App() {
           }
         />
         <Route path="/blog" element={<Navigate to="/bai-viet" replace />} />
+        <Route path="/posts" element={<PostListPage />} />
+        <Route path="/posts/:slug" element={<PostDetailPage />} />
         <Route
           path="/tai-lieu"
           element={
