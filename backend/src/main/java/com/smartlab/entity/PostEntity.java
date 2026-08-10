@@ -161,6 +161,17 @@ public class PostEntity {
         this.updatedAt = mutationInstant;
     }
 
+    public void publishDirect(Instant mutationInstant) {
+        Objects.requireNonNull(mutationInstant, "Mutation instant is required");
+        if (status != PostStatus.DRAFT) {
+            throw new IllegalStateException("Only draft posts can be directly published");
+        }
+
+        this.status = PostStatus.PUBLISHED;
+        this.publishedAt = mutationInstant;
+        this.updatedAt = mutationInstant;
+    }
+
     private static Map<String, Object> copyJsonObject(Map<String, Object> source) {
         if (source == null) {
             return null;

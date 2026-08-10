@@ -130,6 +130,59 @@ class PostEntityWorkflowTest {
     }
 
     @Test
+    void directlyPublishesDraftWithOneSuppliedTimestampForBothPublicationFields() {
+        PostEntity post = draft();
+
+        post.publishDirect(PUBLISHED_AT);
+
+        assertThat(post.getStatus()).isEqualTo(PostStatus.PUBLISHED);
+        assertThat(post.getPublishedAt()).isEqualTo(PUBLISHED_AT);
+        assertThat(post.getUpdatedAt()).isEqualTo(PUBLISHED_AT);
+    }
+
+    @ParameterizedTest
+    @MethodSource("nonDraftStatuses")
+    void rejectsDirectPublishFromEveryNonDraftState(PostStatus sourceStatus) throws Exception {
+        PostEntity post = draftWithStatus(sourceStatus);
+
+        assertThatThrownBy(() -> post.publishDirect(PUBLISHED_AT))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Only draft posts can be directly published");
+        assertThat(post.getStatus()).isEqualTo(sourceStatus);
+        assertThat(post.getPublishedAt()).isNull();
+        assertThat(post.getUpdatedAt()).isEqualTo(CREATED_AT);
+    }
+
+    @Test
+    void rejectsRepeatedDirectPublishWithoutReplacingTheOriginalPublicationTime() {
+        PostEntity post = draft();
+        post.publishDirect(PUBLISHED_AT);
+        Instant laterAttempt = PUBLISHED_AT.plusSeconds(1);
+
+        assertThatThrownBy(() -> post.publishDirect(laterAttempt))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Only draft posts can be directly published");
+        assertThat(post.getStatus()).isEqualTo(PostStatus.PUBLISHED);
+        assertThat(post.getPublishedAt()).isEqualTo(PUBLISHED_AT);
+        assertThat(post.getUpdatedAt()).isEqualTo(PUBLISHED_AT);
+    }
+
+    @Test
+    void keepsNormalAndDirectPublicationLifecyclesSeparate() {
+        assertThatThrownBy(() -> draft().publish(PUBLISHED_AT))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Only approved posts can be published");
+        assertThatThrownBy(() -> approvedPost().publishDirect(PUBLISHED_AT))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Only draft posts can be directly published");
+
+        PostEntity approvedPost = approvedPost();
+        approvedPost.publish(PUBLISHED_AT);
+
+        assertThat(approvedPost.getStatus()).isEqualTo(PostStatus.PUBLISHED);
+    }
+
+    @Test
     void rejectsNullDecisionAndMutationInstants() {
         assertThatThrownBy(() -> pendingReview().applyReviewDecision(null, REVIEWED_AT))
                 .isInstanceOf(NullPointerException.class)
@@ -141,6 +194,9 @@ class PostEntityWorkflowTest {
                 .isInstanceOf(NullPointerException.class)
                 .hasMessage("Mutation instant is required");
         assertThatThrownBy(() -> approvedPost().publish(null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("Mutation instant is required");
+        assertThatThrownBy(() -> draft().publishDirect(null))
                 .isInstanceOf(NullPointerException.class)
                 .hasMessage("Mutation instant is required");
     }
@@ -169,6 +225,40 @@ class PostEntityWorkflowTest {
         assertThat(post.getVisibility()).isEqualTo(visibility);
         assertThat(post.getCategoryId()).isEqualTo(categoryId);
         assertThat(post.getCreatedAt()).isEqualTo(createdAt);
+    }
+
+    @Test
+    void directPublishLeavesRichEditorFieldsUntouched() throws Exception {
+        PostEntity post = draft();
+        setField(post, "projectId", 11L);
+        setField(post, "contentHtml", "<p>Original HTML</p>");
+        setField(post, "coverFileId", 12L);
+        Long authorUserId = post.getAuthorUserId();
+        Long projectId = post.getProjectId();
+        String title = post.getTitle();
+        String slug = post.getSlug();
+        String excerpt = post.getExcerpt();
+        Map<String, Object> contentJson = post.getContentJson();
+        String contentHtml = post.getContentHtml();
+        Long coverFileId = post.getCoverFileId();
+        PostVisibility visibility = post.getVisibility();
+        Long categoryId = post.getCategoryId();
+        Instant createdAt = post.getCreatedAt();
+
+        post.publishDirect(PUBLISHED_AT);
+
+        assertThat(post.getAuthorUserId()).isEqualTo(authorUserId);
+        assertThat(post.getProjectId()).isEqualTo(projectId);
+        assertThat(post.getTitle()).isEqualTo(title);
+        assertThat(post.getSlug()).isEqualTo(slug);
+        assertThat(post.getExcerpt()).isEqualTo(excerpt);
+        assertThat(post.getContentJson()).isSameAs(contentJson);
+        assertThat(post.getContentHtml()).isEqualTo(contentHtml);
+        assertThat(post.getCoverFileId()).isEqualTo(coverFileId);
+        assertThat(post.getVisibility()).isEqualTo(visibility);
+        assertThat(post.getCategoryId()).isEqualTo(categoryId);
+        assertThat(post.getCreatedAt()).isEqualTo(createdAt);
+        assertThat(post.getDeletedAt()).isNull();
     }
 
     private static Stream<PostStatus> nonDraftStatuses() {
@@ -230,9 +320,13 @@ class PostEntityWorkflowTest {
 
     private static PostEntity draftWithStatus(PostStatus status) throws Exception {
         PostEntity post = draft();
-        Field field = PostEntity.class.getDeclaredField("status");
-        field.setAccessible(true);
-        field.set(post, status);
+        setField(post, "status", status);
         return post;
+    }
+
+    private static void setField(PostEntity post, String fieldName, Object value) throws Exception {
+        Field field = PostEntity.class.getDeclaredField(fieldName);
+        field.setAccessible(true);
+        field.set(post, value);
     }
 }
