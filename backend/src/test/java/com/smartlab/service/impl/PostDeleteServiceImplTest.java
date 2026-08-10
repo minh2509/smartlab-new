@@ -11,6 +11,7 @@ import com.smartlab.repo.UserRepository;
 import com.smartlab.service.NotificationService;
 import com.smartlab.service.PostService;
 import com.smartlab.service.PostSlugGenerator;
+import com.smartlab.service.PostContentRenderer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -62,6 +63,9 @@ class PostDeleteServiceImplTest {
     private PostSlugGenerator postSlugGenerator;
     @Mock
     private PostCreateAttemptService postCreateAttemptService;
+
+    @Mock
+    private PostContentRenderer postContentRenderer;
     @Mock
     private NotificationService notificationService;
     @Mock private com.smartlab.service.AuditService auditService;
@@ -77,6 +81,7 @@ class PostDeleteServiceImplTest {
                 postReviewRepository,
                 postSlugGenerator,
                 postCreateAttemptService,
+                postContentRenderer,
                 notificationService,
                 auditService
         );

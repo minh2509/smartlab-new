@@ -91,12 +91,37 @@ public class PostEntity {
             Long categoryId,
             Instant creationTime
     ) {
+        return createDraft(
+                authorUserId,
+                title,
+                slug,
+                excerpt,
+                contentJson,
+                null,
+                visibility,
+                categoryId,
+                creationTime
+        );
+    }
+
+    public static PostEntity createDraft(
+            Long authorUserId,
+            String title,
+            String slug,
+            String excerpt,
+            Map<String, Object> contentJson,
+            String contentHtml,
+            PostVisibility visibility,
+            Long categoryId,
+            Instant creationTime
+    ) {
         PostEntity post = new PostEntity();
         post.authorUserId = authorUserId;
         post.title = title;
         post.slug = slug;
         post.excerpt = excerpt;
         post.contentJson = copyJsonObject(contentJson);
+        post.contentHtml = contentHtml;
         post.visibility = visibility;
         post.categoryId = categoryId;
         post.status = PostStatus.DRAFT;
@@ -113,6 +138,26 @@ public class PostEntity {
             Long categoryId,
             Instant updatedAt
     ) {
+        applyDraftUpdate(
+                title,
+                excerpt,
+                contentJson,
+                this.contentHtml,
+                visibility,
+                categoryId,
+                updatedAt
+        );
+    }
+
+    public void applyDraftUpdate(
+            String title,
+            String excerpt,
+            Map<String, Object> contentJson,
+            String contentHtml,
+            PostVisibility visibility,
+            Long categoryId,
+            Instant updatedAt
+    ) {
         if (status != PostStatus.DRAFT) {
             throw new IllegalStateException("Only draft posts can be updated");
         }
@@ -120,6 +165,7 @@ public class PostEntity {
         this.title = title;
         this.excerpt = excerpt;
         this.contentJson = copyJsonObject(contentJson);
+        this.contentHtml = contentHtml;
         this.visibility = visibility;
         this.categoryId = categoryId;
         this.updatedAt = updatedAt;

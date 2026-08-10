@@ -14,6 +14,7 @@ import com.smartlab.repo.UserRepository;
 import com.smartlab.service.NotificationService;
 import com.smartlab.service.PostService;
 import com.smartlab.service.PostSlugGenerator;
+import com.smartlab.service.PostContentRenderer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -64,6 +65,9 @@ class PostPatchServiceImplTest {
     private PostSlugGenerator postSlugGenerator;
     @Mock
     private PostCreateAttemptService postCreateAttemptService;
+
+    @Mock
+    private PostContentRenderer postContentRenderer;
     @Mock
     private NotificationService notificationService;
     @Mock private com.smartlab.service.AuditService auditService;
@@ -79,6 +83,7 @@ class PostPatchServiceImplTest {
                 postReviewRepository,
                 postSlugGenerator,
                 postCreateAttemptService,
+                postContentRenderer,
                 notificationService,
                 auditService
         );
@@ -345,6 +350,8 @@ class PostPatchServiceImplTest {
         set(post, "contentHtml", "<p>unchanged</p>");
         set(post, "publishedAt", publishedAt);
         Map<String, Object> replacement = Map.of("type", "updated");
+        when(postContentRenderer.renderAndSanitize(replacement))
+                .thenReturn(Optional.of("<p>updated-safe</p>"));
         UpdatePostRequest request = new UpdatePostRequest();
         request.setTitle("Updated title");
         request.setExcerpt("  exact excerpt  ");
@@ -362,7 +369,7 @@ class PostPatchServiceImplTest {
         assertThat(post.getStatus()).isEqualTo(PostStatus.DRAFT);
         assertThat(post.getProjectId()).isEqualTo(51L);
         assertThat(post.getCoverFileId()).isEqualTo(61L);
-        assertThat(post.getContentHtml()).isEqualTo("<p>unchanged</p>");
+        assertThat(post.getContentHtml()).isEqualTo("<p>updated-safe</p>");
         assertThat(post.getPublishedAt()).isEqualTo(publishedAt);
         assertThat(post.getDeletedAt()).isNull();
         assertThat(response.getId()).isEqualTo(POST_ID);
