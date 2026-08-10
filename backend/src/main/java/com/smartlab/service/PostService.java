@@ -19,6 +19,8 @@ public interface PostService {
 
     PostDetailResponse publishPost(String authenticatedEmail, Long postId);
 
+    PostDetailResponse directPublishPost(String authenticatedEmail, Long postId);
+
     void deletePost(String authenticatedEmail, Long id);
 
     List<PostSummaryResponse> getReadablePosts(String authenticatedEmail);
