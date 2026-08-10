@@ -64,6 +64,7 @@ class PostDeleteServiceImplTest {
     private PostCreateAttemptService postCreateAttemptService;
     @Mock
     private NotificationService notificationService;
+    @Mock private com.smartlab.service.AuditService auditService;
 
     private PostService postService;
 
@@ -76,7 +77,8 @@ class PostDeleteServiceImplTest {
                 postReviewRepository,
                 postSlugGenerator,
                 postCreateAttemptService,
-                notificationService
+                notificationService,
+                auditService
         );
     }
 

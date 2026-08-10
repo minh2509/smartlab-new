@@ -13,6 +13,7 @@ import com.smartlab.repo.PostRepository;
 import com.smartlab.repo.PostReviewRepository;
 import com.smartlab.repo.UserRepository;
 import com.smartlab.service.NotificationService;
+import com.smartlab.service.AuditService;
 import com.smartlab.service.NotificationRelated;
 import com.smartlab.service.PostService;
 import com.smartlab.service.PostSlugGenerator;
@@ -67,6 +68,8 @@ class PostReviewServiceImplTest {
     @Mock
     private NotificationService notificationService;
     @Mock
+    private AuditService auditService;
+    @Mock
     private PostSlugGenerator postSlugGenerator;
     @Mock
     private PostCreateAttemptService postCreateAttemptService;
@@ -82,7 +85,8 @@ class PostReviewServiceImplTest {
                 postReviewRepository,
                 postSlugGenerator,
                 postCreateAttemptService,
-                notificationService
+                notificationService,
+                auditService
         );
     }
 
@@ -145,6 +149,7 @@ class PostReviewServiceImplTest {
 
         assertThat(snapshot(post)).isEqualTo(before);
         verify(postReviewRepository, never()).saveAndFlush(any());
+        verifyNoInteractions(auditService);
     }
 
     @Test
@@ -157,6 +162,7 @@ class PostReviewServiceImplTest {
 
         verify(postRepository).findActiveByIdForUpdate(POST_ID);
         verify(postReviewRepository, never()).saveAndFlush(any());
+        verifyNoInteractions(auditService);
     }
 
     @ParameterizedTest
@@ -212,6 +218,7 @@ class PostReviewServiceImplTest {
 
         verify(postReviewRepository).saveAndFlush(any(PostReviewEntity.class));
         verifyNoInteractions(notificationService);
+        verifyNoInteractions(auditService);
     }
 
     @Test
@@ -243,6 +250,19 @@ class PostReviewServiceImplTest {
                 new NotificationRelated(REVIEWER_ID, "POST", POST_ID, null),
                 post.getUpdatedAt()
         );
+        verifyNoInteractions(auditService);
+    }
+
+    @Test
+    void auditFailurePropagatesAfterNotification() {
+        PostEntity post = postInState(PostStatus.PENDING_REVIEW, AUTHOR_ID);
+        DataIntegrityViolationException failure = new DataIntegrityViolationException("audit persistence failure");
+        activeReviewer();
+        when(postRepository.findActiveByIdForUpdate(POST_ID)).thenReturn(Optional.of(post));
+        doThrow(failure).when(auditService).log(any(), any(), any(), any(), any());
+        assertThatThrownBy(() -> postService.reviewPost(
+                REVIEWER_EMAIL, POST_ID, request(ReviewDecision.APPROVED, "approved"))).isSameAs(failure);
+        verify(notificationService).notify(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -293,6 +313,13 @@ class PostReviewServiceImplTest {
                     review.getCreatedAt()
             );
         }
+        verify(auditService).log(
+                "POST_REVIEWED",
+                "POST",
+                POST_ID.toString(),
+                Map.of("status", "PENDING_REVIEW"),
+                Map.of("status", expectedStatus.name(), "decision", decision.name())
+        );
 
         assertThat(review.getId()).isNull();
         assertThat(review.getPostId()).isEqualTo(POST_ID);

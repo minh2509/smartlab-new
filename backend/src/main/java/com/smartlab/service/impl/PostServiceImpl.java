@@ -18,6 +18,7 @@ import com.smartlab.repo.PostRepository;
 import com.smartlab.repo.PostReviewRepository;
 import com.smartlab.repo.UserRepository;
 import com.smartlab.service.NotificationService;
+import com.smartlab.service.AuditService;
 import com.smartlab.service.NotificationRelated;
 import com.smartlab.service.PostService;
 import com.smartlab.service.PostSlugGenerator;
@@ -36,6 +37,9 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.smartlab.service.AuditVocabulary.POST;
+import static com.smartlab.service.AuditVocabulary.POST_REVIEWED;
+
 @Service
 @RequiredArgsConstructor
 public class PostServiceImpl implements PostService {
@@ -46,6 +50,7 @@ public class PostServiceImpl implements PostService {
     private final PostSlugGenerator postSlugGenerator;
     private final PostCreateAttemptService postCreateAttemptService;
     private final NotificationService notificationService;
+    private final AuditService auditService;
 
     @Override
     public PostDetailResponse createPost(String authenticatedEmail, CreatePostRequest request) {
@@ -158,6 +163,7 @@ public class PostServiceImpl implements PostService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Only pending-review posts can be reviewed");
         }
 
+        Map<String, Object> auditBefore = Map.of("status", post.getStatus().name());
         Instant reviewInstant = Instant.now();
         PostReviewEntity review = PostReviewEntity.create(
                 post.getId(),
@@ -177,6 +183,8 @@ public class PostServiceImpl implements PostService {
                     reviewInstant
             );
         }
+        auditService.log(POST_REVIEWED, POST, post.getId().toString(), auditBefore,
+                Map.of("status", post.getStatus().name(), "decision", request.decision().name()));
 
         return toDetailResponse(post, findCategoryResponse(post.getCategoryId()));
     }

@@ -12,6 +12,7 @@ import com.smartlab.repo.PostRepository;
 import com.smartlab.repo.PostReviewRepository;
 import com.smartlab.repo.UserRepository;
 import com.smartlab.service.NotificationService;
+import com.smartlab.service.AuditService;
 import com.smartlab.service.NotificationRelated;
 import com.smartlab.service.PostService;
 import org.junit.jupiter.api.AfterEach;
@@ -69,6 +70,8 @@ class PostReviewNotificationPostgresIntegrationTest {
     private UserRepository userRepository;
     @MockitoSpyBean
     private NotificationService notificationService;
+    @MockitoSpyBean
+    private AuditService auditService;
 
     private final Set<Long> postIds = new LinkedHashSet<>();
     private final Set<Long> userIds = new LinkedHashSet<>();
@@ -81,6 +84,7 @@ class PostReviewNotificationPostgresIntegrationTest {
         assertThat(tableExists("posts")).isTrue();
         assertThat(tableExists("post_reviews")).isTrue();
         assertThat(tableExists("notifications")).isTrue();
+        assertThat(tableExists("audit_logs")).isTrue();
         assertThat(postRepository).isNotNull();
         assertThat(postReviewRepository).isNotNull();
         assertThat(notificationRepository).isNotNull();
@@ -90,6 +94,7 @@ class PostReviewNotificationPostgresIntegrationTest {
     @AfterEach
     void cleanExactFixturesAndRestoreBaseline() {
         assertThat(currentDatabase()).isEqualTo(TARGET_DATABASE);
+        postIds.forEach(id -> jdbc.update("delete from audit_logs where target_type = 'POST' and target_id = ?", id.toString()));
         userIds.forEach(id -> jdbc.update("delete from notifications where recipient_user_id = ?", id));
         postIds.forEach(id -> jdbc.update("delete from posts where id = ?", id));
         userIds.forEach(id -> jdbc.update("delete from tbl_user where id = ?", id));
@@ -114,6 +119,7 @@ class PostReviewNotificationPostgresIntegrationTest {
 
         PostReviewSnapshot persisted = inNewTransaction(() -> readPostReview(postId));
         NotificationSnapshot notification = inNewTransaction(() -> readOnlyNotification(author.id()));
+        AuditSnapshot audit = inNewTransaction(() -> readOnlyAudit(postId));
 
         assertThat(response.getStatus()).isEqualTo(reviewCase.expectedStatus());
         assertThat(response.getUpdatedAt()).isEqualTo(persisted.postUpdatedAt());
@@ -137,6 +143,10 @@ class PostReviewNotificationPostgresIntegrationTest {
         assertThat(notificationCount(author.id())).isEqualTo(1L);
         assertThat(notification.createdAt()).isEqualTo(persisted.reviewCreatedAt());
         assertThat(notification.createdAt()).isEqualTo(persisted.postUpdatedAt());
+        assertThat(audit.action()).isEqualTo("POST_REVIEWED");
+        assertThat(audit.beforeStatus()).isEqualTo("PENDING_REVIEW");
+        assertThat(audit.afterStatus()).isEqualTo(reviewCase.expectedStatus().name());
+        assertThat(audit.decision()).isEqualTo(reviewCase.decision().name());
 
         if (reviewCase.decision() == ReviewDecision.REJECTED) {
             assertThat(persisted.reason()).isEqualTo("  full rejection reason remains in history  ");
@@ -164,6 +174,7 @@ class PostReviewNotificationPostgresIntegrationTest {
         assertThat(persisted.decision()).isEqualTo(ReviewDecision.APPROVED);
         assertThat(reviewCount(postId)).isEqualTo(1L);
         assertThat(after.notifications()).isEqualTo(baselineCounts.notifications());
+        assertThat(readOnlyAudit(postId).action()).isEqualTo("POST_REVIEWED");
     }
 
     @Test
@@ -201,6 +212,28 @@ class PostReviewNotificationPostgresIntegrationTest {
         assertThat(after.updatedAt()).isEqualTo(before.updatedAt());
         assertThat(after.reviewCount()).isZero();
         assertThat(after.notificationCount()).isZero();
+        assertThat(auditCount(postId)).isZero();
+    }
+
+    @Test
+    void auditProviderFailureRollsBackPostReviewAndNotification() {
+        UserFixture author = insertUser("audit-rollback-author");
+        UserFixture reviewer = insertUser("audit-rollback-reviewer");
+        Long postId = insertPendingReviewPost(author.id(), "audit-rollback");
+        when(userRepository.findByEmail(reviewer.email())).thenReturn(Optional.of(reviewer.entity()));
+        PostBeforeState before = inNewTransaction(() -> readPostBeforeState(postId));
+        DataIntegrityViolationException failure = new DataIntegrityViolationException("injected audit failure");
+        doThrow(failure).when(auditService).log(eq("POST_REVIEWED"), eq("POST"), eq(postId.toString()), any(), any());
+
+        assertThatThrownBy(() -> postService.reviewPost(reviewer.email(), postId,
+                new ReviewPostRequest(ReviewDecision.APPROVED, "rollback audit evidence"))).isSameAs(failure);
+
+        RollbackSnapshot after = inNewTransaction(() -> readRollbackSnapshot(postId, author.id()));
+        assertThat(after.status()).isEqualTo(PostStatus.PENDING_REVIEW);
+        assertThat(after.updatedAt()).isEqualTo(before.updatedAt());
+        assertThat(after.reviewCount()).isZero();
+        assertThat(after.notificationCount()).isZero();
+        assertThat(auditCount(postId)).isZero();
     }
 
     private UserFixture insertUser(String tag) {
@@ -293,6 +326,15 @@ class PostReviewNotificationPostgresIntegrationTest {
         ), recipientUserId);
     }
 
+    private AuditSnapshot readOnlyAudit(Long postId) {
+        return jdbc.queryForObject("""
+                select action, before_json ->> 'status' before_status,
+                       after_json ->> 'status' after_status, after_json ->> 'decision' decision
+                from audit_logs where target_type = 'POST' and target_id = ?
+                """, (rs, rowNum) -> new AuditSnapshot(rs.getString("action"), rs.getString("before_status"),
+                rs.getString("after_status"), rs.getString("decision")), postId.toString());
+    }
+
     private PostBeforeState readPostBeforeState(Long postId) {
         return jdbc.queryForObject("select status, updated_at from posts where id = ?", (rs, rowNum) ->
                 new PostBeforeState(
@@ -332,12 +374,19 @@ class PostReviewNotificationPostgresIntegrationTest {
         ));
     }
 
+    private long auditCount(Long postId) {
+        return inNewTransaction(() -> jdbc.queryForObject(
+                "select count(*) from audit_logs where target_type = 'POST' and target_id = ?",
+                Long.class, postId.toString()));
+    }
+
     private DatabaseCounts databaseCounts() {
         return new DatabaseCounts(
                 jdbc.queryForObject("select count(*) from tbl_user", Long.class),
                 jdbc.queryForObject("select count(*) from posts", Long.class),
                 jdbc.queryForObject("select count(*) from post_reviews", Long.class),
                 jdbc.queryForObject("select count(*) from notifications", Long.class)
+                , jdbc.queryForObject("select count(*) from audit_logs", Long.class)
         );
     }
 
@@ -427,6 +476,9 @@ class PostReviewNotificationPostgresIntegrationTest {
     ) {
     }
 
+    private record AuditSnapshot(String action, String beforeStatus, String afterStatus, String decision) {
+    }
+
     private record PostBeforeState(PostStatus status, Instant updatedAt) {
     }
 
@@ -438,6 +490,6 @@ class PostReviewNotificationPostgresIntegrationTest {
     ) {
     }
 
-    private record DatabaseCounts(long users, long posts, long reviews, long notifications) {
+    private record DatabaseCounts(long users, long posts, long reviews, long notifications, long audits) {
     }
 }

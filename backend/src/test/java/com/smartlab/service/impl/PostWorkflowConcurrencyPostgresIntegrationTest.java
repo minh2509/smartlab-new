@@ -81,6 +81,7 @@ class PostWorkflowConcurrencyPostgresIntegrationTest {
     @AfterEach
     void cleanExactFixtures() {
         assertThat(currentDatabase()).isEqualTo(TARGET_DATABASE);
+        postIds.forEach(id -> jdbc.update("delete from audit_logs where target_type = 'POST' and target_id = ?", id.toString()));
         postIds.forEach(id -> jdbc.update("delete from posts where id = ?", id));
         userIds.forEach(id -> jdbc.update("delete from tbl_user where id = ?", id));
         postIds.clear();
@@ -607,7 +608,8 @@ class PostWorkflowConcurrencyPostgresIntegrationTest {
         return new DatabaseCounts(
                 jdbc.queryForObject("select count(*) from tbl_user", Long.class),
                 jdbc.queryForObject("select count(*) from posts", Long.class),
-                jdbc.queryForObject("select count(*) from post_reviews", Long.class)
+                jdbc.queryForObject("select count(*) from post_reviews", Long.class),
+                jdbc.queryForObject("select count(*) from audit_logs", Long.class)
         );
     }
 
@@ -647,7 +649,7 @@ class PostWorkflowConcurrencyPostgresIntegrationTest {
     ) {
     }
 
-    private record DatabaseCounts(long users, long posts, long reviews) {
+    private record DatabaseCounts(long users, long posts, long reviews, long audits) {
     }
 
     private record LockObservation(int gateBackendPid, Set<Integer> waitingBackendPids) {

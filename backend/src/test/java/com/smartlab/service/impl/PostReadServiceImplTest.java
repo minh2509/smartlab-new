@@ -60,6 +60,7 @@ class PostReadServiceImplTest {
     private PostCreateAttemptService postCreateAttemptService;
     @Mock
     private NotificationService notificationService;
+    @Mock private com.smartlab.service.AuditService auditService;
 
     private PostServiceImpl postService;
 
@@ -72,7 +73,8 @@ class PostReadServiceImplTest {
                 postReviewRepository,
                 postSlugGenerator,
                 postCreateAttemptService,
-                notificationService
+                notificationService,
+                auditService
         );
     }
 
