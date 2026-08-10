@@ -1,18 +1,23 @@
 package com.smartlab.service.impl;
 
 import com.smartlab.dto.request.CreatePostRequest;
+import com.smartlab.dto.request.ReviewPostRequest;
 import com.smartlab.dto.request.UpdatePostRequest;
 import com.smartlab.dto.response.PostCategoryResponse;
 import com.smartlab.dto.response.PostDetailResponse;
 import com.smartlab.dto.response.PostSummaryResponse;
 import com.smartlab.entity.ContentCategoryEntity;
 import com.smartlab.entity.PostEntity;
+import com.smartlab.entity.PostReviewEntity;
 import com.smartlab.entity.UserEntity;
 import com.smartlab.enums.PostVisibility;
 import com.smartlab.enums.PostStatus;
+import com.smartlab.enums.ReviewDecision;
 import com.smartlab.repo.ContentCategoryRepository;
 import com.smartlab.repo.PostRepository;
+import com.smartlab.repo.PostReviewRepository;
 import com.smartlab.repo.UserRepository;
+import com.smartlab.service.NotificationService;
 import com.smartlab.service.PostService;
 import com.smartlab.service.PostSlugGenerator;
 import lombok.RequiredArgsConstructor;
@@ -36,8 +41,10 @@ public class PostServiceImpl implements PostService {
     private final UserRepository userRepository;
     private final ContentCategoryRepository contentCategoryRepository;
     private final PostRepository postRepository;
+    private final PostReviewRepository postReviewRepository;
     private final PostSlugGenerator postSlugGenerator;
     private final PostCreateAttemptService postCreateAttemptService;
+    private final NotificationService notificationService;
 
     @Override
     public PostDetailResponse createPost(String authenticatedEmail, CreatePostRequest request) {
@@ -116,6 +123,93 @@ public class PostServiceImpl implements PostService {
                 ? toCategoryResponse(suppliedCategory)
                 : findCategoryResponse(resolvedCategoryId);
         return toDetailResponse(post, category);
+    }
+
+    @Override
+    @Transactional
+    public PostDetailResponse submitForReview(String authenticatedEmail, Long id) {
+        UserEntity author = resolveActiveAuthor(authenticatedEmail);
+        PostEntity post = postRepository.findActiveByIdForUpdate(id)
+                .orElseThrow(this::postNotFound);
+
+        if (post.getAuthorUserId() == null || !post.getAuthorUserId().equals(author.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Post is not owned by authenticated user");
+        }
+        if (post.getStatus() != PostStatus.DRAFT) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only draft posts can be submitted for review");
+        }
+
+        post.submitForReview(Instant.now());
+        return toDetailResponse(post, findCategoryResponse(post.getCategoryId()));
+    }
+
+    @Override
+    @Transactional
+    public PostDetailResponse reviewPost(String authenticatedEmail, Long postId, ReviewPostRequest request) {
+        UserEntity reviewer = resolveActiveAuthor(authenticatedEmail);
+        PostEntity post = postRepository.findActiveByIdForUpdate(postId)
+                .orElseThrow(this::postNotFound);
+
+        if (post.getAuthorUserId() != null && post.getAuthorUserId().equals(reviewer.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Post authors cannot review their own posts");
+        }
+        if (post.getStatus() != PostStatus.PENDING_REVIEW) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only pending-review posts can be reviewed");
+        }
+
+        Instant reviewInstant = Instant.now();
+        PostReviewEntity review = PostReviewEntity.create(
+                post.getId(),
+                reviewer.getId(),
+                request.decision(),
+                request.reason(),
+                reviewInstant
+        );
+        post.applyReviewDecision(request.decision(), reviewInstant);
+        postReviewRepository.saveAndFlush(review);
+        if (post.getAuthorUserId() != null) {
+            notificationService.recordNotification(
+                    post.getAuthorUserId(),
+                    reviewNotificationMessage(request.decision()),
+                    null,
+                    reviewInstant
+            );
+        }
+
+        return toDetailResponse(post, findCategoryResponse(post.getCategoryId()));
+    }
+
+    @Override
+    @Transactional
+    public PostDetailResponse publishPost(String authenticatedEmail, Long postId) {
+        resolveActiveAuthor(authenticatedEmail);
+        PostEntity post = postRepository.findActiveByIdForUpdate(postId)
+                .orElseThrow(this::postNotFound);
+
+        if (post.getStatus() != PostStatus.APPROVED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only approved posts can be published");
+        }
+
+        post.publish(Instant.now());
+        return toDetailResponse(post, findCategoryResponse(post.getCategoryId()));
+    }
+
+    @Override
+    @Transactional
+    public PostDetailResponse directPublishPost(String authenticatedEmail, Long postId) {
+        UserEntity author = resolveActiveAuthor(authenticatedEmail);
+        PostEntity post = postRepository.findActiveByIdForUpdate(postId)
+                .orElseThrow(this::postNotFound);
+
+        if (post.getAuthorUserId() == null || !post.getAuthorUserId().equals(author.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Post is not owned by authenticated user");
+        }
+        if (post.getStatus() != PostStatus.DRAFT) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only draft posts can be directly published");
+        }
+
+        post.publishDirect(Instant.now());
+        return toDetailResponse(post, findCategoryResponse(post.getCategoryId()));
     }
 
     @Override
@@ -252,6 +346,14 @@ public class PostServiceImpl implements PostService {
         return (post.getAuthorUserId() != null && post.getAuthorUserId().equals(viewerUserId))
                 || (post.getStatus() == PostStatus.PUBLISHED
                 && (post.getVisibility() == PostVisibility.PUBLIC || post.getVisibility() == PostVisibility.LAB));
+    }
+
+    private static String reviewNotificationMessage(ReviewDecision decision) {
+        return switch (decision) {
+            case APPROVED -> "Bài viết của bạn đã được duyệt.";
+            case REVISION_REQUIRED -> "Bài viết của bạn cần được chỉnh sửa.";
+            case REJECTED -> "Bài viết của bạn đã bị từ chối.";
+        };
     }
 
     private ResponseStatusException postNotFound() {
