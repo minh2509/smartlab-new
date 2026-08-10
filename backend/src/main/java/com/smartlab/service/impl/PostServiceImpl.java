@@ -21,6 +21,7 @@ import com.smartlab.service.NotificationService;
 import com.smartlab.service.AuditService;
 import com.smartlab.service.NotificationRelated;
 import com.smartlab.service.PostService;
+import com.smartlab.service.PostContentRenderer;
 import com.smartlab.service.PostSlugGenerator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -49,6 +50,7 @@ public class PostServiceImpl implements PostService {
     private final PostReviewRepository postReviewRepository;
     private final PostSlugGenerator postSlugGenerator;
     private final PostCreateAttemptService postCreateAttemptService;
+    private final PostContentRenderer postContentRenderer;
     private final NotificationService notificationService;
     private final AuditService auditService;
 
@@ -59,6 +61,7 @@ public class PostServiceImpl implements PostService {
         Map<String, Object> contentJson = request.getContentJson() == null
                 ? new LinkedHashMap<>()
                 : request.getContentJson();
+        String contentHtml = postContentRenderer.renderAndSanitize(contentJson).orElse(null);
         PostVisibility visibility = request.getVisibility() == null ? PostVisibility.LAB : request.getVisibility();
         Instant creationTime = Instant.now();
         for (int candidateNumber = 1; candidateNumber <= postSlugGenerator.maxCandidates(); candidateNumber++) {
@@ -73,6 +76,7 @@ public class PostServiceImpl implements PostService {
                     candidate,
                     request.getExcerpt(),
                     contentJson,
+                    contentHtml,
                     visibility,
                     category == null ? null : category.getId(),
                     creationTime
@@ -113,6 +117,10 @@ public class PostServiceImpl implements PostService {
         Map<String, Object> resolvedContentJson = request.hasContentJson()
                 ? request.getContentJson() == null ? new LinkedHashMap<>() : request.getContentJson()
                 : post.getContentJson();
+        String resolvedContentHtml = request.hasContentJson()
+                ? postContentRenderer.renderAndSanitize(resolvedContentJson)
+                        .orElse(post.getContentHtml())
+                : post.getContentHtml();
         PostVisibility resolvedVisibility = request.hasVisibility() ? request.getVisibility() : post.getVisibility();
         Instant transitionInstant = Instant.now();
 
@@ -120,6 +128,7 @@ public class PostServiceImpl implements PostService {
                 resolvedTitle,
                 resolvedExcerpt,
                 resolvedContentJson,
+                resolvedContentHtml,
                 resolvedVisibility,
                 resolvedCategoryId,
                 transitionInstant
