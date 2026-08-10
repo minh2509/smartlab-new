@@ -19,6 +19,7 @@ import com.smartlab.repo.UserPermissionOverrideRepository;
 import com.smartlab.repo.UserRepository;
 import com.smartlab.repo.UserRoleRepository;
 import com.smartlab.service.AdminAccountService;
+import com.smartlab.service.AuditService;
 import com.smartlab.service.EmailService;
 import com.smartlab.service.PermissionService;
 import com.smartlab.service.TokenHashService;
@@ -39,8 +40,12 @@ import java.util.Base64;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+
+import static com.smartlab.service.AuditVocabulary.*;
 
 @Service
 @RequiredArgsConstructor
@@ -56,6 +61,7 @@ public class AdminAccountServiceImpl implements AdminAccountService {
     private final UserSessionService userSessionService;
     private final TokenHashService tokenHashService;
     private final PasswordEncoder passwordEncoder;
+    private final AuditService auditService;
     private final SecureRandom secureRandom = new SecureRandom();
 
     @Value("${smartlab.invite.ttl-hours:72}")
@@ -157,8 +163,12 @@ public class AdminAccountServiceImpl implements AdminAccountService {
     @Override
     public AccountResponse updateRoles(String userId, Set<String> roleCodes, String adminUserId) {
         UserEntity user = getUserByUserId(userId);
-        assignRoles(user, roleCodes, adminUserId);
+        List<String> beforeCodes = userRoleRepository.findRolesByUserId(user.getId()).stream()
+                .map(RoleEntity::getCode).sorted().toList();
+        List<String> afterCodes = assignRoles(user, roleCodes, adminUserId);
         userSessionService.revokeAllByEmail(user.getEmail());
+        auditService.log(USER_ROLES_UPDATED, USER, user.getId().toString(),
+                Map.of("roleCodes", beforeCodes), Map.of("roleCodes", afterCodes));
         return toResponse(user);
     }
 
@@ -192,10 +202,13 @@ public class AdminAccountServiceImpl implements AdminAccountService {
                         .user(user)
                         .permission(permission)
                         .build());
+        Map<String, Object> before = overrideSnapshot(permission.getCode(), override.getEffect());
         override.setEffect(request.getEffect());
         override.setChangedBy(adminUserId);
         userPermissionOverrideRepository.save(override);
         userSessionService.revokeAllByEmail(user.getEmail());
+        auditService.log(USER_PERMISSION_OVERRIDE_SET, USER, user.getId().toString(), before,
+                overrideSnapshot(permission.getCode(), override.getEffect()));
         return toResponse(user);
     }
 
@@ -205,7 +218,12 @@ public class AdminAccountServiceImpl implements AdminAccountService {
         UserEntity user = getUserByUserId(userId);
         PermissionEntity permission = permissionRepository.findByCode(permissionCode)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Permission not found"));
-        userPermissionOverrideRepository.deleteByUserIdAndPermissionId(user.getId(), permission.getId());
+        userPermissionOverrideRepository.findByUserIdAndPermissionId(user.getId(), permission.getId())
+                .ifPresent(existing -> {
+                    userPermissionOverrideRepository.deleteByUserIdAndPermissionId(user.getId(), permission.getId());
+                    auditService.log(USER_PERMISSION_OVERRIDE_REMOVED, USER, user.getId().toString(),
+                            overrideSnapshot(permission.getCode(), existing.getEffect()), null);
+                });
         userSessionService.revokeAllByEmail(user.getEmail());
         return toResponse(user);
     }
@@ -224,7 +242,7 @@ public class AdminAccountServiceImpl implements AdminAccountService {
                 .build();
     }
 
-    private void assignRoles(UserEntity user, Set<String> roleCodes, String adminUserId) {
+    private List<String> assignRoles(UserEntity user, Set<String> roleCodes, String adminUserId) {
         Set<String> normalizedCodes = new HashSet<>();
         for (String roleCode : roleCodes) {
             normalizedCodes.add(roleCode.trim().toUpperCase());
@@ -242,6 +260,7 @@ public class AdminAccountServiceImpl implements AdminAccountService {
                     .assignedBy(adminUserId)
                     .build());
         }
+        return roles.stream().map(RoleEntity::getCode).sorted().toList();
     }
 
     private String upsertInvite(String email, String adminUserId) {
@@ -281,5 +300,12 @@ public class AdminAccountServiceImpl implements AdminAccountService {
         byte[] bytes = new byte[byteLength];
         secureRandom.nextBytes(bytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    private static Map<String, Object> overrideSnapshot(String permissionCode, Object effect) {
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("permissionCode", permissionCode);
+        snapshot.put("effect", effect == null ? null : effect.toString());
+        return snapshot;
     }
 }

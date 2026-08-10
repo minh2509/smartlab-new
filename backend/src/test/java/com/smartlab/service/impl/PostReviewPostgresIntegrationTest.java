@@ -70,6 +70,7 @@ class PostReviewPostgresIntegrationTest {
     @AfterEach
     void cleanExactFixtures() {
         assertThat(currentDatabase()).isEqualTo(TARGET_DATABASE);
+        postIds.forEach(id -> jdbc.update("delete from audit_logs where target_type = 'POST' and target_id = ?", id.toString()));
         postIds.forEach(id -> jdbc.update("delete from posts where id = ?", id));
         userIds.forEach(id -> jdbc.update("delete from tbl_user where id = ?", id));
         postIds.clear();

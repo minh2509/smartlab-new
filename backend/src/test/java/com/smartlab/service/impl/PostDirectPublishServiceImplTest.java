@@ -61,6 +61,7 @@ class PostDirectPublishServiceImplTest {
     private PostCreateAttemptService postCreateAttemptService;
     @Mock
     private NotificationService notificationService;
+    @Mock private com.smartlab.service.AuditService auditService;
 
     private PostService postService;
 
@@ -73,7 +74,8 @@ class PostDirectPublishServiceImplTest {
                 postReviewRepository,
                 postSlugGenerator,
                 postCreateAttemptService,
-                notificationService
+                notificationService,
+                auditService
         );
     }
 
