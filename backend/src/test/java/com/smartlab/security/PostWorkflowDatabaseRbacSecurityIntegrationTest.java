@@ -148,8 +148,8 @@ class PostWorkflowDatabaseRbacSecurityIntegrationTest {
     void databaseIdentityAndPersistedT12PolicyAreExact() {
         assertThat(currentDatabase()).isEqualTo(TARGET_DATABASE);
         assertPersistedT12Policy();
-        assertThat(baseline.permissions()).isEqualTo(14);
-        assertThat(baseline.rolePermissions()).isEqualTo(25);
+        assertThat(baseline.permissions()).isEqualTo(16);
+        assertThat(baseline.rolePermissions()).isEqualTo(31);
     }
 
     @Test
