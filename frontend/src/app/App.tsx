@@ -10,8 +10,12 @@ import { VerifyResetOtpPage } from '../features/auth/pages/VerifyResetOtpPage'
 import { AdminAccountsPage } from '../features/admin/pages/AdminAccountsPage'
 import { AdminRbacPage } from '../features/admin/pages/AdminRbacPage'
 import { ProfilePage } from '../features/profile/pages/ProfilePage'
+import { ResearchFieldsPage } from '../features/profile/pages/ResearchFieldsPage'
+import { AdminMembersPage } from '../features/profile/pages/AdminMembersPage'
 import { HomePage } from '../features/public/pages/HomePage'
 import { StaticPublicPage } from '../features/public/pages/StaticPublicPage'
+import { RequirePermissions } from './RequirePermissions'
+import { FilesPage } from '../features/files/pages/FilesPage'
 
 export function App() {
   return (
@@ -133,8 +137,11 @@ export function App() {
 
       <Route element={<AdminLayout />}>
         <Route path="/profile" element={<ProfilePage />} />
-        <Route path="/admin/accounts" element={<AdminAccountsPage />} />
-        <Route path="/admin/rbac" element={<AdminRbacPage />} />
+        <Route path="/files" element={<RequirePermissions allOf={['FILE_UPLOAD']}><FilesPage /></RequirePermissions>} />
+        <Route path="/admin/research-fields" element={<RequirePermissions allOf={['RESEARCH_FIELD_MANAGE']}><ResearchFieldsPage /></RequirePermissions>} />
+        <Route path="/admin/members" element={<RequirePermissions allOf={['MEMBER_MANAGE']}><AdminMembersPage /></RequirePermissions>} />
+        <Route path="/admin/accounts" element={<RequirePermissions allOf={['USER_MANAGE', 'ROLE_MANAGE', 'PERMISSION_MANAGE']}><AdminAccountsPage /></RequirePermissions>} />
+        <Route path="/admin/rbac" element={<RequirePermissions allOf={['ROLE_MANAGE', 'PERMISSION_MANAGE']}><AdminRbacPage /></RequirePermissions>} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

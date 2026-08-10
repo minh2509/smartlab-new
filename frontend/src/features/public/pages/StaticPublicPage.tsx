@@ -1,7 +1,9 @@
 import { BadgeCheck, CalendarDays, Clock3, FileText, FlaskConical, GraduationCap, MapPin, Search } from 'lucide-react'
 import type { CSSProperties } from 'react'
-import { Fragment } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { getMembers } from '../../profile/api'
+import type { MemberProfile } from '../../../shared/types/api'
 import { aboutQuickFacts, coreValues, documents, events, fields, gallery, members, operatingSteps, posts, projects, stats } from '../publicData'
 import { PublicPageHead } from '../components/PublicPageHead'
 
@@ -23,7 +25,7 @@ export function StaticPublicPage({ title, description, kind }: StaticPublicPageP
       {kind === 'about' ? <AboutContent /> : null}
       {kind === 'fields' ? <FieldsContent /> : null}
       {kind === 'projects' ? <ProjectsContent /> : null}
-      {kind === 'members' ? <MembersContent /> : null}
+      {kind === 'members' ? <ApiMembersContent /> : null}
       {kind === 'blog' ? <BlogContent /> : null}
       {kind === 'documents' ? <DocumentsContent /> : null}
       {kind === 'events' ? <EventsContent /> : null}
@@ -291,7 +293,7 @@ function ProjectsContent() {
   )
 }
 
-function MembersContent() {
+export function MembersContent() {
   return (
     <section className="section">
       <div className="wrap">
@@ -303,6 +305,75 @@ function MembersContent() {
         </div>
       </div>
     </section>
+  )
+}
+
+function ApiMembersContent() {
+  const [apiMembers, setApiMembers] = useState<MemberProfile[] | null>(null)
+  const [query, setQuery] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    getMembers()
+      .then(setApiMembers)
+      .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Không tải được danh sách thành viên.'))
+  }, [])
+
+  const visibleMembers = apiMembers?.filter((member) => {
+    const normalized = query.trim().toLowerCase()
+    if (!normalized) return true
+    return member.name.toLowerCase().includes(normalized)
+      || (member.bio ?? '').toLowerCase().includes(normalized)
+      || member.researchFields.some((field) => field.name.toLowerCase().includes(normalized))
+  })
+
+  if (apiMembers === null && !error) {
+    return <section className="section"><div className="wrap"><div className="public-empty empty tight">Đang tải danh sách thành viên...</div></div></section>
+  }
+
+  if (apiMembers && apiMembers.length > 0) {
+    return (
+      <section className="section">
+        <div className="wrap">
+          <div className="toolbar">
+            <div className="searchbar" style={{ flex: 1, minWidth: 220 }}>
+              <Search aria-hidden="true" />
+              <input className="input" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm thành viên theo tên hoặc lĩnh vực..." />
+            </div>
+          </div>
+          {visibleMembers?.length ? (
+            <div className="grid c4">
+              {visibleMembers.map((member) => <ApiMemberCard key={member.userId} member={member} />)}
+            </div>
+          ) : <div className="public-empty empty tight">Không tìm thấy thành viên phù hợp.</div>}
+        </div>
+      </section>
+    )
+  }
+
+  return (
+    <section className="section">
+      <div className="wrap">
+        {error && <div className="alert error">{error}</div>}
+        {!error && <div className="public-empty empty tight">Chưa có thành viên công khai.</div>}
+      </div>
+    </section>
+  )
+}
+
+function ApiMemberCard({ member }: { member: MemberProfile }) {
+  const initials = member.name.split(' ').filter(Boolean).slice(-2).map((part) => part[0]).join('').toUpperCase()
+  const avatarUrl = member.avatar ? `${import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1.0'}/files/${member.avatar.id}` : null
+  return (
+    <article className="card hover person">
+      {avatarUrl ? <img className="public-member-avatar" src={avatarUrl} alt={member.name} /> : <span className="ava lg" style={{ background: 'var(--s1)' }}>{initials}</span>}
+      <h3>{member.name}</h3>
+      <div className="role">{member.activeStatus}</div>
+      <div className="exp">{member.bio || 'Thành viên Smart Lab'}</div>
+      <div className="tags">
+        {member.researchFields.map((field) => <span className="chip accent" key={field.id}>{field.name}</span>)}
+      </div>
+    </article>
   )
 }
 
