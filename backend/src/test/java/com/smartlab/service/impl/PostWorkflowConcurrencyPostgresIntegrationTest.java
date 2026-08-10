@@ -70,10 +70,12 @@ class PostWorkflowConcurrencyPostgresIntegrationTest {
 
     private final Set<Long> postIds = new LinkedHashSet<>();
     private final Set<Long> userIds = new LinkedHashSet<>();
+    private DatabaseCounts baselineCounts;
 
     @BeforeEach
     void requireExactIntegrationDatabase() {
         assertThat(currentDatabase()).isEqualTo(TARGET_DATABASE);
+        baselineCounts = databaseCounts();
     }
 
     @AfterEach
@@ -83,6 +85,7 @@ class PostWorkflowConcurrencyPostgresIntegrationTest {
         userIds.forEach(id -> jdbc.update("delete from tbl_user where id = ?", id));
         postIds.clear();
         userIds.clear();
+        assertThat(databaseCounts()).isEqualTo(baselineCounts);
     }
 
     @Test
@@ -194,6 +197,134 @@ class PostWorkflowConcurrencyPostgresIntegrationTest {
     }
 
     @Test
+    void concurrentDirectPublishesSerializeToOneSuccessAndOnePublicationTimestamp() throws Exception {
+        UserFixture owner = insertUser("direct-direct-owner");
+        PostFixture post = insertPost(owner.id(), PostStatus.DRAFT, "direct race", "direct-direct");
+        when(userRepository.findByEmail(owner.email())).thenReturn(Optional.of(owner.entity()));
+
+        RaceExecution race = raceBehindHeldPostLock(
+                post.id(),
+                () -> postService.directPublishPost(owner.email(), post.id()),
+                () -> postService.directPublishPost(owner.email(), post.id())
+        );
+
+        assertThat(race.lockObservation().waitingBackendPids()).hasSize(2);
+        assertThat(race.outcomes()).filteredOn(CommandOutcome::succeeded).hasSize(1);
+        assertThat(race.outcomes()).filteredOn(outcome -> hasStatus(outcome, HttpStatus.CONFLICT)).hasSize(1);
+
+        PostDetailResponse successfulResponse = (PostDetailResponse) race.outcomes().stream()
+                .filter(CommandOutcome::succeeded)
+                .findFirst()
+                .orElseThrow()
+                .value();
+        PostSnapshot persisted = readPost(post.id());
+        assertThat(persisted.status()).isEqualTo(PostStatus.PUBLISHED);
+        assertThat(persisted.publishedAt()).isNotNull().isEqualTo(persisted.updatedAt());
+        assertThat(successfulResponse.getPublishedAt()).isEqualTo(persisted.publishedAt());
+        assertThat(reviewCount(post.id())).isZero();
+    }
+
+    @Test
+    void concurrentDirectPublishAndSubmitMatchExactlyOneSerializedWinner() throws Exception {
+        UserFixture owner = insertUser("direct-submit-owner");
+        PostFixture post = insertPost(owner.id(), PostStatus.DRAFT, "direct submit race", "direct-submit");
+        when(userRepository.findByEmail(owner.email())).thenReturn(Optional.of(owner.entity()));
+
+        RaceExecution race = raceBehindHeldPostLock(
+                post.id(),
+                () -> postService.directPublishPost(owner.email(), post.id()),
+                () -> postService.submitForReview(owner.email(), post.id())
+        );
+
+        assertThat(race.lockObservation().waitingBackendPids()).hasSize(2);
+        assertThat(race.outcomes()).filteredOn(CommandOutcome::succeeded).hasSize(1);
+        assertThat(race.outcomes()).filteredOn(outcome -> hasStatus(outcome, HttpStatus.CONFLICT)).hasSize(1);
+
+        PostSnapshot persisted = readPost(post.id());
+        if (persisted.status() == PostStatus.PUBLISHED) {
+            assertThat(race.first().succeeded()).isTrue();
+            assertThat(hasStatus(race.second(), HttpStatus.CONFLICT)).isTrue();
+            assertThat(persisted.publishedAt()).isNotNull().isEqualTo(persisted.updatedAt());
+            System.out.println("T11A4_EVIDENCE direct-submit history=DIRECT_THEN_SUBMIT_CONFLICT");
+        } else {
+            assertThat(persisted.status()).isEqualTo(PostStatus.PENDING_REVIEW);
+            assertThat(hasStatus(race.first(), HttpStatus.CONFLICT)).isTrue();
+            assertThat(race.second().succeeded()).isTrue();
+            assertThat(persisted.publishedAt()).isNull();
+            System.out.println("T11A4_EVIDENCE direct-submit history=SUBMIT_THEN_DIRECT_CONFLICT");
+        }
+        assertThat(reviewCount(post.id())).isZero();
+    }
+
+    @Test
+    void concurrentDirectPublishAndPatchMatchAValidSerializedHistory() throws Exception {
+        UserFixture owner = insertUser("direct-patch-owner");
+        String originalExcerpt = "original direct patch excerpt";
+        String patchedExcerpt = "patched before direct publication";
+        PostFixture post = insertPost(owner.id(), PostStatus.DRAFT, originalExcerpt, "direct-patch");
+        when(userRepository.findByEmail(owner.email())).thenReturn(Optional.of(owner.entity()));
+        UpdatePostRequest patch = new UpdatePostRequest();
+        patch.setExcerpt(patchedExcerpt);
+
+        RaceExecution race = raceBehindHeldPostLock(
+                post.id(),
+                () -> postService.directPublishPost(owner.email(), post.id()),
+                () -> postService.updatePost(owner.email(), post.id(), patch)
+        );
+
+        assertThat(race.lockObservation().waitingBackendPids()).hasSize(2);
+        assertThat(race.first().succeeded()).isTrue();
+        assertThat(race.second().succeeded() || hasStatus(race.second(), HttpStatus.CONFLICT)).isTrue();
+
+        PostSnapshot persisted = readPost(post.id());
+        assertThat(persisted.status()).isEqualTo(PostStatus.PUBLISHED);
+        assertThat(persisted.publishedAt()).isNotNull().isEqualTo(persisted.updatedAt());
+        if (race.second().succeeded()) {
+            assertThat(persisted.excerpt()).isEqualTo(patchedExcerpt);
+            System.out.println("T11A4_EVIDENCE direct-patch history=PATCH_THEN_DIRECT");
+        } else {
+            assertThat(persisted.excerpt()).isEqualTo(originalExcerpt);
+            System.out.println("T11A4_EVIDENCE direct-patch history=DIRECT_THEN_PATCH_CONFLICT");
+        }
+        assertThat(reviewCount(post.id())).isZero();
+    }
+
+    @Test
+    void concurrentDirectPublishAndDeleteMatchExactlyOneSerializedWinner() throws Exception {
+        UserFixture owner = insertUser("direct-delete-owner");
+        PostFixture post = insertPost(owner.id(), PostStatus.DRAFT, "direct delete race", "direct-delete");
+        when(userRepository.findByEmail(owner.email())).thenReturn(Optional.of(owner.entity()));
+
+        RaceExecution race = raceBehindHeldPostLock(
+                post.id(),
+                () -> postService.directPublishPost(owner.email(), post.id()),
+                () -> {
+                    postService.deletePost(owner.email(), post.id());
+                    return null;
+                }
+        );
+
+        assertThat(race.lockObservation().waitingBackendPids()).hasSize(2);
+        assertThat(race.outcomes()).filteredOn(CommandOutcome::succeeded).hasSize(1);
+
+        PostSnapshot persisted = readPost(post.id());
+        if (persisted.deletedAt() == null) {
+            assertThat(race.first().succeeded()).isTrue();
+            assertThat(hasStatus(race.second(), HttpStatus.CONFLICT)).isTrue();
+            assertThat(persisted.status()).isEqualTo(PostStatus.PUBLISHED);
+            assertThat(persisted.publishedAt()).isNotNull().isEqualTo(persisted.updatedAt());
+            System.out.println("T11A4_EVIDENCE direct-delete history=DIRECT_THEN_DELETE_CONFLICT");
+        } else {
+            assertThat(race.second().succeeded()).isTrue();
+            assertThat(hasStatus(race.first(), HttpStatus.NOT_FOUND)).isTrue();
+            assertThat(persisted.status()).isEqualTo(PostStatus.DRAFT);
+            assertThat(persisted.publishedAt()).isNull();
+            System.out.println("T11A4_EVIDENCE direct-delete history=DELETE_THEN_DIRECT_NOT_FOUND");
+        }
+        assertThat(reviewCount(post.id())).isZero();
+    }
+
+    @Test
     void concurrentSubmitAndPatchMatchAValidSerializedHistory() throws Exception {
         UserFixture author = insertUser("submit-patch-author");
         String originalExcerpt = "original patch excerpt";
@@ -298,6 +429,8 @@ class PostWorkflowConcurrencyPostgresIntegrationTest {
             if (observationFailure != null) {
                 throw new AssertionError("Did not observe two concurrent PostgreSQL lock waiters", observationFailure);
             }
+            System.out.printf("T11A4_LOCK_EVIDENCE gate=%d waiters=%s%n",
+                    lockObservation.gateBackendPid(), lockObservation.waitingBackendPids());
             return new RaceExecution(firstOutcome, secondOutcome, lockObservation);
         } finally {
             workers.shutdownNow();
@@ -470,6 +603,14 @@ class PostWorkflowConcurrencyPostgresIntegrationTest {
         return jdbc.queryForObject("select current_database()", String.class);
     }
 
+    private DatabaseCounts databaseCounts() {
+        return new DatabaseCounts(
+                jdbc.queryForObject("select count(*) from tbl_user", Long.class),
+                jdbc.queryForObject("select count(*) from posts", Long.class),
+                jdbc.queryForObject("select count(*) from post_reviews", Long.class)
+        );
+    }
+
     private static boolean hasStatus(CommandOutcome outcome, HttpStatus expected) {
         return outcome.failure() instanceof ResponseStatusException response
                 && response.getStatusCode().value() == expected.value();
@@ -504,6 +645,9 @@ class PostWorkflowConcurrencyPostgresIntegrationTest {
             Instant updatedAt,
             Instant deletedAt
     ) {
+    }
+
+    private record DatabaseCounts(long users, long posts, long reviews) {
     }
 
     private record LockObservation(int gateBackendPid, Set<Integer> waitingBackendPids) {

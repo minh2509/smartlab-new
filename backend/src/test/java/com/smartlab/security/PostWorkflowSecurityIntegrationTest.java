@@ -131,6 +131,30 @@ class PostWorkflowSecurityIntegrationTest {
         verifySuccessfulServiceDelegation(endpoint);
     }
 
+    @ParameterizedTest(name = "direct publish rejects additional wrong authority {0}")
+    @MethodSource("additionalDirectPublishWrongAuthorities")
+    void directPublishRejectsAdditionalWrongWorkflowAuthorities(String authority) throws Exception {
+        String token = tokenWithAuthorities(authority);
+
+        mockMvc.perform(request(directPublishEndpoint(), token))
+                .andExpect(status().isForbidden());
+
+        verifyAuthenticatedFilterPath();
+        verifyNoInteractions(postService);
+    }
+
+    @ParameterizedTest(name = "direct-only authority cannot invoke normal publish")
+    @MethodSource("directPublishOnlyAuthority")
+    void directPublishAuthorityDoesNotAuthorizeNormalPublish(String authority) throws Exception {
+        String token = tokenWithAuthorities(authority);
+
+        mockMvc.perform(request(normalPublishEndpoint(), token))
+                .andExpect(status().isForbidden());
+
+        verifyAuthenticatedFilterPath();
+        verifyNoInteractions(postService);
+    }
+
     private String tokenWithAuthorities(String... authorities) {
         UserDetails userDetails = User.withUsername(EMAIL)
                 .password("t08-not-used")
@@ -152,6 +176,7 @@ class PostWorkflowSecurityIntegrationTest {
             case SUBMIT -> when(postService.submitForReview(EMAIL, POST_ID)).thenReturn(response);
             case REVIEW -> when(postService.reviewPost(any(), any(), any(ReviewPostRequest.class))).thenReturn(response);
             case PUBLISH -> when(postService.publishPost(EMAIL, POST_ID)).thenReturn(response);
+            case DIRECT_PUBLISH -> when(postService.directPublishPost(EMAIL, POST_ID)).thenReturn(response);
         }
     }
 
@@ -164,6 +189,7 @@ class PostWorkflowSecurityIntegrationTest {
                     new ReviewPostRequest(com.smartlab.enums.ReviewDecision.APPROVED, "ready")
             );
             case PUBLISH -> verify(postService).publishPost(EMAIL, POST_ID);
+            case DIRECT_PUBLISH -> verify(postService).directPublishPost(EMAIL, POST_ID);
         }
     }
 
@@ -213,14 +239,46 @@ class PostWorkflowSecurityIntegrationTest {
                         "posts.publish",
                         "posts.review",
                         PostStatus.PUBLISHED
-                )
+                ),
+                directPublishEndpoint()
         );
+    }
+
+    private static WorkflowEndpoint directPublishEndpoint() {
+        return new WorkflowEndpoint(
+                Operation.DIRECT_PUBLISH,
+                "/posts/17/direct-publish",
+                null,
+                "posts.publish.direct",
+                "posts.publish",
+                PostStatus.PUBLISHED
+        );
+    }
+
+    private static WorkflowEndpoint normalPublishEndpoint() {
+        return new WorkflowEndpoint(
+                Operation.PUBLISH,
+                "/posts/17/publish",
+                null,
+                "posts.publish",
+                "posts.review",
+                PostStatus.PUBLISHED
+        );
+    }
+
+    private static Stream<String> additionalDirectPublishWrongAuthorities() {
+        return Stream.of("posts.review");
+    }
+
+    private static Stream<String> directPublishOnlyAuthority() {
+        return Stream.of("posts.publish.direct");
     }
 
     private enum Operation {
         SUBMIT,
         REVIEW,
-        PUBLISH
+        PUBLISH,
+        DIRECT_PUBLISH
     }
 
     private record WorkflowEndpoint(
