@@ -18,6 +18,9 @@ import { HomePage } from '../features/public/pages/HomePage'
 import { StaticPublicPage } from '../features/public/pages/StaticPublicPage'
 import { RequirePermissions } from './RequirePermissions'
 import { FilesPage } from '../features/files/pages/FilesPage'
+import { ProjectListPage } from '../features/projects/pages/ProjectListPage'
+import { ProjectDetailPage } from '../features/projects/pages/ProjectDetailPage'
+import { ProjectManagementPage } from '../features/projects/pages/ProjectManagementPage'
 
 export function App() {
   return (
@@ -45,16 +48,8 @@ export function App() {
             />
           }
         />
-        <Route
-          path="/du-an"
-          element={
-            <StaticPublicPage
-              kind="projects"
-              title="Dự án"
-              description="Danh sách dự án nghiên cứu và sản phẩm của Smart Lab trên các lĩnh vực trọng tâm."
-            />
-          }
-        />
+        <Route path="/du-an" element={<ProjectListPage />} />
+        <Route path="/du-an/:id" element={<ProjectDetailPage />} />
         <Route
           path="/thanh-vien"
           element={
@@ -142,6 +137,7 @@ export function App() {
       <Route element={<AdminLayout />}>
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/files" element={<RequirePermissions allOf={['FILE_UPLOAD']}><FilesPage /></RequirePermissions>} />
+        <Route path="/admin/projects" element={<ProjectManagementPage />} />
         <Route path="/admin/research-fields" element={<RequirePermissions allOf={['RESEARCH_FIELD_MANAGE']}><ResearchFieldsPage /></RequirePermissions>} />
         <Route path="/admin/members" element={<RequirePermissions allOf={['MEMBER_MANAGE']}><AdminMembersPage /></RequirePermissions>} />
         <Route path="/admin/accounts" element={<RequirePermissions allOf={['USER_MANAGE', 'ROLE_MANAGE', 'PERMISSION_MANAGE']}><AdminAccountsPage /></RequirePermissions>} />

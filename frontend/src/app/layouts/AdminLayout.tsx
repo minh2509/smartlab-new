@@ -1,4 +1,4 @@
-import { Files, FlaskConical, KeyRound, LogOut, ShieldCheck, UserCircle, UsersRound } from 'lucide-react'
+import { Files, FlaskConical, FolderKanban, KeyRound, LogOut, ShieldCheck, UserCircle, UsersRound } from 'lucide-react'
 import { NavLink, Navigate, Outlet } from 'react-router-dom'
 import { useAuth } from '../../features/auth/authContext'
 import { Logo } from '../../shared/components/Logo'
@@ -32,6 +32,10 @@ export function AdminLayout() {
                 Tệp của tôi
               </NavLink>}
               <span className="admin-nav-label">Quản trị</span>
+              {(can('PROJECT_READ') || profile?.roles.includes('ADMIN')) && <NavLink to="/admin/projects">
+                <FolderKanban />
+                Dự án
+              </NavLink>}
               {can('USER_MANAGE', 'ROLE_MANAGE', 'PERMISSION_MANAGE') && <NavLink to="/admin/accounts">
                 <UsersRound />
                 Quản trị tài khoản

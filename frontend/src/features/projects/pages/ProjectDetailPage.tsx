@@ -1,0 +1,228 @@
+import { CalendarDays, FileClock, FlaskConical, LockKeyhole, UsersRound } from 'lucide-react'
+import { Fragment, useEffect, useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
+import { Feedback } from '../../../shared/components/Feedback'
+import { useAuth } from '../../auth/authContext'
+import { PublicPageHead } from '../../public/components/PublicPageHead'
+import { getProject } from '../api'
+import {
+  PROJECT_STATUS_BADGES,
+  PROJECT_STATUS_LABELS,
+  PROJECT_TYPE_LABELS,
+} from '../types'
+import type { Project } from '../types'
+
+export function ProjectDetailPage() {
+  const { id } = useParams<{ id: string }>()
+  const { token } = useAuth()
+  const [project, setProject] = useState<Project | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
+
+  useEffect(() => {
+    let active = true
+    const projectId = Number(id)
+
+    setProject(null)
+    setError(null)
+
+    if (!Number.isInteger(projectId) || projectId <= 0) {
+      setLoading(false)
+      setError('Mã dự án không hợp lệ.')
+      return () => {
+        active = false
+      }
+    }
+
+    setLoading(true)
+    getProject(projectId, token)
+      .then((result) => {
+        if (active) setProject(result)
+      })
+      .catch((reason: unknown) => {
+        if (active) {
+          setError(reason instanceof Error ? reason.message : 'Không tải được thông tin dự án.')
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [id, reloadKey, token])
+
+  if (loading) {
+    return (
+      <>
+        <PublicPageHead title="Dự án" description="Đang tải thông tin dự án..." />
+        <section className="section"><div className="wrap"><div className="public-empty empty tight">Đang tải thông tin dự án...</div></div></section>
+      </>
+    )
+  }
+
+  if (error || !project) {
+    return (
+      <>
+        <PublicPageHead title="Không tìm thấy dự án" description="Dự án không tồn tại hoặc bạn không có quyền xem." />
+        <section className="section">
+          <div className="wrap">
+            <Feedback error={error ?? 'Không tìm thấy dự án.'} />
+            <div className="row gap-6 wrapf">
+              <Link className="btn" to="/du-an">Quay lại danh sách</Link>
+              {id && Number.isInteger(Number(id)) && Number(id) > 0 ? (
+                <button className="btn ghost" type="button" onClick={() => setReloadKey((value) => value + 1)}>
+                  Thử tải lại
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </section>
+      </>
+    )
+  }
+
+  const facts = [
+    { label: 'Mã dự án', value: project.code },
+    { label: 'Loại', value: PROJECT_TYPE_LABELS[project.projectType] },
+    { label: 'Ngày bắt đầu', value: formatDate(project.startDate) },
+    { label: 'Dự kiến kết thúc', value: formatDate(project.expectedEndDate) },
+    { label: 'Kết thúc thực tế', value: formatDate(project.actualEndDate) },
+    { label: 'Phạm vi', value: project.isPublic ? 'Công khai' : 'Nội bộ' },
+    { label: 'Nổi bật', value: project.isFeatured ? 'Có' : 'Không' },
+  ]
+
+  return (
+    <>
+      <PublicPageHead title={project.name} description={project.description || 'Thông tin dự án tại Smart Lab.'} />
+
+      <section className="section">
+        <div className="wrap">
+          <Link className="muted-link" to="/du-an">← Quay lại danh sách dự án</Link>
+
+          <div className="layout-side" style={{ marginTop: 24 }}>
+            <div className="prose">
+              <div className="row gap-6 wrapf">
+                <span className={`badge ${PROJECT_STATUS_BADGES[project.status]}`}>
+                  <span className="dot" />
+                  {PROJECT_STATUS_LABELS[project.status]}
+                </span>
+                <span className="chip accent">{PROJECT_TYPE_LABELS[project.projectType]}</span>
+                {project.isFeatured ? <span className="chip">Dự án nổi bật</span> : null}
+              </div>
+
+              <h2>Tổng quan</h2>
+              <p>{project.description || 'Dự án chưa có mô tả.'}</p>
+
+              <h3>Mục tiêu</h3>
+              <p>{project.goal || 'Dự án chưa cập nhật mục tiêu.'}</p>
+
+              <div className="card pad">
+                <h3><CalendarDays size={19} /> Thông tin dự án</h3>
+                <dl className="deflist">
+                  {facts.map((fact) => (
+                    <Fragment key={fact.label}>
+                      <dt>{fact.label}</dt>
+                      <dd>{fact.value}</dd>
+                    </Fragment>
+                  ))}
+                </dl>
+              </div>
+            </div>
+
+            <aside>
+              <div className="side-box sticky">
+                <h4><UsersRound size={18} /> Nhóm leader</h4>
+                {project.primaryLeader ? (
+                  <p>
+                    <span className="muted small">Leader chính</span><br />
+                    <strong>{project.primaryLeader.name}</strong>
+                  </p>
+                ) : <p className="muted">Chưa chọn leader chính.</p>}
+
+                <div className="form-stack mt-20">
+                  {project.leaders.map((leader) => (
+                    <div className="row gap-6" key={leader.userId}>
+                      <span className="ava xs">{initialsOf(leader.name)}</span>
+                      <span>{leader.name}</span>
+                    </div>
+                  ))}
+                  {project.leaders.length === 0 ? <span className="muted small">Chưa phân công leader.</span> : null}
+                </div>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+      <FutureProjectSections />
+    </>
+  )
+}
+
+function FutureProjectSections() {
+  const sections = [
+    {
+      title: 'Lĩnh vực & thành viên',
+      description: 'Khu vực này sẽ hiển thị lĩnh vực nghiên cứu và đội ngũ dự án khi API Đợt 2 hoàn thiện.',
+      batch: 'Đợt 2 · Chưa kích hoạt',
+      Icon: FlaskConical,
+    },
+    {
+      title: 'Sự kiện dự án',
+      description: 'Lịch workshop, seminar và các mốc sự kiện sẽ được nối ở đợt nghiệp vụ tiếp theo.',
+      batch: 'Đợt 2 · Chưa kích hoạt',
+      Icon: CalendarDays,
+    },
+    {
+      title: 'Tài liệu & phiên bản',
+      description: 'Danh sách tài liệu và lịch sử phiên bản sẽ được nối với dịch vụ file ở Đợt 3.',
+      batch: 'Đợt 3 · Chưa kích hoạt',
+      Icon: FileClock,
+    },
+  ]
+
+  return (
+    <section className="section alt" aria-label="Các chức năng dự án sẽ triển khai sau">
+      <div className="wrap">
+        <div className="sec-head">
+          <div className="kicker">Mở rộng dự án</div>
+          <h2>Các phần sẽ hoàn thiện ở đợt sau</h2>
+          <p>Cấu trúc giao diện đã chừa sẵn; chưa có dữ liệu giả hoặc lời gọi API chưa tồn tại.</p>
+        </div>
+        <div className="grid c3">
+          {sections.map(({ title, description, batch, Icon }) => (
+            <article className="card pad" aria-disabled="true" style={{ opacity: 0.72 }} key={title}>
+              <div className="row gap-6 wrapf">
+                <span className="ico"><Icon aria-hidden="true" /></span>
+                <span className="badge mute"><LockKeyhole size={13} /> {batch}</span>
+              </div>
+              <h3>{title}</h3>
+              <p className="muted">{description}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function formatDate(value: string | null) {
+  if (!value) return 'Chưa cập nhật'
+  const date = new Date(`${value}T00:00:00`)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium' }).format(date)
+}
+
+function initialsOf(name: string) {
+  return name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(-2)
+    .map((part) => part.charAt(0))
+    .join('')
+    .toLocaleUpperCase('vi')
+}
