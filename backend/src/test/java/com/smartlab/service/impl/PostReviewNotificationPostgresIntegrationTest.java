@@ -12,6 +12,7 @@ import com.smartlab.repo.PostRepository;
 import com.smartlab.repo.PostReviewRepository;
 import com.smartlab.repo.UserRepository;
 import com.smartlab.service.NotificationService;
+import com.smartlab.service.NotificationRelated;
 import com.smartlab.service.PostService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -126,7 +127,12 @@ class PostReviewNotificationPostgresIntegrationTest {
         assertThat(notification.id()).isPositive();
         assertThat(notification.recipientUserId()).isEqualTo(author.id());
         assertThat(notification.message()).isEqualTo(reviewCase.message());
-        assertThat(notification.linkUrl()).isNull();
+        assertThat(notification.type()).isEqualTo("POST_REVIEW_" + reviewCase.decision().name());
+        assertThat(notification.actorUserId()).isEqualTo(reviewer.id());
+        assertThat(notification.relatedType()).isEqualTo("POST");
+        assertThat(notification.relatedId()).isEqualTo(postId);
+        assertThat(notification.targetUrl()).isNull();
+        assertThat(notification.deletedAt()).isNull();
         assertThat(notification.read()).isFalse();
         assertThat(notificationCount(author.id())).isEqualTo(1L);
         assertThat(notification.createdAt()).isEqualTo(persisted.reviewCreatedAt());
@@ -169,10 +175,11 @@ class PostReviewNotificationPostgresIntegrationTest {
         PostBeforeState before = inNewTransaction(() -> readPostBeforeState(postId));
         DataIntegrityViolationException failure =
                 new DataIntegrityViolationException("injected notification provider failure");
-        doThrow(failure).when(notificationService).recordNotification(
+        doThrow(failure).when(notificationService).notify(
                 eq(author.id()),
+                eq("POST_REVIEW_APPROVED"),
                 eq("Bài viết của bạn đã được duyệt."),
-                isNull(),
+                eq(new NotificationRelated(reviewer.id(), "POST", postId, null)),
                 any(Instant.class)
         );
 
@@ -182,10 +189,11 @@ class PostReviewNotificationPostgresIntegrationTest {
                 new ReviewPostRequest(ReviewDecision.APPROVED, "rollback notification evidence")
         )).isSameAs(failure);
 
-        verify(notificationService).recordNotification(
+        verify(notificationService).notify(
                 eq(author.id()),
+                eq("POST_REVIEW_APPROVED"),
                 eq("Bài viết của bạn đã được duyệt."),
-                isNull(),
+                eq(new NotificationRelated(reviewer.id(), "POST", postId, null)),
                 any(Instant.class)
         );
         RollbackSnapshot after = inNewTransaction(() -> readRollbackSnapshot(postId, author.id()));
@@ -266,15 +274,21 @@ class PostReviewNotificationPostgresIntegrationTest {
 
     private NotificationSnapshot readOnlyNotification(Long recipientUserId) {
         return jdbc.queryForObject("""
-                select id, recipient_user_id, message, link_url, is_read, created_at
+                select id, recipient_user_id, actor_user_id, type, message, related_type, related_id,
+                       target_url, is_read, deleted_at, created_at
                 from notifications
                 where recipient_user_id = ?
                 """, (rs, rowNum) -> new NotificationSnapshot(
                 rs.getLong("id"),
                 rs.getLong("recipient_user_id"),
+                rs.getLong("actor_user_id"),
+                rs.getString("type"),
                 rs.getString("message"),
-                rs.getString("link_url"),
+                rs.getString("related_type"),
+                rs.getLong("related_id"),
+                rs.getString("target_url"),
                 rs.getBoolean("is_read"),
+                rs.getTimestamp("deleted_at") == null ? null : rs.getTimestamp("deleted_at").toInstant(),
                 rs.getTimestamp("created_at").toInstant()
         ), recipientUserId);
     }
@@ -401,9 +415,14 @@ class PostReviewNotificationPostgresIntegrationTest {
     private record NotificationSnapshot(
             Long id,
             Long recipientUserId,
+            Long actorUserId,
+            String type,
             String message,
-            String linkUrl,
+            String relatedType,
+            Long relatedId,
+            String targetUrl,
             boolean read,
+            Instant deletedAt,
             Instant createdAt
     ) {
     }

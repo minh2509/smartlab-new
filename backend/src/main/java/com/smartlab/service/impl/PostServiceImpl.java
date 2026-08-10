@@ -18,6 +18,7 @@ import com.smartlab.repo.PostRepository;
 import com.smartlab.repo.PostReviewRepository;
 import com.smartlab.repo.UserRepository;
 import com.smartlab.service.NotificationService;
+import com.smartlab.service.NotificationRelated;
 import com.smartlab.service.PostService;
 import com.smartlab.service.PostSlugGenerator;
 import lombok.RequiredArgsConstructor;
@@ -168,10 +169,11 @@ public class PostServiceImpl implements PostService {
         post.applyReviewDecision(request.decision(), reviewInstant);
         postReviewRepository.saveAndFlush(review);
         if (post.getAuthorUserId() != null) {
-            notificationService.recordNotification(
+            notificationService.notify(
                     post.getAuthorUserId(),
+                    reviewNotificationType(request.decision()),
                     reviewNotificationMessage(request.decision()),
-                    null,
+                    new NotificationRelated(reviewer.getId(), "POST", post.getId(), null),
                     reviewInstant
             );
         }
@@ -354,6 +356,10 @@ public class PostServiceImpl implements PostService {
             case REVISION_REQUIRED -> "Bài viết của bạn cần được chỉnh sửa.";
             case REJECTED -> "Bài viết của bạn đã bị từ chối.";
         };
+    }
+
+    private static String reviewNotificationType(ReviewDecision decision) {
+        return "POST_REVIEW_" + decision.name();
     }
 
     private ResponseStatusException postNotFound() {
