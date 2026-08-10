@@ -56,6 +56,12 @@ public class PostController {
         return postService.publishPost(authentication.getName(), id);
     }
 
+    @PostMapping("/{id}/direct-publish")
+    @PreAuthorize("hasAuthority('posts.publish.direct')")
+    public PostDetailResponse directPublish(Authentication authentication, @PathVariable Long id) {
+        return postService.directPublishPost(authentication.getName(), id);
+    }
+
     @GetMapping
     public List<PostSummaryResponse> getPosts(Authentication authentication) {
         return postService.getReadablePosts(authentication.getName());
