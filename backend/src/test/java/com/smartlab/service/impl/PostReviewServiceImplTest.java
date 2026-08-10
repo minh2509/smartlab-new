@@ -13,6 +13,7 @@ import com.smartlab.repo.PostRepository;
 import com.smartlab.repo.PostReviewRepository;
 import com.smartlab.repo.UserRepository;
 import com.smartlab.service.NotificationService;
+import com.smartlab.service.NotificationRelated;
 import com.smartlab.service.PostService;
 import com.smartlab.service.PostSlugGenerator;
 import org.junit.jupiter.api.AfterEach;
@@ -219,7 +220,8 @@ class PostReviewServiceImplTest {
         DataIntegrityViolationException failure = new DataIntegrityViolationException("notification persistence failure");
         activeReviewer();
         when(postRepository.findActiveByIdForUpdate(POST_ID)).thenReturn(Optional.of(post));
-        doThrow(failure).when(notificationService).recordNotification(
+        doThrow(failure).when(notificationService).notify(
+                any(),
                 any(),
                 any(),
                 any(),
@@ -234,10 +236,11 @@ class PostReviewServiceImplTest {
 
         InOrder order = inOrder(postReviewRepository, notificationService);
         order.verify(postReviewRepository).saveAndFlush(any(PostReviewEntity.class));
-        order.verify(notificationService).recordNotification(
+        order.verify(notificationService).notify(
                 AUTHOR_ID,
+                "POST_REVIEW_APPROVED",
                 "Bài viết của bạn đã được duyệt.",
-                null,
+                new NotificationRelated(REVIEWER_ID, "POST", POST_ID, null),
                 post.getUpdatedAt()
         );
     }
@@ -282,10 +285,11 @@ class PostReviewServiceImplTest {
         if (authorUserId == null) {
             verifyNoInteractions(notificationService);
         } else {
-            order.verify(notificationService).recordNotification(
+            order.verify(notificationService).notify(
                     authorUserId,
+                    "POST_REVIEW_" + decision.name(),
                     expectedNotificationMessage,
-                    null,
+                    new NotificationRelated(REVIEWER_ID, "POST", POST_ID, null),
                     review.getCreatedAt()
             );
         }

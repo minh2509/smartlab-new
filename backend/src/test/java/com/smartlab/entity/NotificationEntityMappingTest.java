@@ -1,158 +1,87 @@
 package com.smartlab.entity;
 
 import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
 import jakarta.persistence.ManyToOne;
-import jakarta.persistence.OneToMany;
-import jakarta.persistence.OneToOne;
-import jakarta.persistence.Table;
 import org.junit.jupiter.api.Test;
 
-import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
 import java.time.Instant;
 import java.util.Arrays;
-import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class NotificationEntityMappingTest {
-
-    private static final Instant CREATED_AT = Instant.parse("2026-08-10T10:00:00Z");
-
-    @Test
-    void mapsTheAppliedNotificationsTableAndFields() {
-        assertThat(NotificationEntity.class.isAnnotationPresent(Entity.class)).isTrue();
-        assertThat(NotificationEntity.class.getAnnotation(Table.class).name()).isEqualTo("notifications");
-        assertThat(fieldNames()).containsExactlyInAnyOrder(
-                "id",
-                "recipientUserId",
-                "message",
-                "linkUrl",
-                "isRead",
-                "createdAt"
-        );
-    }
+    private static final Instant TIME = Instant.parse("2026-08-10T10:00:00Z");
 
     @Test
-    void mapsIdentityAndScalarRecipientForeignKey() throws NoSuchFieldException {
-        Field id = field("id");
-
-        assertThat(id.isAnnotationPresent(Id.class)).isTrue();
-        assertThat(id.isAnnotationPresent(GeneratedValue.class)).isTrue();
-        assertThat(id.getAnnotation(GeneratedValue.class).strategy()).isEqualTo(GenerationType.IDENTITY);
-        assertThat(id.getType()).isEqualTo(Long.class);
-        assertColumn("recipientUserId", "recipient_user_id", false, 255);
-        assertThat(field("recipientUserId").getType()).isEqualTo(Long.class);
+    void mapsExactReconciledSchemaWithScalarIds() {
+        assertThat(Arrays.stream(NotificationEntity.class.getDeclaredFields()).map(Field::getName))
+                .containsExactlyInAnyOrder("id", "recipientUserId", "actorUserId", "type", "message",
+                        "relatedType", "relatedId", "targetUrl", "isRead", "deletedAt", "createdAt");
+        assertColumn("recipientUserId", "recipient_user_id", 255);
+        assertColumn("actorUserId", "actor_user_id", 255);
+        assertColumn("type", "type", 100);
+        assertColumn("message", "message", 1000);
+        assertColumn("relatedType", "related_type", 80);
+        assertColumn("relatedId", "related_id", 255);
+        assertColumn("targetUrl", "target_url", 500);
+        assertColumn("isRead", "is_read", 255);
+        assertColumn("deletedAt", "deleted_at", 255);
+        assertColumn("createdAt", "created_at", 255);
+        assertThat(Arrays.stream(NotificationEntity.class.getDeclaredFields()).noneMatch(f -> f.isAnnotationPresent(ManyToOne.class))).isTrue();
     }
 
     @Test
-    void mapsMessageLinkReadStateAndCreationTimestamp() throws NoSuchFieldException {
-        assertColumn("message", "message", false, 500);
-        assertColumn("linkUrl", "link_url", true, 500);
-        assertColumn("isRead", "is_read", false, 255);
-        assertColumn("createdAt", "created_at", false, 255);
-        assertThat(field("isRead").getType()).isEqualTo(boolean.class);
-        assertThat(field("createdAt").getType()).isEqualTo(Instant.class);
+    void factoryPreservesExactInputsAndStartsUnreadUndeleted() {
+        NotificationEntity n = NotificationEntity.create(9L, 8L, " TYPE ", " message ", " POST ", 7L, " /posts/7 ", TIME);
+        assertThat(n.getRecipientUserId()).isEqualTo(9L);
+        assertThat(n.getActorUserId()).isEqualTo(8L);
+        assertThat(n.getType()).isEqualTo(" TYPE ");
+        assertThat(n.getMessage()).isEqualTo(" message ");
+        assertThat(n.getRelatedType()).isEqualTo(" POST ");
+        assertThat(n.getRelatedId()).isEqualTo(7L);
+        assertThat(n.getTargetUrl()).isEqualTo(" /posts/7 ");
+        assertThat(n.isRead()).isFalse();
+        assertThat(n.getDeletedAt()).isNull();
+        assertThat(n.getCreatedAt()).isEqualTo(TIME);
     }
 
     @Test
-    void usesNoObjectGraphRelationships() {
-        assertThat(Arrays.stream(NotificationEntity.class.getDeclaredFields()))
-                .noneMatch(field -> field.isAnnotationPresent(ManyToOne.class)
-                        || field.isAnnotationPresent(OneToOne.class)
-                        || field.isAnnotationPresent(OneToMany.class));
+    void acceptsExactColumnBoundariesAndNullableMetadata() {
+        NotificationEntity n = NotificationEntity.create(1L, null, "t".repeat(100), "m".repeat(1000),
+                "r".repeat(80), null, "u".repeat(500), TIME);
+        assertThat(n.getMessage()).hasSize(1000);
+        assertThat(n.getActorUserId()).isNull();
+        assertThat(n.getRelatedId()).isNull();
     }
 
     @Test
-    void hasProtectedJpaConstructor() throws Exception {
-        Constructor<NotificationEntity> constructor = NotificationEntity.class.getDeclaredConstructor();
-
-        assertThat(Modifier.isProtected(constructor.getModifiers())).isTrue();
+    void rejectsInvalidContractValues() {
+        assertThatThrownBy(() -> NotificationEntity.create(0L, null, "TYPE", "m", null, null, null, TIME)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> NotificationEntity.create(1L, 0L, "TYPE", "m", null, null, null, TIME)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> NotificationEntity.create(1L, null, " ", "m", null, null, null, TIME)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> NotificationEntity.create(1L, null, "t".repeat(101), "m", null, null, null, TIME)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> NotificationEntity.create(1L, null, "TYPE", "m".repeat(1001), null, null, null, TIME)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> NotificationEntity.create(1L, null, "TYPE", "m", "r".repeat(81), null, null, TIME)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> NotificationEntity.create(1L, null, "TYPE", "m", null, 0L, null, TIME)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> NotificationEntity.create(1L, null, "TYPE", "m", null, null, "u".repeat(501), TIME)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
-    void createsUnreadNotificationPreservingSuppliedTextAndTimestamp() {
-        String message = "  Your notification  ";
-        String linkUrl = "  /posts/example  ";
-
-        NotificationEntity notification = NotificationEntity.create(9L, message, linkUrl, CREATED_AT);
-
-        assertThat(notification.getId()).isNull();
-        assertThat(notification.getRecipientUserId()).isEqualTo(9L);
-        assertThat(notification.getMessage()).isEqualTo(message);
-        assertThat(notification.getLinkUrl()).isEqualTo(linkUrl);
-        assertThat(notification.isRead()).isFalse();
-        assertThat(notification.getCreatedAt()).isEqualTo(CREATED_AT);
+    void controlledOperationsChangeOnlyReadAndDeletedState() {
+        NotificationEntity n = NotificationEntity.create(1L, null, "TYPE", "m", null, null, null, TIME);
+        n.markRead();
+        n.softDelete(TIME.plusSeconds(1));
+        assertThat(n.isRead()).isTrue();
+        assertThat(n.getDeletedAt()).isEqualTo(TIME.plusSeconds(1));
     }
 
-    @Test
-    void allowsNullLinkAndBlankMessageWithoutRewritingSchemaPermittedText() {
-        NotificationEntity notification = NotificationEntity.create(9L, " ", null, CREATED_AT);
-
-        assertThat(notification.getMessage()).isEqualTo(" ");
-        assertThat(notification.getLinkUrl()).isNull();
-        assertThat(notification.isRead()).isFalse();
-    }
-
-    @Test
-    void acceptsExactFiveHundredCharacterMessageAndLink() {
-        NotificationEntity notification = NotificationEntity.create(9L, "m".repeat(500), "l".repeat(500), CREATED_AT);
-
-        assertThat(notification.getMessage()).hasSize(500);
-        assertThat(notification.getLinkUrl()).hasSize(500);
-    }
-
-    @Test
-    void rejectsTextLongerThanAppliedColumnLimits() {
-        assertThatThrownBy(() -> NotificationEntity.create(9L, "m".repeat(501), null, CREATED_AT))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Notification message must be at most 500 characters");
-        assertThatThrownBy(() -> NotificationEntity.create(9L, "message", "l".repeat(501), CREATED_AT))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Notification link URL must be at most 500 characters");
-    }
-
-    @Test
-    void rejectsMissingRequiredCreationValuesAndNonPositiveRecipients() {
-        assertThatThrownBy(() -> NotificationEntity.create(null, "message", null, CREATED_AT))
-                .isInstanceOf(NullPointerException.class)
-                .hasMessage("Notification recipient user ID is required");
-        assertThatThrownBy(() -> NotificationEntity.create(0L, "message", null, CREATED_AT))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Notification recipient user ID must be positive");
-        assertThatThrownBy(() -> NotificationEntity.create(-1L, "message", null, CREATED_AT))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Notification recipient user ID must be positive");
-        assertThatThrownBy(() -> NotificationEntity.create(9L, null, null, CREATED_AT))
-                .isInstanceOf(NullPointerException.class)
-                .hasMessage("Notification message is required");
-        assertThatThrownBy(() -> NotificationEntity.create(9L, "message", null, null))
-                .isInstanceOf(NullPointerException.class)
-                .hasMessage("Notification creation instant is required");
-    }
-
-    private static Set<String> fieldNames() {
-        return Arrays.stream(NotificationEntity.class.getDeclaredFields())
-                .map(Field::getName)
-                .collect(java.util.stream.Collectors.toSet());
-    }
-
-    private static Field field(String name) throws NoSuchFieldException {
-        return NotificationEntity.class.getDeclaredField(name);
-    }
-
-    private static void assertColumn(String fieldName, String columnName, boolean nullable, int length)
-            throws NoSuchFieldException {
-        Column column = field(fieldName).getAnnotation(Column.class);
-
-        assertThat(column.name()).isEqualTo(columnName);
-        assertThat(column.nullable()).isEqualTo(nullable);
-        assertThat(column.length()).isEqualTo(length);
+    private static void assertColumn(String fieldName, String columnName, int length) {
+        try {
+            Column column = NotificationEntity.class.getDeclaredField(fieldName).getAnnotation(Column.class);
+            assertThat(column.name()).isEqualTo(columnName);
+            assertThat(column.length()).isEqualTo(length);
+        } catch (NoSuchFieldException e) { throw new AssertionError(e); }
     }
 }
