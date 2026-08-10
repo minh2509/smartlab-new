@@ -12,10 +12,12 @@ import com.smartlab.entity.PostReviewEntity;
 import com.smartlab.entity.UserEntity;
 import com.smartlab.enums.PostVisibility;
 import com.smartlab.enums.PostStatus;
+import com.smartlab.enums.ReviewDecision;
 import com.smartlab.repo.ContentCategoryRepository;
 import com.smartlab.repo.PostRepository;
 import com.smartlab.repo.PostReviewRepository;
 import com.smartlab.repo.UserRepository;
+import com.smartlab.service.NotificationService;
 import com.smartlab.service.PostService;
 import com.smartlab.service.PostSlugGenerator;
 import lombok.RequiredArgsConstructor;
@@ -42,6 +44,7 @@ public class PostServiceImpl implements PostService {
     private final PostReviewRepository postReviewRepository;
     private final PostSlugGenerator postSlugGenerator;
     private final PostCreateAttemptService postCreateAttemptService;
+    private final NotificationService notificationService;
 
     @Override
     public PostDetailResponse createPost(String authenticatedEmail, CreatePostRequest request) {
@@ -164,6 +167,14 @@ public class PostServiceImpl implements PostService {
         );
         post.applyReviewDecision(request.decision(), reviewInstant);
         postReviewRepository.saveAndFlush(review);
+        if (post.getAuthorUserId() != null) {
+            notificationService.recordNotification(
+                    post.getAuthorUserId(),
+                    reviewNotificationMessage(request.decision()),
+                    null,
+                    reviewInstant
+            );
+        }
 
         return toDetailResponse(post, findCategoryResponse(post.getCategoryId()));
     }
@@ -335,6 +346,14 @@ public class PostServiceImpl implements PostService {
         return (post.getAuthorUserId() != null && post.getAuthorUserId().equals(viewerUserId))
                 || (post.getStatus() == PostStatus.PUBLISHED
                 && (post.getVisibility() == PostVisibility.PUBLIC || post.getVisibility() == PostVisibility.LAB));
+    }
+
+    private static String reviewNotificationMessage(ReviewDecision decision) {
+        return switch (decision) {
+            case APPROVED -> "Bài viết của bạn đã được duyệt.";
+            case REVISION_REQUIRED -> "Bài viết của bạn cần được chỉnh sửa.";
+            case REJECTED -> "Bài viết của bạn đã bị từ chối.";
+        };
     }
 
     private ResponseStatusException postNotFound() {

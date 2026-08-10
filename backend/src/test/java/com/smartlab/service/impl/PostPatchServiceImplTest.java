@@ -11,6 +11,7 @@ import com.smartlab.repo.ContentCategoryRepository;
 import com.smartlab.repo.PostRepository;
 import com.smartlab.repo.PostReviewRepository;
 import com.smartlab.repo.UserRepository;
+import com.smartlab.service.NotificationService;
 import com.smartlab.service.PostService;
 import com.smartlab.service.PostSlugGenerator;
 import org.junit.jupiter.api.AfterEach;
@@ -63,6 +64,8 @@ class PostPatchServiceImplTest {
     private PostSlugGenerator postSlugGenerator;
     @Mock
     private PostCreateAttemptService postCreateAttemptService;
+    @Mock
+    private NotificationService notificationService;
 
     private PostService postService;
 
@@ -74,7 +77,8 @@ class PostPatchServiceImplTest {
                 postRepository,
                 postReviewRepository,
                 postSlugGenerator,
-                postCreateAttemptService
+                postCreateAttemptService,
+                notificationService
         );
     }
 

@@ -12,6 +12,7 @@ import com.smartlab.repo.ContentCategoryRepository;
 import com.smartlab.repo.PostRepository;
 import com.smartlab.repo.PostReviewRepository;
 import com.smartlab.repo.UserRepository;
+import com.smartlab.service.NotificationService;
 import com.smartlab.service.PostService;
 import com.smartlab.service.PostSlugGenerator;
 import org.junit.jupiter.api.AfterEach;
@@ -38,6 +39,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -62,6 +64,8 @@ class PostReviewServiceImplTest {
     @Mock
     private PostReviewRepository postReviewRepository;
     @Mock
+    private NotificationService notificationService;
+    @Mock
     private PostSlugGenerator postSlugGenerator;
     @Mock
     private PostCreateAttemptService postCreateAttemptService;
@@ -76,7 +80,8 @@ class PostReviewServiceImplTest {
                 postRepository,
                 postReviewRepository,
                 postSlugGenerator,
-                postCreateAttemptService
+                postCreateAttemptService,
+                notificationService
         );
     }
 
@@ -91,7 +96,13 @@ class PostReviewServiceImplTest {
 
     @Test
     void approvedReviewPersistsTrustedHistoryTransitionsLockedPostAndReturnsCanonicalDetail() {
-        assertSuccessfulReview(ReviewDecision.APPROVED, "approved with evidence", PostStatus.APPROVED, AUTHOR_ID);
+        assertSuccessfulReview(
+                ReviewDecision.APPROVED,
+                "approved with evidence",
+                PostStatus.APPROVED,
+                AUTHOR_ID,
+                "Bài viết của bạn đã được duyệt."
+        );
     }
 
     @Test
@@ -100,18 +111,25 @@ class PostReviewServiceImplTest {
                 ReviewDecision.REVISION_REQUIRED,
                 "Please add sources",
                 PostStatus.REVISION_REQUIRED,
-                AUTHOR_ID
+                AUTHOR_ID,
+                "Bài viết của bạn cần được chỉnh sửa."
         );
     }
 
     @Test
     void rejectedReviewPreservesLeadingAndTrailingWhitespaceExactly() {
-        assertSuccessfulReview(ReviewDecision.REJECTED, "  needs evidence  ", PostStatus.REJECTED, AUTHOR_ID);
+        assertSuccessfulReview(
+                ReviewDecision.REJECTED,
+                "  needs evidence  ",
+                PostStatus.REJECTED,
+                AUTHOR_ID,
+                "Bài viết của bạn đã bị từ chối."
+        );
     }
 
     @Test
     void authorlessPendingReviewCanBeReviewedByTrustedCanonicalUser() {
-        assertSuccessfulReview(ReviewDecision.APPROVED, null, PostStatus.APPROVED, null);
+        assertSuccessfulReview(ReviewDecision.APPROVED, null, PostStatus.APPROVED, null, null);
     }
 
     @Test
@@ -192,6 +210,36 @@ class PostReviewServiceImplTest {
         )).isSameAs(failure);
 
         verify(postReviewRepository).saveAndFlush(any(PostReviewEntity.class));
+        verifyNoInteractions(notificationService);
+    }
+
+    @Test
+    void notificationPersistenceFailurePropagatesAfterReviewHistoryFlush() {
+        PostEntity post = postInState(PostStatus.PENDING_REVIEW, AUTHOR_ID);
+        DataIntegrityViolationException failure = new DataIntegrityViolationException("notification persistence failure");
+        activeReviewer();
+        when(postRepository.findActiveByIdForUpdate(POST_ID)).thenReturn(Optional.of(post));
+        doThrow(failure).when(notificationService).recordNotification(
+                any(),
+                any(),
+                any(),
+                any()
+        );
+
+        assertThatThrownBy(() -> postService.reviewPost(
+                REVIEWER_EMAIL,
+                POST_ID,
+                request(ReviewDecision.APPROVED, "approved")
+        )).isSameAs(failure);
+
+        InOrder order = inOrder(postReviewRepository, notificationService);
+        order.verify(postReviewRepository).saveAndFlush(any(PostReviewEntity.class));
+        order.verify(notificationService).recordNotification(
+                AUTHOR_ID,
+                "Bài viết của bạn đã được duyệt.",
+                null,
+                post.getUpdatedAt()
+        );
     }
 
     @Test
@@ -213,7 +261,8 @@ class PostReviewServiceImplTest {
             ReviewDecision decision,
             String reason,
             PostStatus expectedStatus,
-            Long authorUserId
+            Long authorUserId,
+            String expectedNotificationMessage
     ) {
         PostEntity post = postInState(PostStatus.PENDING_REVIEW, authorUserId);
         activeReviewer();
@@ -224,11 +273,22 @@ class PostReviewServiceImplTest {
 
         Instant afterReview = Instant.now();
         ArgumentCaptor<PostReviewEntity> reviewCaptor = ArgumentCaptor.forClass(PostReviewEntity.class);
-        InOrder order = inOrder(userRepository, postRepository, postReviewRepository);
+        InOrder order = inOrder(userRepository, postRepository, postReviewRepository, notificationService);
         order.verify(userRepository).findByEmail(REVIEWER_EMAIL);
         order.verify(postRepository).findActiveByIdForUpdate(POST_ID);
         order.verify(postReviewRepository).saveAndFlush(reviewCaptor.capture());
         PostReviewEntity review = reviewCaptor.getValue();
+
+        if (authorUserId == null) {
+            verifyNoInteractions(notificationService);
+        } else {
+            order.verify(notificationService).recordNotification(
+                    authorUserId,
+                    expectedNotificationMessage,
+                    null,
+                    review.getCreatedAt()
+            );
+        }
 
         assertThat(review.getId()).isNull();
         assertThat(review.getPostId()).isEqualTo(POST_ID);
