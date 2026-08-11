@@ -134,14 +134,63 @@ select {
   width: auto;
 }
 
+.site-nav .nav-in {
+  width: 100%;
+  max-width: 1440px;
+  gap: clamp(12px, 1.25vw, 18px);
+}
+
 .public-nav {
-  flex: 1;
+  flex: 1 1 auto;
+  justify-content: center;
+  margin-left: 0;
   min-width: 0;
-  overflow: visible;
 }
 
 .public-nav a {
   white-space: nowrap;
+}
+
+.nav-act {
+  flex: 0 0 auto;
+  gap: 8px;
+  margin-left: auto;
+  padding-left: 12px;
+  border-left: 1px solid var(--line);
+}
+
+.nav-act > * {
+  flex: none;
+}
+
+.nav-private-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  color: var(--text-2);
+  font-size: 13.5px;
+  font-weight: 650;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.nav-private-link:hover {
+  background: var(--surface-2);
+  color: var(--text-1);
+}
+
+.nav-private-link.is-active {
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  color: var(--accent);
+}
+
+.nav-private-link:focus-visible {
+  outline: 2px solid var(--brand-1);
+  outline-offset: 2px;
 }
 
 .nav-login-btn {
@@ -2040,6 +2089,36 @@ select {
 
   .post-card-title {
     font-size: 19px;
+  }
+}
+
+@media (max-width: 1200px) {
+  .nav-in > .logo {
+    width: 40px;
+    overflow: hidden;
+  }
+
+  .menu > li > a,
+  .menu .nav-dropdown-trigger {
+    padding-right: 10px;
+    padding-left: 10px;
+  }
+
+  .nav-act {
+    gap: 6px;
+    padding-left: 10px;
+  }
+}
+
+@media (max-width: 1023px) {
+  .public-nav {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .nav-act .nav-private-link {
+    display: none;
   }
 }
 
