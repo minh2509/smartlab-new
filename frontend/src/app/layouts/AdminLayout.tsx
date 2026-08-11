@@ -1,4 +1,4 @@
-import { Files, FlaskConical, FolderKanban, KeyRound, LogOut, ShieldCheck, UserCircle, UsersRound } from 'lucide-react'
+import { Award, CheckSquare, Files, FlaskConical, FolderKanban, KeyRound, LogOut, ShieldCheck, UserCircle, UsersRound } from 'lucide-react'
 import { NavLink, Navigate, Outlet } from 'react-router-dom'
 import { useAuth } from '../../features/auth/authContext'
 import { Logo } from '../../shared/components/Logo'
@@ -27,6 +27,10 @@ export function AdminLayout() {
                 <UserCircle />
                 Tài khoản của tôi
               </NavLink>
+              <NavLink to="/my-evaluations">
+                <Award />
+                Đánh giá của tôi
+              </NavLink>
               {can('FILE_UPLOAD') && <NavLink to="/files">
                 <Files />
                 Tệp của tôi
@@ -36,6 +40,10 @@ export function AdminLayout() {
                 <FolderKanban />
                 Dự án
               </NavLink>}
+              <NavLink to="/admin/tasks">
+                <CheckSquare />
+                Nhiệm vụ & Đánh giá
+              </NavLink>
               {can('USER_MANAGE', 'ROLE_MANAGE', 'PERMISSION_MANAGE') && <NavLink to="/admin/accounts">
                 <UsersRound />
                 Quản trị tài khoản

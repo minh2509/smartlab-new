@@ -35,6 +35,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -75,9 +76,14 @@ class PostControllerTest {
 
         assertThat(PostController.class.isAnnotationPresent(RestController.class)).isTrue();
         assertThat(requestMapping.value()).containsExactly("/posts");
-        assertThat(PostController.class.getDeclaredFields()).extracting(Field::getType)
-                .containsExactly(PostService.class)
-                .doesNotContain(PostRepository.class, UserRepository.class, ContentCategoryRepository.class, PermissionService.class);
+        List<String> fieldTypeNames = Arrays.stream(PostController.class.getDeclaredFields())
+                .map(field -> field.getType().getName())
+                .toList();
+
+        assertThat(fieldTypeNames)
+                .containsExactly(PostService.class.getName())
+                .doesNotContain(PostRepository.class.getName(), UserRepository.class.getName(),
+                        ContentCategoryRepository.class.getName(), PermissionService.class.getName());
     }
 
     @Test
