@@ -49,27 +49,40 @@ export function PostDetailPage() {
         ) : null}
 
         {!loading && !error && post ? (
-          <article className="card pad">
-            <div className="pmeta">
-              {post.category ? <span className="chip accent">{post.category.name}</span> : null}
-              <span>{post.status}</span>
-              <span>·</span>
-              <span>{post.visibility}</span>
+          <article className="post-page-detail">
+            <header className="post-page-header">
+              <div className="post-page-eyebrow">
+                {post.category ? <span className="post-page-category">{post.category.name}</span> : null}
+              </div>
+
+              <h1 className="post-page-title">{post.title}</h1>
+
+              {post.excerpt ? <p className="post-page-excerpt">{post.excerpt}</p> : null}
+
+              <div className="post-page-meta">
+                <span className="post-page-dates">
+                  {formatDate(post.createdAt)}
+                  {post.updatedAt !== post.createdAt ? ` (Cập nhật: ${formatDate(post.updatedAt)})` : ''}
+                  {post.publishedAt ? ` · Xuất bản: ${formatDate(post.publishedAt)}` : ''}
+                </span>
+                <span className="post-page-status-visibility">
+                  {post.status} · {post.visibility}
+                </span>
+              </div>
+            </header>
+
+            <hr className="post-page-divider" />
+
+            <div className="post-page-content-state">
+              <p>Nội dung bài viết hiện được lưu dưới dạng cấu trúc và chưa có trình hiển thị tương ứng.</p>
             </div>
 
-            <h1>{post.title}</h1>
-
-            {post.excerpt ? <p>{post.excerpt}</p> : null}
-
-            <div className="muted small">
-              Tạo {formatDate(post.createdAt)} · Cập nhật {formatDate(post.updatedAt)}
-              {post.publishedAt ? ` · Xuất bản ${formatDate(post.publishedAt)}` : ''}
+            <div className="post-page-data-disclosure">
+              <details>
+                <summary>Xem dữ liệu nội dung</summary>
+                <pre>{JSON.stringify(post.contentJson ?? {}, null, 2)}</pre>
+              </details>
             </div>
-
-            <hr />
-
-            <h2>Nội dung JSON</h2>
-            <pre>{JSON.stringify(post.contentJson ?? {}, null, 2)}</pre>
           </article>
         ) : null}
       </div>
@@ -78,5 +91,9 @@ export function PostDetailPage() {
 }
 
 function formatDate(value: string) {
-  return new Date(value).toLocaleString('vi-VN')
+  return new Intl.DateTimeFormat('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  }).format(new Date(value))
 }

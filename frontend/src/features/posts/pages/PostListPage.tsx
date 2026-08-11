@@ -1,8 +1,26 @@
 import { useEffect, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
+import { AlertTriangle, ArrowRight, CalendarDays, Globe, Lock, Newspaper, Users } from 'lucide-react'
 import { useAuth } from '../../auth/authContext'
 import { listPosts } from '../api'
-import type { PostSummary } from '../types'
+import type { PostStatus, PostSummary, PostVisibility } from '../types'
+
+const VISIBILITY: Record<PostVisibility, { label: string; Icon: typeof Globe }> = {
+  PUBLIC: { label: 'Công khai', Icon: Globe },
+  LAB: { label: 'Nội bộ Lab', Icon: Users },
+  PROJECT: { label: 'Theo dự án', Icon: Lock },
+}
+
+const STATUS: Record<PostStatus, { label: string; tone: 'ok' | 'warn' | 'danger' | 'muted' }> = {
+  DRAFT: { label: 'Bản nháp', tone: 'muted' },
+  PENDING_REVIEW: { label: 'Chờ duyệt', tone: 'warn' },
+  REVISION_REQUIRED: { label: 'Cần chỉnh sửa', tone: 'warn' },
+  APPROVED: { label: 'Đã duyệt', tone: 'ok' },
+  PUBLISHED: { label: 'Đã xuất bản', tone: 'ok' },
+  REJECTED: { label: 'Bị từ chối', tone: 'danger' },
+}
+
+const SKELETON_KEYS = ['sk-1', 'sk-2', 'sk-3']
 
 export function PostListPage() {
   const { token } = useAuth()
@@ -32,54 +50,101 @@ export function PostListPage() {
   }
 
   return (
-    <section className="section">
-      <div className="wrap">
-        <div className="sec-head">
-          <div className="kicker">Bài viết nội bộ</div>
-          <h1>Bài viết</h1>
-          <p>Danh sách bài viết bạn được phép xem theo quyền truy cập hiện tại.</p>
-        </div>
+    <section className="post-feed-page">
+      <div className="post-feed-shell">
+        <header className="post-feed-head">
+          <span className="post-feed-kicker">Bảng tin nội bộ</span>
+          <div className="post-feed-headline">
+            <h1>Bài viết</h1>
+            {!loading && !error && posts.length > 0 ? (
+              <span className="post-feed-count">{posts.length}</span>
+            ) : null}
+          </div>
+          <p className="post-feed-sub">
+            Những bài viết bạn được phép xem theo quyền truy cập hiện tại.
+          </p>
+        </header>
 
-        {loading ? <div className="empty">Đang tải bài viết...</div> : null}
+        {loading ? (
+          <div className="post-feed" aria-busy="true" aria-live="polite">
+            {SKELETON_KEYS.map((key) => (
+              <div className="post-card is-skeleton" key={key} aria-hidden="true">
+                <span className="sk sk-top" />
+                <span className="sk sk-title" />
+                <span className="sk sk-line" />
+                <span className="sk sk-line short" />
+                <span className="sk sk-foot" />
+              </div>
+            ))}
+          </div>
+        ) : null}
 
         {!loading && error ? (
-          <div className="empty">
-            <h3>Không thể tải bài viết</h3>
+          <div className="post-feed-state is-error" role="alert">
+            <span className="post-feed-state-icon" aria-hidden="true">
+              <AlertTriangle />
+            </span>
+            <h2>Không thể tải bài viết</h2>
             <p>{error}</p>
           </div>
         ) : null}
 
         {!loading && !error && posts.length === 0 ? (
-          <div className="empty">
-            <h3>Chưa có bài viết</h3>
-            <p>Hiện chưa có bài viết nào bạn được phép xem.</p>
+          <div className="post-feed-state">
+            <span className="post-feed-state-icon" aria-hidden="true">
+              <Newspaper />
+            </span>
+            <h2>Chưa có bài viết</h2>
+            <p>
+              Hiện chưa có bài viết nào bạn được phép xem. Khi có bài phù hợp với quyền truy
+              cập, chúng sẽ xuất hiện tại đây.
+            </p>
           </div>
         ) : null}
 
         {!loading && !error && posts.length > 0 ? (
-          <div className="grid c3">
-            {posts.map((post) => (
-              <article className="card pad" key={post.id}>
-                <div className="pmeta">
-                  {post.category ? <span className="chip accent">{post.category.name}</span> : null}
-                  <span>{post.status}</span>
-                  <span>·</span>
-                  <span>{post.visibility}</span>
-                </div>
+          <div className="post-feed">
+            {posts.map((post) => {
+              const audience = VISIBILITY[post.visibility]
+              const AudienceIcon = audience.Icon
+              const status = STATUS[post.status]
+              const href = `/posts/${encodeURIComponent(post.slug)}`
 
-                <h2>{post.title}</h2>
+              return (
+                <article className="post-card" key={post.id}>
+                  <div className="post-card-top">
+                    {post.category ? (
+                      <span className="post-card-topic">{post.category.name}</span>
+                    ) : null}
+                    <span className="post-card-audience">
+                      <AudienceIcon aria-hidden="true" />
+                      {audience.label}
+                    </span>
+                  </div>
 
-                {post.excerpt ? <p>{post.excerpt}</p> : null}
+                  <h2 className="post-card-title">
+                    <Link to={href}>{post.title}</Link>
+                  </h2>
 
-                <div className="muted small">
-                  Cập nhật {formatDate(post.updatedAt)}
-                </div>
+                  {post.excerpt ? <p className="post-card-excerpt">{post.excerpt}</p> : null}
 
-                <Link className="more" to={`/posts/${encodeURIComponent(post.slug)}`}>
-                  Xem bài viết
-                </Link>
-              </article>
-            ))}
+                  <div className="post-card-foot">
+                    <span className="post-card-meta">
+                      <CalendarDays aria-hidden="true" />
+                      <span className={`post-card-status is-${status.tone}`}>{status.label}</span>
+                      <span className="post-card-dot" aria-hidden="true">
+                        ·
+                      </span>
+                      <span className="post-card-date">{formatDate(post.publishedAt ?? post.updatedAt)}</span>
+                    </span>
+                    <Link className="post-card-action" to={href}>
+                      Đọc bài
+                      <ArrowRight aria-hidden="true" />
+                    </Link>
+                  </div>
+                </article>
+              )
+            })}
           </div>
         ) : null}
       </div>
@@ -88,5 +153,9 @@ export function PostListPage() {
 }
 
 function formatDate(value: string) {
-  return new Date(value).toLocaleString('vi-VN')
+  return new Intl.DateTimeFormat('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(new Date(value))
 }
