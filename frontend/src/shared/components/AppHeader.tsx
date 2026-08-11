@@ -19,7 +19,8 @@ const aboutLinks = [
 ]
 
 export function AppHeader() {
-  const { isAuthenticated, logout } = useAuth()
+  const { isAuthenticated, logout, profile } = useAuth()
+  const role = resolveHeaderRole(profile?.roles)
 
   return (
     <header className="site-nav">
@@ -45,9 +46,15 @@ export function AppHeader() {
               <li>
                 <NavLink to="/profile">Hồ sơ</NavLink>
               </li>
-              <li>
-                <NavLink to="/admin/accounts">Admin</NavLink>
-              </li>
+              {role ? (
+                <li>
+                  {role === 'Admin' ? (
+                    <NavLink to="/admin/accounts">Admin</NavLink>
+                  ) : (
+                    <span className="nav-role-label">{role}</span>
+                  )}
+                </li>
+              ) : null}
             </>
           ) : null}
         </ul>
@@ -82,6 +89,13 @@ export function AppHeader() {
       </div>
     </header>
   )
+}
+
+function resolveHeaderRole(roles: string[] | undefined) {
+  if (roles?.includes('ADMIN')) return 'Admin'
+  if (roles?.includes('LEADER')) return 'Leader'
+  if (roles?.includes('MEMBER')) return 'Member'
+  return null
 }
 
 function AboutDropdown() {
