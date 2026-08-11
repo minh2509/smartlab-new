@@ -109,6 +109,22 @@ class PostReadServiceImplTest {
     }
 
     @Test
+    void myPostsReturnsEveryActiveOwnedLifecycleStatusInRepositoryOrder() {
+        PostEntity draft = post(5L, VIEWER_ID, PostStatus.DRAFT, PostVisibility.LAB, null, "draft", 5);
+        PostEntity rejected = post(4L, VIEWER_ID, PostStatus.REJECTED, PostVisibility.LAB, null, "rejected", 4);
+        PostEntity published = post(3L, VIEWER_ID, PostStatus.PUBLISHED, PostVisibility.PUBLIC, null, "published", 3);
+        activeViewer();
+        when(postRepository.findActiveOwnedByAuthorUserId(VIEWER_ID)).thenReturn(List.of(draft, rejected, published));
+
+        List<PostSummaryResponse> responses = postService.getMyPosts(VIEWER_EMAIL);
+
+        assertThat(responses).extracting(PostSummaryResponse::getStatus)
+                .containsExactly(PostStatus.DRAFT, PostStatus.REJECTED, PostStatus.PUBLISHED);
+        verify(postRepository).findActiveOwnedByAuthorUserId(VIEWER_ID);
+        verifyNoInteractions(projectMemberRepository);
+    }
+
+    @Test
     void listUsesActiveProjectMembershipsOnceForPublishedProjectPosts() throws ReflectiveOperationException {
         PostEntity ownDraft = post(5L, VIEWER_ID, PostStatus.DRAFT, PostVisibility.LAB, null, "own", 5);
         PostEntity projectPost = post(4L, 99L, PostStatus.PUBLISHED, PostVisibility.PROJECT, null, "project", 4);
@@ -244,6 +260,81 @@ class PostReadServiceImplTest {
         assertThat(ids.getValue()).containsExactlyInAnyOrder(7L, 8L);
         verify(contentCategoryRepository, never()).findById(any());
         verify(contentCategoryRepository, never()).findByIdAndIsActiveTrue(any());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void listBatchMapsDistinctAuthorsIncludingInactiveAndLeavesMissingOrNullAuthorsNull() {
+        PostEntity first = post(5L, 91L, PostStatus.PUBLISHED, PostVisibility.LAB, null, "first", 5);
+        PostEntity second = post(4L, 91L, PostStatus.PUBLISHED, PostVisibility.PUBLIC, null, "second", 4);
+        PostEntity missing = post(3L, 92L, PostStatus.PUBLISHED, PostVisibility.LAB, null, "missing", 3);
+        PostEntity authorless = post(2L, null, PostStatus.PUBLISHED, PostVisibility.PUBLIC, null, "authorless", 2);
+        UserEntity inactiveAuthor = UserEntity.builder()
+                .id(91L)
+                .userId("public-author-91")
+                .name("Historical Author")
+                .isActive(false)
+                .build();
+        activeViewer();
+        when(projectMemberRepository.findActiveProjectIdsByUserId(VIEWER_ID)).thenReturn(List.of());
+        when(postRepository.findActiveReadableByViewerUserId(VIEWER_ID, List.of(-1L)))
+                .thenReturn(List.of(first, second, missing, authorless));
+        when(userRepository.findAllById(any(Iterable.class))).thenReturn(List.of(inactiveAuthor));
+
+        List<PostSummaryResponse> responses = postService.getReadablePosts(VIEWER_EMAIL);
+
+        assertThat(responses.get(0).getAuthor())
+                .extracting("userId", "name")
+                .containsExactly("public-author-91", "Historical Author");
+        assertThat(responses.get(1).getAuthor()).isEqualTo(responses.get(0).getAuthor());
+        assertThat(responses.get(2).getAuthor()).isNull();
+        assertThat(responses.get(3).getAuthor()).isNull();
+        ArgumentCaptor<Iterable<Long>> ids = ArgumentCaptor.forClass(Iterable.class);
+        verify(userRepository).findAllById(ids.capture());
+        assertThat(ids.getValue()).containsExactlyInAnyOrder(91L, 92L);
+    }
+
+    @Test
+    void detailResolvesInactiveHistoricalAuthorWithoutActiveFilter() {
+        PostEntity post = post(1L, 91L, PostStatus.PUBLISHED, PostVisibility.PUBLIC, null, "historical", 1);
+        UserEntity inactiveAuthor = UserEntity.builder()
+                .id(91L)
+                .userId("public-author-91")
+                .name("Historical Author")
+                .isActive(false)
+                .build();
+        activeViewer();
+        when(postRepository.findActiveBySlug("historical")).thenReturn(Optional.of(post));
+        when(userRepository.findById(91L)).thenReturn(Optional.of(inactiveAuthor));
+
+        PostDetailResponse response = postService.getPostBySlug(VIEWER_EMAIL, "historical");
+
+        assertThat(response.getAuthor())
+                .extracting("userId", "name")
+                .containsExactly("public-author-91", "Historical Author");
+        verify(userRepository).findById(91L);
+    }
+
+    @Test
+    void anonymousDetailUsesDedicatedPublicPublishedLookupWithoutResolvingViewer() {
+        PostEntity post = post(1L, 91L, PostStatus.PUBLISHED, PostVisibility.PUBLIC, null, "public-post", 1);
+        UserEntity author = UserEntity.builder()
+                .id(91L)
+                .userId("public-author-91")
+                .name("Public Author")
+                .build();
+        when(postRepository.findActivePublishedPublicBySlug("public-post")).thenReturn(Optional.of(post));
+        when(userRepository.findById(91L)).thenReturn(Optional.of(author));
+
+        PostDetailResponse response = postService.getPostBySlug(null, "public-post");
+
+        assertThat(response.getSlug()).isEqualTo("public-post");
+        assertThat(response.getStatus()).isEqualTo(PostStatus.PUBLISHED);
+        assertThat(response.getVisibility()).isEqualTo(PostVisibility.PUBLIC);
+        assertThat(response.getAuthor()).extracting("userId", "name")
+                .containsExactly("public-author-91", "Public Author");
+        verify(userRepository, never()).findByEmail(any());
+        verify(postRepository, never()).findActiveBySlug(any());
     }
 
     @Test

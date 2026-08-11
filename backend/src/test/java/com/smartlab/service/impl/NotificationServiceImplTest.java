@@ -42,6 +42,26 @@ class NotificationServiceImplTest {
         NotificationEntity n = NotificationEntity.create(1L,null,"T","m",null,null,null,time); when(notifications.findByRecipientUserIdAndDeletedAtIsNullOrderByCreatedAtDescIdDesc(1L)).thenReturn(List.of(n));
         assertThat(service.getNotifications("a@b")).hasSize(1); verify(notifications).findByRecipientUserIdAndDeletedAtIsNullOrderByCreatedAtDescIdDesc(1L);
     }
+    @Test void listBatchResolvesDistinctActorNamesIncludingInactiveAccounts() {
+        UserEntity recipient = active(1L);
+        UserEntity inactiveActor = UserEntity.builder().id(2L).name("Reviewer Name").isActive(false).build();
+        NotificationEntity first = NotificationEntity.create(1L,2L,"T1","m1",null,null,null,time);
+        NotificationEntity second = NotificationEntity.create(1L,2L,"T2","m2",null,null,null,time.minusSeconds(1));
+        NotificationEntity actorless = NotificationEntity.create(1L,null,"T3","m3",null,null,null,time.minusSeconds(2));
+        when(users.findByEmail("a@b")).thenReturn(Optional.of(recipient));
+        when(notifications.findByRecipientUserIdAndDeletedAtIsNullOrderByCreatedAtDescIdDesc(1L))
+                .thenReturn(List.of(first, second, actorless));
+        when(users.findAllById(any())).thenReturn(List.of(inactiveActor));
+
+        var responses = service.getNotifications("a@b");
+
+        assertThat(responses).extracting(response -> response.actorName())
+                .containsExactly("Reviewer Name", "Reviewer Name", null);
+        verify(users).findAllById(argThat(ids -> {
+            assertThat(ids).containsExactly(2L);
+            return true;
+        }));
+    }
     @Test void unavailableCanonicalUserIsUnauthorized() { when(users.findByEmail("x")).thenReturn(Optional.empty()); assertThatThrownBy(() -> service.getNotifications("x")).isInstanceOf(ResponseStatusException.class).extracting(e -> ((ResponseStatusException)e).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED); }
     @Test void markAndDeleteAreRecipientScopedAndMissingRowsAreNotFound() {
         when(users.findByEmail("a")).thenReturn(Optional.of(active(1L))); when(notifications.findByIdAndRecipientUserIdAndDeletedAtIsNull(2L,1L)).thenReturn(Optional.empty());

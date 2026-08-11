@@ -241,10 +241,13 @@ public class PostEntity {
         }
 
         this.status = switch (decision) {
-            case APPROVED -> PostStatus.APPROVED;
+            case APPROVED -> PostStatus.PUBLISHED;
             case REVISION_REQUIRED -> PostStatus.REVISION_REQUIRED;
             case REJECTED -> PostStatus.REJECTED;
         };
+        if (decision == ReviewDecision.APPROVED) {
+            this.publishedAt = mutationInstant;
+        }
         this.updatedAt = mutationInstant;
     }
 

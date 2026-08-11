@@ -47,14 +47,14 @@ class PostEntityWorkflowTest {
     }
 
     @Test
-    void appliesApprovedReviewWithTheSuppliedTimestamp() {
+    void approvedReviewPublishesWithTheSuppliedTimestamp() {
         PostEntity post = pendingReview();
 
         post.applyReviewDecision(ReviewDecision.APPROVED, REVIEWED_AT);
 
-        assertThat(post.getStatus()).isEqualTo(PostStatus.APPROVED);
+        assertThat(post.getStatus()).isEqualTo(PostStatus.PUBLISHED);
         assertThat(post.getUpdatedAt()).isEqualTo(REVIEWED_AT);
-        assertThat(post.getPublishedAt()).isNull();
+        assertThat(post.getPublishedAt()).isEqualTo(REVIEWED_AT);
     }
 
     @Test
@@ -215,7 +215,6 @@ class PostEntityWorkflowTest {
 
         post.submitForReview(SUBMITTED_AT);
         post.applyReviewDecision(ReviewDecision.APPROVED, REVIEWED_AT);
-        post.publish(PUBLISHED_AT);
 
         assertThat(post.getAuthorUserId()).isEqualTo(authorUserId);
         assertThat(post.getTitle()).isEqualTo(title);
@@ -300,9 +299,11 @@ class PostEntityWorkflowTest {
     }
 
     private static PostEntity approvedPost() {
-        PostEntity post = pendingReview();
-        post.applyReviewDecision(ReviewDecision.APPROVED, REVIEWED_AT);
-        return post;
+        try {
+            return draftWithStatus(PostStatus.APPROVED);
+        } catch (Exception exception) {
+            throw new AssertionError(exception);
+        }
     }
 
     private static PostEntity draft() {

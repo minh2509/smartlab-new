@@ -125,8 +125,11 @@ export function PostReviewQueuePage() {
                     <span className="post-card-meta">
                       <CalendarDays aria-hidden="true" />
                       <span className={`post-card-status is-${status.tone}`}>{status.label}</span>
-                      <span className="post-card-dot" aria-hidden="true">·</span>
-                      <span className="post-card-date">{formatDate(post.updatedAt)}</span>
+                      <span className="post-card-byline">
+                        <span>{post.author?.name ?? 'Tác giả không còn khả dụng'}</span>
+                        <span className="post-card-dot" aria-hidden="true">·</span>
+                        <span className="post-card-date">{formatDate(post.updatedAt)}</span>
+                      </span>
                     </span>
                     <Link className="post-card-action" to={href}>
                       Mở để duyệt

@@ -1,7 +1,8 @@
-import { Bell, ClipboardCheck, ChevronDown, LogIn, LogOut, Newspaper } from 'lucide-react'
+import { ClipboardCheck, ChevronDown, LogIn, LogOut, Newspaper } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../../features/auth/authContext'
+import { NotificationPopover } from '../../features/notifications/components/NotificationPopover'
 import { Logo } from './Logo'
 
 const publicLinks = [
@@ -22,6 +23,7 @@ export function AppHeader() {
   const { isAuthenticated, logout, profile } = useAuth()
   const role = resolveHeaderRole(profile?.roles)
   const canReviewPosts = profile?.permissions.includes('posts.review') ?? false
+  const canReadNotifications = profile?.permissions.includes('notifications.read_own') ?? false
 
   return (
     <header className="site-nav">
@@ -80,21 +82,31 @@ export function AppHeader() {
                   Duyệt bài
                 </NavLink>
               ) : null}
-              <button className="icon-btn" type="button" aria-label="Thông báo">
-                <Bell />
-              </button>
+              {canReadNotifications ? (
+                <NotificationPopover />
+              ) : null}
               <button className="btn sm" type="button" onClick={() => void logout()}>
                 <LogOut size={15} />
                 Đăng xuất
               </button>
             </>
           ) : (
-            <NavLink className="nav-login-btn" to="/login">
-              <span className="nav-login-ico">
-                <LogIn size={15} />
-              </span>
-              <span>Đăng nhập</span>
-            </NavLink>
+            <>
+              <NavLink
+                end
+                className={({ isActive }) => `nav-private-link nav-public-feed-link${isActive ? ' is-active' : ''}`}
+                to="/posts"
+              >
+                <Newspaper size={15} aria-hidden="true" />
+                Bảng tin
+              </NavLink>
+              <NavLink className="nav-login-btn" to="/login">
+                <span className="nav-login-ico">
+                  <LogIn size={15} />
+                </span>
+                <span>Đăng nhập</span>
+              </NavLink>
+            </>
           )}
         </div>
       </div>

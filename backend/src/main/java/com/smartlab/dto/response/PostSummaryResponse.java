@@ -18,6 +18,7 @@ public class PostSummaryResponse {
     Long projectId;
     PostStatus status;
     PostCategoryResponse category;
+    PostAuthorResponse author;
     Instant publishedAt;
     Instant createdAt;
     Instant updatedAt;

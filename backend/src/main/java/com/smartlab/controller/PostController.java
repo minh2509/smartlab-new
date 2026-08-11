@@ -1,13 +1,20 @@
 package com.smartlab.controller;
 
 import com.smartlab.dto.request.CreatePostRequest;
+import com.smartlab.dto.request.PostCommentRequest;
+import com.smartlab.dto.request.PostReactionRequest;
 import com.smartlab.dto.request.ReviewPostRequest;
 import com.smartlab.dto.request.UpdatePostRequest;
 import com.smartlab.dto.response.PostDetailResponse;
+import com.smartlab.dto.response.CursorPageResponse;
+import com.smartlab.dto.response.PostCommentResponse;
+import com.smartlab.dto.response.PostFeedResponse;
+import com.smartlab.dto.response.PostReactionResponse;
 import com.smartlab.dto.response.PostSummaryResponse;
 import com.smartlab.service.PostService;
+import com.smartlab.service.PostSocialService;
 import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -18,16 +25,29 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/posts")
-@RequiredArgsConstructor
 public class PostController {
     private final PostService postService;
+    private final PostSocialService postSocialService;
+
+    @Autowired
+    public PostController(PostService postService, Optional<PostSocialService> postSocialService) {
+        this.postService = postService;
+        this.postSocialService = postSocialService.orElse(null);
+    }
+
+    PostController(PostService postService) {
+        this(postService, Optional.empty());
+    }
 
     @PostMapping
     public PostDetailResponse createPost(Authentication authentication, @Valid @RequestBody CreatePostRequest request) {
@@ -63,8 +83,74 @@ public class PostController {
     }
 
     @GetMapping
+    public CursorPageResponse<PostFeedResponse> getPosts(
+            Authentication authentication,
+            @RequestParam(required = false) String cursor,
+            @RequestParam(defaultValue = "15") int limit
+    ) {
+        return postSocialService.getFeed(authentication == null ? null : authentication.getName(), cursor, limit);
+    }
+
     public List<PostSummaryResponse> getPosts(Authentication authentication) {
         return postService.getReadablePosts(authentication.getName());
+    }
+
+    @GetMapping("/mine")
+    public List<PostSummaryResponse> getMyPosts(Authentication authentication) {
+        return postService.getMyPosts(authentication.getName());
+    }
+
+    @PutMapping("/{id}/reaction")
+    public PostReactionResponse setReaction(
+            Authentication authentication,
+            @PathVariable Long id,
+            @Valid @RequestBody PostReactionRequest request
+    ) {
+        return postSocialService.setReaction(authentication.getName(), id, request.reaction());
+    }
+
+    @DeleteMapping("/{id}/reaction")
+    public PostReactionResponse removeReaction(Authentication authentication, @PathVariable Long id) {
+        return postSocialService.removeReaction(authentication.getName(), id);
+    }
+
+    @GetMapping("/{id}/comments")
+    public CursorPageResponse<PostCommentResponse> getComments(
+            Authentication authentication,
+            @PathVariable Long id,
+            @RequestParam(required = false) String cursor,
+            @RequestParam(defaultValue = "20") int limit
+    ) {
+        return postSocialService.getComments(authentication.getName(), id, cursor, limit);
+    }
+
+    @PostMapping("/{id}/comments")
+    public PostCommentResponse createComment(
+            Authentication authentication,
+            @PathVariable Long id,
+            @Valid @RequestBody PostCommentRequest request
+    ) {
+        return postSocialService.createComment(authentication.getName(), id, request);
+    }
+
+    @PatchMapping("/{id}/comments/{commentId}")
+    public PostCommentResponse editComment(
+            Authentication authentication,
+            @PathVariable Long id,
+            @PathVariable Long commentId,
+            @Valid @RequestBody PostCommentRequest request
+    ) {
+        return postSocialService.editComment(authentication.getName(), id, commentId, request);
+    }
+
+    @DeleteMapping("/{id}/comments/{commentId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteComment(
+            Authentication authentication,
+            @PathVariable Long id,
+            @PathVariable Long commentId
+    ) {
+        postSocialService.deleteComment(authentication.getName(), id, commentId);
     }
 
     @GetMapping("/review-queue")
@@ -77,6 +163,11 @@ public class PostController {
     @PreAuthorize("hasAuthority('posts.review')")
     public PostDetailResponse getReviewQueuePost(Authentication authentication, @PathVariable Long id) {
         return postService.getReviewablePost(authentication.getName(), id);
+    }
+
+    @GetMapping("/public/{slug}")
+    public PostDetailResponse getPublicPostBySlug(@PathVariable String slug) {
+        return postService.getPostBySlug(null, slug);
     }
 
     @GetMapping("/{slug}")

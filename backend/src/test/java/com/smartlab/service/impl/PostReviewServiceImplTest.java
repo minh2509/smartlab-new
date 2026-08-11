@@ -115,9 +115,9 @@ class PostReviewServiceImplTest {
         assertSuccessfulReview(
                 ReviewDecision.APPROVED,
                 "approved with evidence",
-                PostStatus.APPROVED,
+                PostStatus.PUBLISHED,
                 AUTHOR_ID,
-                "Bài viết của bạn đã được duyệt."
+                "Bài viết của bạn đã được duyệt và xuất bản."
         );
     }
 
@@ -145,7 +145,7 @@ class PostReviewServiceImplTest {
 
     @Test
     void authorlessPendingReviewCanBeReviewedByTrustedCanonicalUser() {
-        assertSuccessfulReview(ReviewDecision.APPROVED, null, PostStatus.APPROVED, null, null);
+        assertSuccessfulReview(ReviewDecision.APPROVED, null, PostStatus.PUBLISHED, null, null);
     }
 
     @Test
@@ -257,8 +257,8 @@ class PostReviewServiceImplTest {
         order.verify(notificationService).notify(
                 AUTHOR_ID,
                 "POST_REVIEW_APPROVED",
-                "Bài viết của bạn đã được duyệt.",
-                new NotificationRelated(REVIEWER_ID, "POST", POST_ID, null),
+                "Bài viết của bạn đã được duyệt và xuất bản.",
+                new NotificationRelated(REVIEWER_ID, "POST", POST_ID, "/posts/immutable-slug"),
                 post.getUpdatedAt()
         );
         verifyNoInteractions(auditService);
@@ -320,7 +320,7 @@ class PostReviewServiceImplTest {
                     authorUserId,
                     "POST_REVIEW_" + decision.name(),
                     expectedNotificationMessage,
-                    new NotificationRelated(REVIEWER_ID, "POST", POST_ID, null),
+                    new NotificationRelated(REVIEWER_ID, "POST", POST_ID, "/posts/immutable-slug"),
                     review.getCreatedAt()
             );
         }
@@ -342,6 +342,13 @@ class PostReviewServiceImplTest {
         assertThat(post.getStatus()).isEqualTo(expectedStatus);
         assertThat(response.getStatus()).isEqualTo(expectedStatus);
         assertThat(response.getUpdatedAt()).isEqualTo(post.getUpdatedAt());
+        if (decision == ReviewDecision.APPROVED) {
+            assertThat(post.getPublishedAt()).isEqualTo(review.getCreatedAt());
+            assertThat(response.getPublishedAt()).isEqualTo(review.getCreatedAt());
+        } else {
+            assertThat(post.getPublishedAt()).isNull();
+            assertThat(response.getPublishedAt()).isNull();
+        }
         assertThat(response.getId()).isEqualTo(POST_ID);
         assertThat(response.getTitle()).isEqualTo("Original title");
     }
@@ -379,16 +386,18 @@ class PostReviewServiceImplTest {
             return post;
         }
 
+        if (status == PostStatus.APPROVED) {
+            setStatus(post, PostStatus.APPROVED);
+            return post;
+        }
+
         ReviewDecision decision = switch (status) {
-            case APPROVED, PUBLISHED -> ReviewDecision.APPROVED;
+            case PUBLISHED -> ReviewDecision.APPROVED;
             case REVISION_REQUIRED -> ReviewDecision.REVISION_REQUIRED;
             case REJECTED -> ReviewDecision.REJECTED;
             default -> throw new IllegalArgumentException("Unsupported test status: " + status);
         };
         post.applyReviewDecision(decision, CREATED_AT.plusSeconds(2));
-        if (status == PostStatus.PUBLISHED) {
-            post.publish(CREATED_AT.plusSeconds(3));
-        }
         return post;
     }
 
@@ -397,6 +406,16 @@ class PostReviewServiceImplTest {
             Field field = PostEntity.class.getDeclaredField("id");
             field.setAccessible(true);
             field.set(post, POST_ID);
+        } catch (ReflectiveOperationException exception) {
+            throw new AssertionError(exception);
+        }
+    }
+
+    private static void setStatus(PostEntity post, PostStatus status) {
+        try {
+            Field field = PostEntity.class.getDeclaredField("status");
+            field.setAccessible(true);
+            field.set(post, status);
         } catch (ReflectiveOperationException exception) {
             throw new AssertionError(exception);
         }

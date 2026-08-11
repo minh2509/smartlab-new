@@ -183,17 +183,26 @@ class PostReviewerReadPostgresIntegrationTest {
             }
             case APPROVED -> {
                 post.submitForReview(mutationInstant);
-                post.applyReviewDecision(ReviewDecision.APPROVED, mutationInstant.plusSeconds(1));
+                setStatus(post, PostStatus.APPROVED);
             }
             case PUBLISHED -> {
                 post.submitForReview(mutationInstant);
                 post.applyReviewDecision(ReviewDecision.APPROVED, mutationInstant.plusSeconds(1));
-                post.publish(mutationInstant.plusSeconds(2));
             }
             case REJECTED -> {
                 post.submitForReview(mutationInstant);
                 post.applyReviewDecision(ReviewDecision.REJECTED, mutationInstant.plusSeconds(1));
             }
+        }
+    }
+
+    private static void setStatus(PostEntity post, PostStatus status) {
+        try {
+            java.lang.reflect.Field field = PostEntity.class.getDeclaredField("status");
+            field.setAccessible(true);
+            field.set(post, status);
+        } catch (ReflectiveOperationException exception) {
+            throw new AssertionError(exception);
         }
     }
 

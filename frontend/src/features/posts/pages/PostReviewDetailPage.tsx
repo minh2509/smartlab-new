@@ -7,7 +7,7 @@ import type { PostDetail, ReviewDecision } from '../types'
 import { Feedback } from '../../../shared/components/Feedback'
 
 const DECISIONS: Array<{ value: ReviewDecision; label: string; description: string }> = [
-  { value: 'APPROVED', label: 'Duyệt', description: 'Đạt yêu cầu và chuyển sang trạng thái đã duyệt.' },
+  { value: 'APPROVED', label: 'Duyệt', description: 'Đạt yêu cầu và xuất bản ngay lên Bảng tin.' },
   { value: 'REVISION_REQUIRED', label: 'Yêu cầu chỉnh sửa', description: 'Cần tác giả cập nhật trước khi gửi duyệt lại.' },
   { value: 'REJECTED', label: 'Từ chối', description: 'Không chấp nhận bài viết ở trạng thái hiện tại.' },
 ]
@@ -110,8 +110,8 @@ export function PostReviewDetailPage() {
                 <div className="post-page-meta">
                   <span className="post-page-dates">
                     <CalendarDays aria-hidden="true" />
-                    Tạo: {formatDate(post.createdAt)}
-                    {post.updatedAt !== post.createdAt ? ` (Cập nhật: ${formatDate(post.updatedAt)})` : ''}
+                    <span>{post.author?.name ?? 'Tác giả không còn khả dụng'} · {formatDate(post.createdAt)}</span>
+                    {post.updatedAt !== post.createdAt ? <span>Cập nhật: {formatDate(post.updatedAt)}</span> : null}
                   </span>
                   <span className="post-page-status-visibility">{statusLabel(post.status)}</span>
                   <span className="post-page-status-visibility">{visibilityLabel(post.visibility)}</span>
@@ -120,16 +120,7 @@ export function PostReviewDetailPage() {
 
               <hr className="post-page-divider" />
 
-              <div className="post-page-content-state">
-                <p>Nội dung bài viết hiện được lưu dưới dạng cấu trúc và chưa có trình hiển thị tương ứng.</p>
-              </div>
-
-              <div className="post-page-data-disclosure">
-                <details>
-                  <summary>Xem dữ liệu nội dung</summary>
-                  <pre>{JSON.stringify(post.contentJson ?? {}, null, 2)}</pre>
-                </details>
-              </div>
+              <ReviewPostContent contentJson={post.contentJson} />
             </article>
 
             <aside className="post-review-sidebar">
@@ -146,7 +137,9 @@ export function PostReviewDetailPage() {
 
                 {reviewSucceeded ? (
                   <div className="post-review-success" role="status">
-                    Đã gửi quyết định. Trạng thái hệ thống trả về: <strong>{statusLabel(post.status)}</strong>.
+                    {post.status === 'PUBLISHED'
+                      ? 'Đã duyệt và xuất bản bài viết.'
+                      : <>Đã gửi quyết định. Trạng thái hệ thống trả về: <strong>{statusLabel(post.status)}</strong>.</>}
                   </div>
                 ) : null}
 
@@ -223,6 +216,13 @@ export function PostReviewDetailPage() {
       </div>
     </section>
   )
+}
+
+function ReviewPostContent({ contentJson }: { contentJson: Record<string, unknown> }) {
+  if (typeof contentJson.body !== 'string') {
+    return <div className="post-page-content-state"><p>Nội dung này hiện chưa hỗ trợ hiển thị đầy đủ.</p></div>
+  }
+  return <div className="post-page-content-body"><p>{contentJson.body}</p></div>
 }
 
 function reasonHelp(decision: ReviewDecision | '') {
