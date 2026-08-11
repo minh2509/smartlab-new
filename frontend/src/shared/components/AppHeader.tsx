@@ -1,4 +1,4 @@
-import { Bell, ChevronDown, LogIn, LogOut, Shield } from 'lucide-react'
+import { Bell, ChevronDown, LogIn, LogOut, Newspaper } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../../features/auth/authContext'
@@ -19,7 +19,7 @@ const aboutLinks = [
 ]
 
 export function AppHeader() {
-  const { isAuthenticated, profile, logout } = useAuth()
+  const { isAuthenticated, logout } = useAuth()
 
   return (
     <header className="site-nav">
@@ -55,10 +55,13 @@ export function AppHeader() {
         <div className="nav-act">
           {isAuthenticated ? (
             <>
-              <span className="chip accent hide-md">
-                <Shield size={14} />
-                {profile?.roles?.join(', ') || 'Đã đăng nhập'}
-              </span>
+              <NavLink
+                className={({ isActive }) => `nav-private-link${isActive ? ' is-active' : ''}`}
+                to="/posts"
+              >
+                <Newspaper size={15} aria-hidden="true" />
+                Bảng tin
+              </NavLink>
               <button className="icon-btn" type="button" aria-label="Thông báo">
                 <Bell />
               </button>
