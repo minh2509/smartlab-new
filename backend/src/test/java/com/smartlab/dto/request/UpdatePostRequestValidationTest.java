@@ -180,8 +180,8 @@ class UpdatePostRequestValidationTest {
     }
 
     @Test
-    void rejectsProjectVisibility() throws JacksonException {
-        assertInvalid(read("{\"visibility\":\"PROJECT\"}"));
+    void acceptsProjectVisibility() throws JacksonException {
+        assertValid(read("{\"visibility\":\"PROJECT\"}"));
     }
 
     @Test
@@ -217,6 +217,19 @@ class UpdatePostRequestValidationTest {
     }
 
     @Test
+    void tracksProjectIdPresenceAndValidatesPositiveValues() throws JacksonException {
+        UpdatePostRequest absent = read("{\"title\":\"Title\"}");
+        UpdatePostRequest explicitNull = read("{\"projectId\":null}");
+
+        assertThat(absent.hasProjectId()).isFalse();
+        assertThat(explicitNull.hasProjectId()).isTrue();
+        assertValid(explicitNull);
+        assertValid(read("{\"projectId\":1}"));
+        assertInvalid(read("{\"projectId\":0}"));
+        assertInvalid(read("{\"projectId\":-1}"));
+    }
+
+    @Test
     void exposesOnlyApprovedMutableFieldsToJackson() {
         Set<String> bindableFields = Arrays.stream(UpdatePostRequest.class.getDeclaredMethods())
                 .filter(method -> method.isAnnotationPresent(JsonSetter.class))
@@ -228,7 +241,8 @@ class UpdatePostRequestValidationTest {
                 "excerpt",
                 "contentJson",
                 "visibility",
-                "categoryId"
+                "categoryId",
+                "projectId"
         );
     }
 

@@ -41,6 +41,7 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -71,6 +72,8 @@ class PostPatchServiceImplTest {
     @Mock
     private NotificationService notificationService;
     @Mock private com.smartlab.service.AuditService auditService;
+    @Mock private com.smartlab.repo.ProjectRepository projectRepository;
+    @Mock private com.smartlab.repo.ProjectMemberRepository projectMemberRepository;
 
     private PostService postService;
 
@@ -85,7 +88,9 @@ class PostPatchServiceImplTest {
                 postCreateAttemptService,
                 postContentRenderer,
                 notificationService,
-                auditService
+                auditService,
+                projectRepository,
+                projectMemberRepository
         );
     }
 
@@ -260,6 +265,133 @@ class PostPatchServiceImplTest {
     }
 
     @Test
+    void patchPromotesLabPostToProjectAfterValidatingTheTargetMembership() {
+        PostEntity post = draft();
+        UpdatePostRequest request = new UpdatePostRequest();
+        request.setVisibility(PostVisibility.PROJECT);
+        request.setProjectId(17L);
+        stubOwnedDraft(post);
+        when(projectRepository.findByIdAndDeletedAtIsNull(17L))
+                .thenReturn(Optional.of(mock(com.smartlab.entity.ProjectEntity.class)));
+        when(projectMemberRepository.existsByProject_IdAndUser_IdAndStatus(17L, OWNER_ID,
+                com.smartlab.enums.ProjectMemberStatus.ACTIVE)).thenReturn(true);
+
+        PostDetailResponse response = postService.updatePost(OWNER_EMAIL, POST_ID, request);
+
+        assertThat(post.getVisibility()).isEqualTo(PostVisibility.PROJECT);
+        assertThat(post.getProjectId()).isEqualTo(17L);
+        assertThat(response.getProjectId()).isEqualTo(17L);
+    }
+
+    @Test
+    void patchProjectToAnotherProjectRequiresMembershipInTheNewProject() throws ReflectiveOperationException {
+        PostEntity post = draft();
+        set(post, "visibility", PostVisibility.PROJECT);
+        set(post, "projectId", 16L);
+        UpdatePostRequest request = new UpdatePostRequest();
+        request.setProjectId(17L);
+        stubOwnedDraft(post);
+        when(projectRepository.findByIdAndDeletedAtIsNull(17L))
+                .thenReturn(Optional.of(mock(com.smartlab.entity.ProjectEntity.class)));
+        when(projectMemberRepository.existsByProject_IdAndUser_IdAndStatus(17L, OWNER_ID,
+                com.smartlab.enums.ProjectMemberStatus.ACTIVE)).thenReturn(false);
+
+        assertStatus(HttpStatus.FORBIDDEN, () -> postService.updatePost(OWNER_EMAIL, POST_ID, request));
+
+        assertThat(post.getProjectId()).isEqualTo(16L);
+    }
+
+    @Test
+    void patchingUnrelatedFieldOnProjectDraftRevalidatesExistingProjectMembership()
+            throws ReflectiveOperationException {
+        PostEntity post = draft();
+        set(post, "visibility", PostVisibility.PROJECT);
+        set(post, "projectId", 16L);
+        stubOwnedDraft(post);
+        when(projectRepository.findByIdAndDeletedAtIsNull(16L))
+                .thenReturn(Optional.of(mock(com.smartlab.entity.ProjectEntity.class)));
+        when(projectMemberRepository.existsByProject_IdAndUser_IdAndStatus(16L, OWNER_ID,
+                com.smartlab.enums.ProjectMemberStatus.ACTIVE)).thenReturn(true);
+
+        PostDetailResponse response = postService.updatePost(OWNER_EMAIL, POST_ID, titleRequest("Updated"));
+
+        assertThat(post.getTitle()).isEqualTo("Updated");
+        assertThat(post.getVisibility()).isEqualTo(PostVisibility.PROJECT);
+        assertThat(post.getProjectId()).isEqualTo(16L);
+        assertThat(response.getProjectId()).isEqualTo(16L);
+        verify(projectRepository).findByIdAndDeletedAtIsNull(16L);
+        verify(projectMemberRepository).existsByProject_IdAndUser_IdAndStatus(
+                16L,
+                OWNER_ID,
+                com.smartlab.enums.ProjectMemberStatus.ACTIVE
+        );
+    }
+
+    @Test
+    void patchingUnrelatedFieldOnProjectDraftWithoutActiveMembershipDoesNotMutate()
+            throws ReflectiveOperationException {
+        PostEntity post = draft();
+        set(post, "visibility", PostVisibility.PROJECT);
+        set(post, "projectId", 16L);
+        PostSnapshot before = snapshot(post);
+        stubOwnedDraft(post);
+        when(projectRepository.findByIdAndDeletedAtIsNull(16L))
+                .thenReturn(Optional.of(mock(com.smartlab.entity.ProjectEntity.class)));
+        when(projectMemberRepository.existsByProject_IdAndUser_IdAndStatus(16L, OWNER_ID,
+                com.smartlab.enums.ProjectMemberStatus.ACTIVE)).thenReturn(false);
+
+        assertStatus(HttpStatus.FORBIDDEN, () -> postService.updatePost(OWNER_EMAIL, POST_ID, titleRequest("Updated")));
+
+        assertThat(snapshot(post)).isEqualTo(before);
+    }
+
+    @Test
+    void patchResultingProjectWithoutProjectIdIsRejectedBeforeMutation() {
+        PostEntity post = draft();
+        PostSnapshot before = snapshot(post);
+        UpdatePostRequest request = new UpdatePostRequest();
+        request.setVisibility(PostVisibility.PROJECT);
+        stubOwnedDraft(post);
+
+        assertStatus(HttpStatus.BAD_REQUEST, () -> postService.updatePost(OWNER_EMAIL, POST_ID, request));
+
+        assertThat(snapshot(post)).isEqualTo(before);
+        verifyNoInteractions(projectRepository, projectMemberRepository);
+    }
+
+    @Test
+    void patchProjectTargetFailureDoesNotMutateTheDraft() {
+        PostEntity post = draft();
+        PostSnapshot before = snapshot(post);
+        UpdatePostRequest request = new UpdatePostRequest();
+        request.setVisibility(PostVisibility.PROJECT);
+        request.setProjectId(17L);
+        stubOwnedDraft(post);
+        when(projectRepository.findByIdAndDeletedAtIsNull(17L)).thenReturn(Optional.empty());
+
+        assertStatus(HttpStatus.BAD_REQUEST, () -> postService.updatePost(OWNER_EMAIL, POST_ID, request));
+
+        assertThat(snapshot(post)).isEqualTo(before);
+        verifyNoInteractions(projectMemberRepository);
+    }
+
+    @Test
+    void patchProjectToPublicClearsProjectAssociation() throws ReflectiveOperationException {
+        PostEntity post = draft();
+        set(post, "visibility", PostVisibility.PROJECT);
+        set(post, "projectId", 16L);
+        UpdatePostRequest request = new UpdatePostRequest();
+        request.setVisibility(PostVisibility.PUBLIC);
+        stubOwnedDraft(post);
+
+        PostDetailResponse response = postService.updatePost(OWNER_EMAIL, POST_ID, request);
+
+        assertThat(post.getVisibility()).isEqualTo(PostVisibility.PUBLIC);
+        assertThat(post.getProjectId()).isNull();
+        assertThat(response.getProjectId()).isNull();
+    }
+
+    @Test
     void absentCategoryAllowsAndMapsUnchangedInactiveCategory() throws ReflectiveOperationException {
         PostEntity post = draft();
         set(post, "categoryId", 7L);
@@ -367,7 +499,7 @@ class PostPatchServiceImplTest {
         assertThat(post.getSlug()).isEqualTo("immutable-slug");
         assertThat(post.getAuthorUserId()).isEqualTo(OWNER_ID);
         assertThat(post.getStatus()).isEqualTo(PostStatus.DRAFT);
-        assertThat(post.getProjectId()).isEqualTo(51L);
+        assertThat(post.getProjectId()).isNull();
         assertThat(post.getCoverFileId()).isEqualTo(61L);
         assertThat(post.getContentHtml()).isEqualTo("<p>updated-safe</p>");
         assertThat(post.getPublishedAt()).isEqualTo(publishedAt);
@@ -384,7 +516,7 @@ class PostPatchServiceImplTest {
         assertThat(response.getCreatedAt()).isEqualTo(createdAt);
         assertThat(response.getUpdatedAt()).isEqualTo(post.getUpdatedAt());
         assertThat(Arrays.stream(PostDetailResponse.class.getDeclaredFields()).map(Field::getName))
-                .doesNotContain("authorUserId", "contentHtml", "projectId", "coverFileId", "deletedAt");
+                .doesNotContain("authorUserId", "contentHtml", "coverFileId", "deletedAt");
     }
 
     @Test

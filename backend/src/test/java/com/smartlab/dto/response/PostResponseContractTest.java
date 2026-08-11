@@ -19,6 +19,7 @@ class PostResponseContractTest {
                 "slug",
                 "excerpt",
                 "visibility",
+                "projectId",
                 "status",
                 "category",
                 "publishedAt",
@@ -41,6 +42,7 @@ class PostResponseContractTest {
                 "excerpt",
                 "contentJson",
                 "visibility",
+                "projectId",
                 "status",
                 "category",
                 "publishedAt",
@@ -59,7 +61,6 @@ class PostResponseContractTest {
         Set<String> forbiddenFields = Set.of(
                 "authorUserId",
                 "contentHtml",
-                "projectId",
                 "coverFileId",
                 "deletedAt"
         );

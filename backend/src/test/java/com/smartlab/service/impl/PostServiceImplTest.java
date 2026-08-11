@@ -35,6 +35,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -68,6 +69,8 @@ class PostServiceImplTest {
     @Mock
     private NotificationService notificationService;
     @Mock private com.smartlab.service.AuditService auditService;
+    @Mock private com.smartlab.repo.ProjectRepository projectRepository;
+    @Mock private com.smartlab.repo.ProjectMemberRepository projectMemberRepository;
 
     private PostServiceImpl postService;
 
@@ -82,7 +85,9 @@ class PostServiceImplTest {
                 postCreateAttemptService,
                 postContentRenderer,
                 notificationService,
-                auditService
+                auditService,
+                projectRepository,
+                projectMemberRepository
         );
     }
 
@@ -136,6 +141,65 @@ class PostServiceImplTest {
         requestNested.put("enabled", false);
         assertThat(((Map<?, ?>) savedPost.getValue().getContentJson().get("nested")).get("enabled"))
                 .isEqualTo(true);
+    }
+
+    @Test
+    void createsProjectDraftForAnActiveProjectMember() {
+        CreatePostRequest request = request("Project Post", null, null, PostVisibility.PROJECT, null);
+        request.setProjectId(17L);
+        when(userRepository.findByEmail("member@example.edu")).thenReturn(Optional.of(activeUser(41L)));
+        when(projectRepository.findByIdAndDeletedAtIsNull(17L)).thenReturn(Optional.of(mock(com.smartlab.entity.ProjectEntity.class)));
+        when(projectMemberRepository.existsByProject_IdAndUser_IdAndStatus(17L, 41L,
+                com.smartlab.enums.ProjectMemberStatus.ACTIVE)).thenReturn(true);
+        when(postSlugGenerator.candidateFor("Project Post", 1)).thenReturn("project-post");
+        saveWithId(94L);
+
+        PostDetailResponse response = postService.createPost("member@example.edu", request);
+
+        ArgumentCaptor<PostEntity> persisted = ArgumentCaptor.forClass(PostEntity.class);
+        verify(postCreateAttemptService).persist(persisted.capture());
+        assertThat(persisted.getValue().getProjectId()).isEqualTo(17L);
+        assertThat(response.getProjectId()).isEqualTo(17L);
+    }
+
+    @Test
+    void rejectsUnavailableOrUnauthorizedProjectBeforePersisting() {
+        CreatePostRequest request = request("Project Post", null, null, PostVisibility.PROJECT, null);
+        request.setProjectId(17L);
+        when(userRepository.findByEmail("member@example.edu")).thenReturn(Optional.of(activeUser(41L)));
+        when(projectRepository.findByIdAndDeletedAtIsNull(17L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> postService.createPost("member@example.edu", request))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+        verifyNoInteractions(postCreateAttemptService, postSlugGenerator, projectMemberRepository);
+    }
+
+    @Test
+    void rejectsProjectWhenAuthorIsNotAnActiveMemberBeforePersisting() {
+        CreatePostRequest request = request("Project Post", null, null, PostVisibility.PROJECT, null);
+        request.setProjectId(17L);
+        when(userRepository.findByEmail("member@example.edu")).thenReturn(Optional.of(activeUser(41L)));
+        when(projectRepository.findByIdAndDeletedAtIsNull(17L)).thenReturn(Optional.of(mock(com.smartlab.entity.ProjectEntity.class)));
+        when(projectMemberRepository.existsByProject_IdAndUser_IdAndStatus(17L, 41L,
+                com.smartlab.enums.ProjectMemberStatus.ACTIVE)).thenReturn(false);
+
+        assertThatThrownBy(() -> postService.createPost("member@example.edu", request))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN));
+        verifyNoInteractions(postCreateAttemptService, postSlugGenerator);
+    }
+
+    @Test
+    void rejectsProjectIdForPublicCreateBeforePersisting() {
+        CreatePostRequest request = request("Public Post", null, null, PostVisibility.PUBLIC, null);
+        request.setProjectId(17L);
+        when(userRepository.findByEmail("member@example.edu")).thenReturn(Optional.of(activeUser(41L)));
+
+        assertThatThrownBy(() -> postService.createPost("member@example.edu", request))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+        verifyNoInteractions(postCreateAttemptService, postSlugGenerator, projectRepository, projectMemberRepository);
     }
 
     @Test

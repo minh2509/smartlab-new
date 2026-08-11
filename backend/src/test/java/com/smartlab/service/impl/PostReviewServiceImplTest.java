@@ -77,6 +77,10 @@ class PostReviewServiceImplTest {
 
     @Mock
     private PostContentRenderer postContentRenderer;
+    @Mock
+    private com.smartlab.repo.ProjectRepository projectRepository;
+    @Mock
+    private com.smartlab.repo.ProjectMemberRepository projectMemberRepository;
 
     private PostService postService;
 
@@ -91,7 +95,9 @@ class PostReviewServiceImplTest {
                 postCreateAttemptService,
                 postContentRenderer,
                 notificationService,
-                auditService
+                auditService,
+                projectRepository,
+                projectMemberRepository
         );
     }
 
