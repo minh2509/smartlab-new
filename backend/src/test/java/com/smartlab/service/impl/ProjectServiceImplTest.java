@@ -18,7 +18,9 @@ import com.smartlab.enums.ProjectType;
 import com.smartlab.repo.ProjectMemberRepository;
 import com.smartlab.repo.ProjectRepository;
 import com.smartlab.repo.UserRepository;
+import com.smartlab.service.AuditService;
 import com.smartlab.service.PermissionService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -32,6 +34,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -39,7 +42,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -57,8 +62,25 @@ class ProjectServiceImplTest {
     @Mock
     private PermissionService permissionService;
 
+    @Mock
+    private AuditService auditService;
+
     @InjectMocks
     private ProjectServiceImpl projectService;
+
+    @BeforeEach
+    void assignsMembershipIdsWhenTheRepositoryFlushes() {
+        lenient().when(projectMemberRepository.saveAllAndFlush(any())).thenAnswer(invocation -> {
+            Iterable<ProjectMemberEntity> memberships = invocation.getArgument(0);
+            long nextId = 100L;
+            for (ProjectMemberEntity membership : memberships) {
+                if (membership.getId() == null) {
+                    ReflectionTestUtils.setField(membership, "id", nextId++);
+                }
+            }
+            return null;
+        });
+    }
 
     @Test
     void createsProjectWithPrimaryAndAdditionalLeaders() {
@@ -138,6 +160,139 @@ class ProjectServiceImplTest {
         assertThat(response.getLeaders()).isEmpty();
         verify(userRepository, never()).findAllByUserIdInForUpdate(any());
         verify(projectMemberRepository).saveAllAndFlush(List.of());
+        verifyNoInteractions(auditService);
+    }
+
+    @Test
+    void auditsEachCreatedProjectMembershipAfterItHasAnId() {
+        UserEntity admin = user(1L, "admin-user", "admin@smartlab.test", true);
+        UserEntity leader = user(2L, "leader-user", "leader@smartlab.test", true);
+        stubAdmin(admin);
+        when(projectRepository.existsByCodeIgnoreCase("SL-AUDIT")).thenReturn(false);
+        when(userRepository.findAllByUserIdInForUpdate(Set.of("leader-user"))).thenReturn(List.of(leader));
+        when(projectRepository.saveAndFlush(any(ProjectEntity.class))).thenAnswer(invocation -> {
+            ProjectEntity project = invocation.getArgument(0);
+            ReflectionTestUtils.setField(project, "id", 7L);
+            return project;
+        });
+
+        projectService.create(minimalCreateRequest("SL-AUDIT", "Audit project", "leader-user"), admin.getEmail());
+
+        @SuppressWarnings("rawtypes")
+        ArgumentCaptor<Map> after = ArgumentCaptor.forClass(Map.class);
+        verify(auditService).log(
+                org.mockito.ArgumentMatchers.eq("PROJECT_MEMBER_CREATED"),
+                org.mockito.ArgumentMatchers.eq("PROJECT_MEMBER"),
+                org.mockito.ArgumentMatchers.eq("100"),
+                org.mockito.ArgumentMatchers.isNull(),
+                after.capture()
+        );
+        assertThat(after.getValue()).containsExactly(
+                java.util.Map.entry("projectId", 7L),
+                java.util.Map.entry("userId", 2L),
+                java.util.Map.entry("projectRole", "LEADER"),
+                java.util.Map.entry("status", "ACTIVE")
+        );
+    }
+
+    @Test
+    void propagatesAuditFailureInsteadOfReportingProjectMemberCreationAsSuccessful() {
+        UserEntity admin = user(1L, "admin-user", "admin@smartlab.test", true);
+        UserEntity leader = user(2L, "leader-user", "leader@smartlab.test", true);
+        stubAdmin(admin);
+        when(projectRepository.existsByCodeIgnoreCase("SL-AUDIT-FAIL")).thenReturn(false);
+        when(userRepository.findAllByUserIdInForUpdate(Set.of("leader-user"))).thenReturn(List.of(leader));
+        when(projectRepository.saveAndFlush(any(ProjectEntity.class))).thenAnswer(invocation -> {
+            ProjectEntity project = invocation.getArgument(0);
+            ReflectionTestUtils.setField(project, "id", 7L);
+            return project;
+        });
+        org.mockito.Mockito.doThrow(new IllegalStateException("audit unavailable"))
+                .when(auditService)
+                .log(
+                        org.mockito.ArgumentMatchers.eq("PROJECT_MEMBER_CREATED"),
+                        org.mockito.ArgumentMatchers.eq("PROJECT_MEMBER"),
+                        org.mockito.ArgumentMatchers.anyString(),
+                        org.mockito.ArgumentMatchers.isNull(),
+                        org.mockito.ArgumentMatchers.anyMap()
+                );
+
+        assertThatThrownBy(() -> projectService.create(
+                minimalCreateRequest("SL-AUDIT-FAIL", "Audit failure", "leader-user"),
+                admin.getEmail()
+        )).isInstanceOf(IllegalStateException.class)
+                .hasMessage("audit unavailable");
+    }
+
+    @Test
+    void auditsMemberPromotionAndLeaderDemotionWithBeforeAndAfterSnapshots() {
+        UserEntity admin = user(1L, "admin-user", "admin@smartlab.test", true);
+        UserEntity leader = user(2L, "leader-user", "leader@smartlab.test", true);
+        ProjectEntity project = project(7L, null, false, ProjectStatus.PROPOSED);
+        ProjectMemberEntity membership = ProjectMemberEntity.createMember(project, leader);
+        ReflectionTestUtils.setField(membership, "id", 101L);
+        stubAdmin(admin);
+        when(projectRepository.findActiveByIdForUpdate(7L)).thenReturn(Optional.of(project));
+        when(userRepository.findAllByUserIdInForUpdate(Set.of("leader-user"))).thenReturn(List.of(leader));
+        when(projectMemberRepository.findAllByProject_IdAndProjectRoleAndStatus(
+                7L, ProjectRole.LEADER, ProjectMemberStatus.ACTIVE)).thenReturn(List.of());
+        when(projectMemberRepository.findByProject_IdAndUser_Id(7L, 2L)).thenReturn(Optional.of(membership));
+
+        ChangeProjectLeadersRequest promote = new ChangeProjectLeadersRequest();
+        promote.setLeaderUserIds(List.of("leader-user"));
+        projectService.replaceLeaders(7L, promote, admin.getEmail());
+
+        @SuppressWarnings("rawtypes")
+        ArgumentCaptor<Map> promotionBefore = ArgumentCaptor.forClass(Map.class);
+        @SuppressWarnings("rawtypes")
+        ArgumentCaptor<Map> promotionAfter = ArgumentCaptor.forClass(Map.class);
+        verify(auditService).log(
+                org.mockito.ArgumentMatchers.eq("PROJECT_MEMBER_UPDATED"),
+                org.mockito.ArgumentMatchers.eq("PROJECT_MEMBER"),
+                org.mockito.ArgumentMatchers.eq("101"),
+                promotionBefore.capture(),
+                promotionAfter.capture()
+        );
+        assertThat(promotionBefore.getValue()).containsEntry("projectRole", "MEMBER");
+        assertThat(promotionAfter.getValue()).containsEntry("projectRole", "LEADER");
+
+        when(projectMemberRepository.findAllByProject_IdAndProjectRoleAndStatus(
+                7L, ProjectRole.LEADER, ProjectMemberStatus.ACTIVE)).thenReturn(List.of(membership));
+        ChangeProjectLeadersRequest demote = new ChangeProjectLeadersRequest();
+        demote.setLeaderUserIds(List.of());
+        projectService.replaceLeaders(7L, demote, admin.getEmail());
+
+        verify(auditService).log(
+                org.mockito.ArgumentMatchers.eq("PROJECT_MEMBER_UPDATED"),
+                org.mockito.ArgumentMatchers.eq("PROJECT_MEMBER"),
+                org.mockito.ArgumentMatchers.eq("101"),
+                org.mockito.ArgumentMatchers.argThat(before -> "LEADER".equals(before.get("projectRole"))),
+                org.mockito.ArgumentMatchers.argThat(after -> "MEMBER".equals(after.get("projectRole")))
+        );
+    }
+
+    @Test
+    void doesNotAuditAnUnchangedLeaderMembershipAcrossIdempotentLeadershipUpdates() {
+        UserEntity admin = user(1L, "admin-user", "admin@smartlab.test", true);
+        UserEntity leader = user(2L, "leader-user", "leader@smartlab.test", true);
+        ProjectEntity project = project(7L, leader, false, ProjectStatus.PROPOSED);
+        ProjectMemberEntity membership = ProjectMemberEntity.createLeader(project, leader);
+        ReflectionTestUtils.setField(membership, "id", 101L);
+        stubAdmin(admin);
+        when(projectRepository.findActiveByIdForUpdate(7L)).thenReturn(Optional.of(project));
+        when(projectRepository.saveAndFlush(project)).thenReturn(project);
+        when(userRepository.findAllByUserIdInForUpdate(Set.of("leader-user"))).thenReturn(List.of(leader));
+        when(projectMemberRepository.findAllByProject_IdAndProjectRoleAndStatus(
+                7L, ProjectRole.LEADER, ProjectMemberStatus.ACTIVE)).thenReturn(List.of(membership));
+
+        UpdateProjectLeadershipRequest request = new UpdateProjectLeadershipRequest();
+        request.setPrimaryLeaderUserId("leader-user");
+        request.setLeaderUserIds(List.of("leader-user"));
+
+        projectService.updateLeadership(7L, request, admin.getEmail());
+        projectService.updateLeadership(7L, request, admin.getEmail());
+
+        verifyNoInteractions(auditService);
     }
 
     @Test
