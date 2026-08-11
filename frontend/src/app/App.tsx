@@ -12,8 +12,11 @@ import { AdminRbacPage } from '../features/admin/pages/AdminRbacPage'
 import { ProfilePage } from '../features/profile/pages/ProfilePage'
 import { ResearchFieldsPage } from '../features/profile/pages/ResearchFieldsPage'
 import { AdminMembersPage } from '../features/profile/pages/AdminMembersPage'
-import { PostListPage } from '../features/posts/pages/PostListPage'
+import { MyPostsPage } from '../features/posts/pages/PostListPage'
+import { PostFeedPage } from '../features/posts/pages/PostFeedPage'
 import { PostDetailPage } from '../features/posts/pages/PostDetailPage'
+import { PostCreatePage } from '../features/posts/pages/PostCreatePage'
+import { PostEditPage } from '../features/posts/pages/PostEditPage'
 import { PostReviewQueuePage } from '../features/posts/pages/PostReviewQueuePage'
 import { PostReviewDetailPage } from '../features/posts/pages/PostReviewDetailPage'
 import { HomePage } from '../features/public/pages/HomePage'
@@ -73,9 +76,12 @@ export function App() {
           }
         />
         <Route path="/blog" element={<Navigate to="/bai-viet" replace />} />
-        <Route path="/posts" element={<PostListPage />} />
+        <Route path="/posts" element={<PostFeedPage />} />
+        <Route path="/my-posts" element={<MyPostsPage />} />
+        <Route path="/posts/new" element={<RequirePermissions allOf={[]}><PostCreatePage /></RequirePermissions>} />
         <Route path="/posts/review-queue" element={<RequirePermissions allOf={['posts.review']}><PostReviewQueuePage /></RequirePermissions>} />
         <Route path="/posts/review-queue/:id" element={<RequirePermissions allOf={['posts.review']}><PostReviewDetailPage /></RequirePermissions>} />
+        <Route path="/posts/:slug/edit" element={<RequirePermissions allOf={[]}><PostEditPage /></RequirePermissions>} />
         <Route path="/posts/:slug" element={<PostDetailPage />} />
         <Route
           path="/tai-lieu"

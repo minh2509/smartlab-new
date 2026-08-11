@@ -117,6 +117,9 @@ class PostServiceImplTest {
         assertThat(response.getId()).isEqualTo(88L);
         assertThat(response.getSlug()).isEqualTo("my-post");
         assertThat(response.getContentJson()).isEqualTo(post.getContentJson());
+        assertThat(response.getAuthor())
+                .extracting("userId", "name")
+                .containsExactly("member-41", "Member 41");
     }
 
     @Test
@@ -386,7 +389,13 @@ class PostServiceImplTest {
     }
 
     private static UserEntity activeUser(Long id) {
-        return UserEntity.builder().id(id).email("member@example.edu").isActive(true).build();
+        return UserEntity.builder()
+                .id(id)
+                .userId("member-" + id)
+                .name("Member " + id)
+                .email("member@example.edu")
+                .isActive(true)
+                .build();
     }
 
     private static UserEntity inactiveUser(Long id) {

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
-import { AlertTriangle, ArrowRight, CalendarDays, Globe, Lock, Newspaper, Users } from 'lucide-react'
+import { AlertTriangle, ArrowRight, CalendarDays, Globe, Lock, Newspaper, Plus, Users } from 'lucide-react'
 import { useAuth } from '../../auth/authContext'
-import { listPosts } from '../api'
+import { listMyPosts } from '../api'
 import type { PostStatus, PostSummary, PostVisibility } from '../types'
 
 const VISIBILITY: Record<PostVisibility, { label: string; Icon: typeof Globe }> = {
@@ -22,7 +22,7 @@ const STATUS: Record<PostStatus, { label: string; tone: 'ok' | 'warn' | 'danger'
 
 const SKELETON_KEYS = ['sk-1', 'sk-2', 'sk-3']
 
-export function PostListPage() {
+export function MyPostsPage() {
   const { token } = useAuth()
   const [posts, setPosts] = useState<PostSummary[]>([])
   const [loading, setLoading] = useState(true)
@@ -37,7 +37,7 @@ export function PostListPage() {
     setLoading(true)
     setError(null)
 
-    void listPosts(token)
+    void listMyPosts(token)
       .then(setPosts)
       .catch((value: unknown) => {
         setError(value instanceof Error ? value.message : 'Không thể tải danh sách bài viết.')
@@ -50,19 +50,24 @@ export function PostListPage() {
   }
 
   return (
-    <section className="post-feed-page">
+    <section className="post-feed-page my-posts-page">
       <div className="post-feed-shell">
-        <header className="post-feed-head">
-          <span className="post-feed-kicker">Bảng tin nội bộ</span>
-          <div className="post-feed-headline">
-            <h1>Bài viết</h1>
-            {!loading && !error && posts.length > 0 ? (
-              <span className="post-feed-count">{posts.length}</span>
-            ) : null}
+        <header className="post-feed-head post-feed-head-with-action">
+          <div>
+            <span className="post-feed-kicker">Không gian quản lý</span>
+            <div className="post-feed-headline">
+              <h1>Bài viết của tôi</h1>
+              {!loading && !error && posts.length > 0 ? (
+                <span className="post-feed-count">{posts.length}</span>
+              ) : null}
+            </div>
+            <p className="post-feed-sub">
+              Theo dõi trạng thái và quản lý toàn bộ bài viết do bạn tạo.
+            </p>
           </div>
-          <p className="post-feed-sub">
-            Những bài viết bạn được phép xem theo quyền truy cập hiện tại.
-          </p>
+          <Link className="btn primary post-create-link" to="/posts/new">
+            <Plus aria-hidden="true" /> Tạo bài viết
+          </Link>
         </header>
 
         {loading ? (
@@ -119,6 +124,7 @@ export function PostListPage() {
                     <span className="post-card-audience">
                       <AudienceIcon aria-hidden="true" />
                       {audience.label}
+                      {post.visibility === 'PROJECT' && post.projectId ? ` #${post.projectId}` : ''}
                     </span>
                   </div>
 
@@ -132,10 +138,11 @@ export function PostListPage() {
                     <span className="post-card-meta">
                       <CalendarDays aria-hidden="true" />
                       <span className={`post-card-status is-${status.tone}`}>{status.label}</span>
-                      <span className="post-card-dot" aria-hidden="true">
-                        ·
+                      <span className="post-card-byline">
+                        <span>{post.author?.name ?? 'Tác giả không còn khả dụng'}</span>
+                        <span className="post-card-dot" aria-hidden="true">·</span>
+                        <span className="post-card-date">{formatDate(post.publishedAt ?? post.updatedAt)}</span>
                       </span>
-                      <span className="post-card-date">{formatDate(post.publishedAt ?? post.updatedAt)}</span>
                     </span>
                     <Link className="post-card-action" to={href}>
                       Đọc bài

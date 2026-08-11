@@ -4,6 +4,7 @@ import com.smartlab.dto.request.CreatePostRequest;
 import com.smartlab.dto.request.ReviewPostRequest;
 import com.smartlab.dto.request.UpdatePostRequest;
 import com.smartlab.dto.response.PostCategoryResponse;
+import com.smartlab.dto.response.PostAuthorResponse;
 import com.smartlab.dto.response.PostDetailResponse;
 import com.smartlab.dto.response.PostSummaryResponse;
 import com.smartlab.entity.ContentCategoryEntity;
@@ -89,7 +90,7 @@ public class PostServiceImpl implements PostService {
                     creationTime
             );
             try {
-                return toDetailResponse(postCreateAttemptService.persist(post), category);
+                return toDetailResponse(postCreateAttemptService.persist(post), category, toAuthorResponse(author));
             } catch (PostSlugCollisionException ignored) {
                 // The isolated attempt has rolled back; advance to the next bounded candidate.
             }
@@ -147,7 +148,7 @@ public class PostServiceImpl implements PostService {
         PostCategoryResponse category = request.hasCategoryId()
                 ? toCategoryResponse(suppliedCategory)
                 : findCategoryResponse(resolvedCategoryId);
-        return toDetailResponse(post, category);
+        return toDetailResponse(post, category, toAuthorResponse(viewer));
     }
 
     @Override
@@ -165,7 +166,7 @@ public class PostServiceImpl implements PostService {
         }
 
         post.submitForReview(Instant.now());
-        return toDetailResponse(post, findCategoryResponse(post.getCategoryId()));
+        return toDetailResponse(post, findCategoryResponse(post.getCategoryId()), toAuthorResponse(author));
     }
 
     @Override
@@ -198,14 +199,15 @@ public class PostServiceImpl implements PostService {
                     post.getAuthorUserId(),
                     reviewNotificationType(request.decision()),
                     reviewNotificationMessage(request.decision()),
-                    new NotificationRelated(reviewer.getId(), "POST", post.getId(), null),
+                    new NotificationRelated(reviewer.getId(), "POST", post.getId(), "/posts/" + post.getSlug()),
                     reviewInstant
             );
         }
         auditService.log(POST_REVIEWED, POST, post.getId().toString(), auditBefore,
                 Map.of("status", post.getStatus().name(), "decision", request.decision().name()));
 
-        return toDetailResponse(post, findCategoryResponse(post.getCategoryId()));
+        return toDetailResponse(post, findCategoryResponse(post.getCategoryId()),
+                findAuthorResponse(post.getAuthorUserId()));
     }
 
     @Override
@@ -220,7 +222,8 @@ public class PostServiceImpl implements PostService {
         }
 
         post.publish(Instant.now());
-        return toDetailResponse(post, findCategoryResponse(post.getCategoryId()));
+        return toDetailResponse(post, findCategoryResponse(post.getCategoryId()),
+                findAuthorResponse(post.getAuthorUserId()));
     }
 
     @Override
@@ -238,7 +241,7 @@ public class PostServiceImpl implements PostService {
         }
 
         post.publishDirect(Instant.now());
-        return toDetailResponse(post, findCategoryResponse(post.getCategoryId()));
+        return toDetailResponse(post, findCategoryResponse(post.getCategoryId()), toAuthorResponse(author));
     }
 
     @Override
@@ -268,14 +271,28 @@ public class PostServiceImpl implements PostService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<PostSummaryResponse> getReadablePosts(String authenticatedEmail) {
+    public List<PostSummaryResponse> getMyPosts(String authenticatedEmail) {
         UserEntity viewer = resolveActiveAuthor(authenticatedEmail);
-        List<Long> activeProjectIds = activeProjectIdsOrNoMatch(viewer.getId());
-        List<PostEntity> posts = postRepository.findActiveReadableByViewerUserId(viewer.getId(), activeProjectIds);
+        List<PostEntity> posts = postRepository.findActiveOwnedByAuthorUserId(viewer.getId());
         Map<Long, PostCategoryResponse> categoriesById = findCategoryResponses(posts);
+        Map<Long, PostAuthorResponse> authorsById = findAuthorResponses(posts);
 
         return posts.stream()
-                .map(post -> toSummaryResponse(post, categoryFor(post, categoriesById)))
+                .map(post -> toSummaryResponse(post, categoryFor(post, categoriesById), authorFor(post, authorsById)))
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<PostSummaryResponse> getReadablePosts(String authenticatedEmail) {
+        UserEntity viewer = resolveActiveAuthor(authenticatedEmail);
+        List<PostEntity> posts = postRepository.findActiveReadableByViewerUserId(
+                viewer.getId(), activeProjectIdsOrNoMatch(viewer.getId())
+        );
+        Map<Long, PostCategoryResponse> categoriesById = findCategoryResponses(posts);
+        Map<Long, PostAuthorResponse> authorsById = findAuthorResponses(posts);
+        return posts.stream()
+                .map(post -> toSummaryResponse(post, categoryFor(post, categoriesById), authorFor(post, authorsById)))
                 .toList();
     }
 
@@ -285,9 +302,10 @@ public class PostServiceImpl implements PostService {
         UserEntity reviewer = resolveActiveAuthor(authenticatedEmail);
         List<PostEntity> posts = postRepository.findActivePendingReviewableByReviewerUserId(reviewer.getId());
         Map<Long, PostCategoryResponse> categoriesById = findCategoryResponses(posts);
+        Map<Long, PostAuthorResponse> authorsById = findAuthorResponses(posts);
 
         return posts.stream()
-                .map(post -> toSummaryResponse(post, categoryFor(post, categoriesById)))
+                .map(post -> toSummaryResponse(post, categoryFor(post, categoriesById), authorFor(post, authorsById)))
                 .toList();
     }
 
@@ -301,24 +319,34 @@ public class PostServiceImpl implements PostService {
                 )
                 .orElseThrow(this::postNotFound);
 
-        return toDetailResponse(post, findCategoryResponse(post.getCategoryId()));
+        return toDetailResponse(post, findCategoryResponse(post.getCategoryId()),
+                findAuthorResponse(post.getAuthorUserId()));
     }
 
     @Override
     @Transactional(readOnly = true)
     public PostDetailResponse getPostBySlug(String authenticatedEmail, String slug) {
+        if (authenticatedEmail == null) {
+            PostEntity publicPost = postRepository.findActivePublishedPublicBySlug(slug)
+                    .orElseThrow(this::postNotFound);
+            return toDetailResponse(publicPost, findCategoryResponse(publicPost.getCategoryId()),
+                    findAuthorResponse(publicPost.getAuthorUserId()));
+        }
+
         UserEntity viewer = resolveActiveAuthor(authenticatedEmail);
         PostEntity post = postRepository.findActiveBySlug(slug)
                 .orElseThrow(this::postNotFound);
 
         if (post.getAuthorUserId() != null && post.getAuthorUserId().equals(viewer.getId())) {
-            return toDetailResponse(post, findCategoryResponse(post.getCategoryId()));
+            return toDetailResponse(post, findCategoryResponse(post.getCategoryId()),
+                    findAuthorResponse(post.getAuthorUserId()));
         }
         if (!isReadableBy(post, activeProjectIdsOrNoMatch(viewer.getId()))) {
             throw postNotFound();
         }
 
-        return toDetailResponse(post, findCategoryResponse(post.getCategoryId()));
+        return toDetailResponse(post, findCategoryResponse(post.getCategoryId()),
+                findAuthorResponse(post.getAuthorUserId()));
     }
 
     private UserEntity resolveActiveAuthor(String authenticatedEmail) {
@@ -370,11 +398,19 @@ public class PostServiceImpl implements PostService {
         return activeProjectIds.isEmpty() ? List.of(-1L) : activeProjectIds;
     }
 
-    private PostDetailResponse toDetailResponse(PostEntity post, ContentCategoryEntity category) {
-        return toDetailResponse(post, toCategoryResponse(category));
+    private PostDetailResponse toDetailResponse(
+            PostEntity post,
+            ContentCategoryEntity category,
+            PostAuthorResponse author
+    ) {
+        return toDetailResponse(post, toCategoryResponse(category), author);
     }
 
-    private PostDetailResponse toDetailResponse(PostEntity post, PostCategoryResponse category) {
+    private PostDetailResponse toDetailResponse(
+            PostEntity post,
+            PostCategoryResponse category,
+            PostAuthorResponse author
+    ) {
         return PostDetailResponse.builder()
                 .id(post.getId())
                 .title(post.getTitle())
@@ -385,13 +421,18 @@ public class PostServiceImpl implements PostService {
                 .projectId(post.getProjectId())
                 .status(post.getStatus())
                 .category(category)
+                .author(author)
                 .publishedAt(post.getPublishedAt())
                 .createdAt(post.getCreatedAt())
                 .updatedAt(post.getUpdatedAt())
                 .build();
     }
 
-    private PostSummaryResponse toSummaryResponse(PostEntity post, PostCategoryResponse category) {
+    private PostSummaryResponse toSummaryResponse(
+            PostEntity post,
+            PostCategoryResponse category,
+            PostAuthorResponse author
+    ) {
         return PostSummaryResponse.builder()
                 .id(post.getId())
                 .title(post.getTitle())
@@ -401,6 +442,7 @@ public class PostServiceImpl implements PostService {
                 .projectId(post.getProjectId())
                 .status(post.getStatus())
                 .category(category)
+                .author(author)
                 .publishedAt(post.getPublishedAt())
                 .createdAt(post.getCreatedAt())
                 .updatedAt(post.getUpdatedAt())
@@ -436,6 +478,44 @@ public class PostServiceImpl implements PostService {
         return post.getCategoryId() == null ? null : categoriesById.get(post.getCategoryId());
     }
 
+    private Map<Long, PostAuthorResponse> findAuthorResponses(List<PostEntity> posts) {
+        Set<Long> authorIds = posts.stream()
+                .map(PostEntity::getAuthorUserId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        if (authorIds.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<Long, PostAuthorResponse> responsesById = new HashMap<>();
+        userRepository.findAllById(authorIds)
+                .forEach(author -> responsesById.put(author.getId(), toAuthorResponse(author)));
+        return responsesById;
+    }
+
+    private PostAuthorResponse findAuthorResponse(Long authorUserId) {
+        if (authorUserId == null) {
+            return null;
+        }
+        return userRepository.findById(authorUserId)
+                .map(this::toAuthorResponse)
+                .orElse(null);
+    }
+
+    private PostAuthorResponse authorFor(PostEntity post, Map<Long, PostAuthorResponse> authorsById) {
+        return post.getAuthorUserId() == null ? null : authorsById.get(post.getAuthorUserId());
+    }
+
+    private PostAuthorResponse toAuthorResponse(UserEntity author) {
+        if (author == null) {
+            return null;
+        }
+        return PostAuthorResponse.builder()
+                .userId(author.getUserId())
+                .name(author.getName())
+                .build();
+    }
+
     private boolean isReadableBy(PostEntity post, List<Long> activeProjectIds) {
         return post.getStatus() == PostStatus.PUBLISHED
                 && (post.getVisibility() == PostVisibility.PUBLIC
@@ -447,7 +527,7 @@ public class PostServiceImpl implements PostService {
 
     private static String reviewNotificationMessage(ReviewDecision decision) {
         return switch (decision) {
-            case APPROVED -> "Bài viết của bạn đã được duyệt.";
+            case APPROVED -> "Bài viết của bạn đã được duyệt và xuất bản.";
             case REVISION_REQUIRED -> "Bài viết của bạn cần được chỉnh sửa.";
             case REJECTED -> "Bài viết của bạn đã bị từ chối.";
         };

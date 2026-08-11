@@ -251,9 +251,10 @@ class PostPublishServiceImplTest {
             return post;
         }
 
-        post.applyReviewDecision(com.smartlab.enums.ReviewDecision.APPROVED, CREATED_AT.plusSeconds(2));
-        if (status == PostStatus.PUBLISHED) {
-            post.publish(CREATED_AT.plusSeconds(3));
+        if (status == PostStatus.APPROVED) {
+            setStatus(post, PostStatus.APPROVED);
+        } else {
+            post.applyReviewDecision(com.smartlab.enums.ReviewDecision.APPROVED, CREATED_AT.plusSeconds(2));
         }
         return post;
     }
@@ -263,6 +264,16 @@ class PostPublishServiceImplTest {
             Field field = PostEntity.class.getDeclaredField("id");
             field.setAccessible(true);
             field.set(post, POST_ID);
+        } catch (ReflectiveOperationException exception) {
+            throw new AssertionError(exception);
+        }
+    }
+
+    private static void setStatus(PostEntity post, PostStatus status) {
+        try {
+            Field field = PostEntity.class.getDeclaredField("status");
+            field.setAccessible(true);
+            field.set(post, status);
         } catch (ReflectiveOperationException exception) {
             throw new AssertionError(exception);
         }

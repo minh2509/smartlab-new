@@ -305,7 +305,7 @@ class PostWorkflowSecurityIntegrationTest {
                         "{\"decision\":\"APPROVED\",\"reason\":\"ready\"}",
                         "posts.review",
                         "posts.submit",
-                        PostStatus.APPROVED
+                        PostStatus.PUBLISHED
                 ),
                 new WorkflowEndpoint(
                         Operation.PUBLISH,

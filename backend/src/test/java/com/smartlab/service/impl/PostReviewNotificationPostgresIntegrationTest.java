@@ -129,6 +129,13 @@ class PostReviewNotificationPostgresIntegrationTest {
         assertThat(persisted.decision()).isEqualTo(reviewCase.decision());
         assertThat(persisted.reason()).isEqualTo(reviewCase.reason());
         assertThat(reviewCount(postId)).isEqualTo(1L);
+        if (reviewCase.decision() == ReviewDecision.APPROVED) {
+            assertThat(persisted.postPublishedAt()).isEqualTo(persisted.reviewCreatedAt());
+            assertThat(response.getPublishedAt()).isEqualTo(persisted.reviewCreatedAt());
+        } else {
+            assertThat(persisted.postPublishedAt()).isNull();
+            assertThat(response.getPublishedAt()).isNull();
+        }
 
         assertThat(notification.id()).isPositive();
         assertThat(notification.recipientUserId()).isEqualTo(author.id());
@@ -137,7 +144,7 @@ class PostReviewNotificationPostgresIntegrationTest {
         assertThat(notification.actorUserId()).isEqualTo(reviewer.id());
         assertThat(notification.relatedType()).isEqualTo("POST");
         assertThat(notification.relatedId()).isEqualTo(postId);
-        assertThat(notification.targetUrl()).isNull();
+        assertThat(notification.targetUrl()).isEqualTo("/posts/" + postSlug(postId));
         assertThat(notification.deletedAt()).isNull();
         assertThat(notification.read()).isFalse();
         assertThat(notificationCount(author.id())).isEqualTo(1L);
@@ -169,8 +176,9 @@ class PostReviewNotificationPostgresIntegrationTest {
         PostReviewSnapshot persisted = inNewTransaction(() -> readPostReview(postId));
         DatabaseCounts after = inNewTransaction(this::databaseCounts);
 
-        assertThat(response.getStatus()).isEqualTo(PostStatus.APPROVED);
-        assertThat(persisted.status()).isEqualTo(PostStatus.APPROVED);
+        assertThat(response.getStatus()).isEqualTo(PostStatus.PUBLISHED);
+        assertThat(persisted.status()).isEqualTo(PostStatus.PUBLISHED);
+        assertThat(persisted.postPublishedAt()).isEqualTo(persisted.reviewCreatedAt());
         assertThat(persisted.decision()).isEqualTo(ReviewDecision.APPROVED);
         assertThat(reviewCount(postId)).isEqualTo(1L);
         assertThat(after.notifications()).isEqualTo(baselineCounts.notifications());
@@ -184,13 +192,14 @@ class PostReviewNotificationPostgresIntegrationTest {
         Long postId = insertPendingReviewPost(author.id(), "rollback");
         when(userRepository.findByEmail(reviewer.email())).thenReturn(Optional.of(reviewer.entity()));
         PostBeforeState before = inNewTransaction(() -> readPostBeforeState(postId));
+        String targetUrl = "/posts/" + postSlug(postId);
         DataIntegrityViolationException failure =
                 new DataIntegrityViolationException("injected notification provider failure");
         doThrow(failure).when(notificationService).notify(
                 eq(author.id()),
                 eq("POST_REVIEW_APPROVED"),
-                eq("Bài viết của bạn đã được duyệt."),
-                eq(new NotificationRelated(reviewer.id(), "POST", postId, null)),
+                eq("Bài viết của bạn đã được duyệt và xuất bản."),
+                eq(new NotificationRelated(reviewer.id(), "POST", postId, targetUrl)),
                 any(Instant.class)
         );
 
@@ -203,8 +212,8 @@ class PostReviewNotificationPostgresIntegrationTest {
         verify(notificationService).notify(
                 eq(author.id()),
                 eq("POST_REVIEW_APPROVED"),
-                eq("Bài viết của bạn đã được duyệt."),
-                eq(new NotificationRelated(reviewer.id(), "POST", postId, null)),
+                eq("Bài viết của bạn đã được duyệt và xuất bản."),
+                eq(new NotificationRelated(reviewer.id(), "POST", postId, targetUrl)),
                 any(Instant.class)
         );
         RollbackSnapshot after = inNewTransaction(() -> readRollbackSnapshot(postId, author.id()));
@@ -289,7 +298,7 @@ class PostReviewNotificationPostgresIntegrationTest {
 
     private PostReviewSnapshot readPostReview(Long postId) {
         return jdbc.queryForObject("""
-                select p.status, p.updated_at, r.id, r.reviewer_user_id,
+                select p.status, p.updated_at, p.published_at, r.id, r.reviewer_user_id,
                        r.decision, r.reason, r.created_at
                 from posts p
                 join post_reviews r on r.post_id = p.id
@@ -297,6 +306,7 @@ class PostReviewNotificationPostgresIntegrationTest {
                 """, (rs, rowNum) -> new PostReviewSnapshot(
                 PostStatus.valueOf(rs.getString("status")),
                 rs.getTimestamp("updated_at").toInstant(),
+                rs.getTimestamp("published_at") == null ? null : rs.getTimestamp("published_at").toInstant(),
                 rs.getLong("id"),
                 rs.getLong("reviewer_user_id"),
                 ReviewDecision.valueOf(rs.getString("decision")),
@@ -374,6 +384,14 @@ class PostReviewNotificationPostgresIntegrationTest {
         ));
     }
 
+    private String postSlug(Long postId) {
+        return inNewTransaction(() -> jdbc.queryForObject(
+                "select slug from posts where id = ?",
+                String.class,
+                postId
+        ));
+    }
+
     private long auditCount(Long postId) {
         return inNewTransaction(() -> jdbc.queryForObject(
                 "select count(*) from audit_logs where target_type = 'POST' and target_id = ?",
@@ -413,9 +431,9 @@ class PostReviewNotificationPostgresIntegrationTest {
                 new AuthoredReviewCase(
                         "approved",
                         ReviewDecision.APPROVED,
-                        PostStatus.APPROVED,
+                        PostStatus.PUBLISHED,
                         "  approval reason stays in history  ",
-                        "Bài viết của bạn đã được duyệt."
+                        "Bài viết của bạn đã được duyệt và xuất bản."
                 ),
                 new AuthoredReviewCase(
                         "revision-required",
@@ -453,6 +471,7 @@ class PostReviewNotificationPostgresIntegrationTest {
     private record PostReviewSnapshot(
             PostStatus status,
             Instant postUpdatedAt,
+            Instant postPublishedAt,
             Long reviewId,
             Long reviewerUserId,
             ReviewDecision decision,

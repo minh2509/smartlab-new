@@ -14,7 +14,12 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -35,8 +40,20 @@ public class NotificationServiceImpl implements NotificationService {
     @Transactional(readOnly = true)
     public List<NotificationResponse> getNotifications(String authenticatedEmail) {
         Long recipientId = resolveActiveUser(authenticatedEmail).getId();
-        return notificationRepository.findByRecipientUserIdAndDeletedAtIsNullOrderByCreatedAtDescIdDesc(recipientId)
-                .stream().map(this::toResponse).toList();
+        List<NotificationEntity> notifications =
+                notificationRepository.findByRecipientUserIdAndDeletedAtIsNullOrderByCreatedAtDescIdDesc(recipientId);
+        Set<Long> actorIds = notifications.stream()
+                .map(NotificationEntity::getActorUserId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, String> actorNamesById = new HashMap<>();
+        if (!actorIds.isEmpty()) {
+            userRepository.findAllById(actorIds)
+                    .forEach(actor -> actorNamesById.put(actor.getId(), actor.getName()));
+        }
+        return notifications.stream()
+                .map(notification -> toResponse(notification, actorNamesById.get(notification.getActorUserId())))
+                .toList();
     }
 
     @Override
@@ -70,8 +87,8 @@ public class NotificationServiceImpl implements NotificationService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Notification not found"));
     }
 
-    private NotificationResponse toResponse(NotificationEntity notification) {
-        return new NotificationResponse(notification.getId(), notification.getActorUserId(), notification.getType(),
+    private NotificationResponse toResponse(NotificationEntity notification, String actorName) {
+        return new NotificationResponse(notification.getId(), notification.getActorUserId(), actorName, notification.getType(),
                 notification.getMessage(), notification.getRelatedType(), notification.getRelatedId(),
                 notification.getTargetUrl(), notification.isRead(), notification.getCreatedAt());
     }
