@@ -8,6 +8,13 @@ export type PostStatus =
 
 export type PostVisibility = 'PUBLIC' | 'LAB' | 'PROJECT'
 
+export type ReviewDecision = 'APPROVED' | 'REVISION_REQUIRED' | 'REJECTED'
+
+export type ReviewPostRequest = {
+  decision: ReviewDecision
+  reason?: string | null
+}
+
 export type PostCategory = {
   id: number
   code: string

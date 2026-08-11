@@ -19,6 +19,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -103,6 +104,31 @@ class PostControllerTest {
 
         assertThat(actual).isSameAs(response);
         verify(postService).getReadablePosts(EMAIL);
+    }
+
+    @Test
+    void reviewerListDelegatesTrustedAuthenticationNameAndIsNotTreatedAsSlug() throws Exception {
+        Authentication authentication = authentication();
+        List<PostSummaryResponse> response = List.of(summaryResponse());
+        when(postService.getReviewablePosts(EMAIL)).thenReturn(response);
+
+        mockMvc.perform(get("/posts/review-queue").principal(authentication))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(7));
+        verify(postService).getReviewablePosts(EMAIL);
+        verify(postService, org.mockito.Mockito.never()).getPostBySlug(EMAIL, "review-queue");
+    }
+
+    @Test
+    void reviewerDetailDelegatesTrustedAuthenticationNameAndPostId() throws Exception {
+        Authentication authentication = authentication();
+        when(postService.getReviewablePost(EMAIL, 17L)).thenReturn(detailResponse());
+
+        mockMvc.perform(get("/posts/review-queue/17").principal(authentication))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(7));
+
+        verify(postService).getReviewablePost(EMAIL, 17L);
     }
 
     @Test
@@ -237,6 +263,19 @@ class PostControllerTest {
         assertThat(delete.getAnnotation(DeleteMapping.class).value()).containsExactly("/{id}");
         assertThat(hasValidAnnotation(create.getParameterAnnotations()[1])).isTrue();
         assertThat(hasValidAnnotation(patch.getParameterAnnotations()[2])).isTrue();
+    }
+
+    @Test
+    void mapsReviewerReadsWithExactStaticPathsAndAuthority() throws NoSuchMethodException {
+        Method list = PostController.class.getMethod("getReviewQueue", Authentication.class);
+        Method detail = PostController.class.getMethod("getReviewQueuePost", Authentication.class, Long.class);
+
+        assertThat(list.getAnnotation(GetMapping.class).value()).containsExactly("/review-queue");
+        assertThat(detail.getAnnotation(GetMapping.class).value()).containsExactly("/review-queue/{id}");
+        assertThat(list.getAnnotation(PreAuthorize.class).value())
+                .isEqualTo("hasAuthority('posts.review')");
+        assertThat(detail.getAnnotation(PreAuthorize.class).value())
+                .isEqualTo("hasAuthority('posts.review')");
     }
 
     private static boolean hasValidAnnotation(Annotation[] annotations) {

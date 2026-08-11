@@ -270,6 +270,31 @@ public class PostServiceImpl implements PostService {
 
     @Override
     @Transactional(readOnly = true)
+    public List<PostSummaryResponse> getReviewablePosts(String authenticatedEmail) {
+        UserEntity reviewer = resolveActiveAuthor(authenticatedEmail);
+        List<PostEntity> posts = postRepository.findActivePendingReviewableByReviewerUserId(reviewer.getId());
+        Map<Long, PostCategoryResponse> categoriesById = findCategoryResponses(posts);
+
+        return posts.stream()
+                .map(post -> toSummaryResponse(post, categoryFor(post, categoriesById)))
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PostDetailResponse getReviewablePost(String authenticatedEmail, Long postId) {
+        UserEntity reviewer = resolveActiveAuthor(authenticatedEmail);
+        PostEntity post = postRepository.findActivePendingReviewableByIdAndReviewerUserId(
+                        postId,
+                        reviewer.getId()
+                )
+                .orElseThrow(this::postNotFound);
+
+        return toDetailResponse(post, findCategoryResponse(post.getCategoryId()));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public PostDetailResponse getPostBySlug(String authenticatedEmail, String slug) {
         UserEntity viewer = resolveActiveAuthor(authenticatedEmail);
         PostEntity post = postRepository.findActiveBySlug(slug)

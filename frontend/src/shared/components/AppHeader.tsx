@@ -1,4 +1,4 @@
-import { Bell, ChevronDown, LogIn, LogOut, Newspaper } from 'lucide-react'
+import { Bell, ClipboardCheck, ChevronDown, LogIn, LogOut, Newspaper } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../../features/auth/authContext'
@@ -21,6 +21,7 @@ const aboutLinks = [
 export function AppHeader() {
   const { isAuthenticated, logout, profile } = useAuth()
   const role = resolveHeaderRole(profile?.roles)
+  const canReviewPosts = profile?.permissions.includes('posts.review') ?? false
 
   return (
     <header className="site-nav">
@@ -63,12 +64,22 @@ export function AppHeader() {
           {isAuthenticated ? (
             <>
               <NavLink
+                end
                 className={({ isActive }) => `nav-private-link${isActive ? ' is-active' : ''}`}
                 to="/posts"
               >
                 <Newspaper size={15} aria-hidden="true" />
                 Bảng tin
               </NavLink>
+              {canReviewPosts ? (
+                <NavLink
+                  className={({ isActive }) => `nav-private-link${isActive ? ' is-active' : ''}`}
+                  to="/posts/review-queue"
+                >
+                  <ClipboardCheck size={15} aria-hidden="true" />
+                  Duyệt bài
+                </NavLink>
+              ) : null}
               <button className="icon-btn" type="button" aria-label="Thông báo">
                 <Bell />
               </button>

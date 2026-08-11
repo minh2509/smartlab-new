@@ -24,9 +24,11 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -99,6 +101,101 @@ class PostReadServiceImplTest {
         verify(postRepository).findActiveReadableByViewerUserId(VIEWER_ID);
         verify(postRepository, never()).save(any(PostEntity.class));
         verifyNoInteractions(contentCategoryRepository, postSlugGenerator);
+    }
+
+    @Test
+    void reviewerListResolvesActiveReviewerAndPreservesReviewQueueOrderAndVisibility() {
+        PostEntity publicPost = post(8L, 98L, PostStatus.PENDING_REVIEW,
+                PostVisibility.PUBLIC, null, "public-review", 8);
+        PostEntity labPost = post(7L, 99L, PostStatus.PENDING_REVIEW,
+                PostVisibility.LAB, null, "lab-review", 7);
+        PostEntity projectPost = post(6L, 100L, PostStatus.PENDING_REVIEW,
+                PostVisibility.PROJECT, null, "project-review", 6);
+        PostEntity authorlessPost = post(5L, null, PostStatus.PENDING_REVIEW,
+                PostVisibility.LAB, null, "authorless-review", 5);
+        activeViewer();
+        when(postRepository.findActivePendingReviewableByReviewerUserId(VIEWER_ID))
+                .thenReturn(List.of(publicPost, labPost, projectPost, authorlessPost));
+
+        List<PostSummaryResponse> responses = postService.getReviewablePosts(VIEWER_EMAIL);
+
+        assertThat(responses).extracting(PostSummaryResponse::getId)
+                .containsExactly(8L, 7L, 6L, 5L);
+        assertThat(responses).extracting(PostSummaryResponse::getVisibility)
+                .containsExactly(PostVisibility.PUBLIC, PostVisibility.LAB,
+                        PostVisibility.PROJECT, PostVisibility.LAB);
+        verify(postRepository).findActivePendingReviewableByReviewerUserId(VIEWER_ID);
+        verify(postRepository, never()).findActiveByIdForUpdate(any());
+        verify(postRepository, never()).save(any(PostEntity.class));
+        verifyNoInteractions(postReviewRepository, notificationService, auditService, postCreateAttemptService);
+    }
+
+    @Test
+    void reviewerDetailReturnsPredicateConstrainedPendingPostWithExistingDetailMapping() {
+        Map<String, Object> content = Map.of("type", "doc", "review", true);
+        PostEntity post = post(17L, 99L, PostStatus.PENDING_REVIEW,
+                PostVisibility.PROJECT, null, "pending-detail", 17, content);
+        activeViewer();
+        when(postRepository.findActivePendingReviewableByIdAndReviewerUserId(17L, VIEWER_ID))
+                .thenReturn(Optional.of(post));
+
+        PostDetailResponse response = postService.getReviewablePost(VIEWER_EMAIL, 17L);
+
+        assertThat(response.getId()).isEqualTo(17L);
+        assertThat(response.getStatus()).isEqualTo(PostStatus.PENDING_REVIEW);
+        assertThat(response.getVisibility()).isEqualTo(PostVisibility.PROJECT);
+        assertThat(response.getContentJson()).isEqualTo(content);
+        verify(postRepository).findActivePendingReviewableByIdAndReviewerUserId(17L, VIEWER_ID);
+        verify(postRepository, never()).findActiveByIdForUpdate(any());
+        verify(postRepository, never()).save(any(PostEntity.class));
+        verifyNoInteractions(postReviewRepository, notificationService, auditService, postCreateAttemptService);
+    }
+
+    @Test
+    void reviewerDetailConcealsEveryNonReviewableResultAsPostNotFound() {
+        activeViewer();
+        when(postRepository.findActivePendingReviewableByIdAndReviewerUserId(17L, VIEWER_ID))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> postService.getReviewablePost(VIEWER_EMAIL, 17L))
+                .isInstanceOfSatisfying(ResponseStatusException.class, exception -> {
+                    assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+                    assertThat(exception.getReason()).isEqualTo("Post not found");
+                });
+
+        verifyNoInteractions(contentCategoryRepository, postReviewRepository,
+                notificationService, auditService, postCreateAttemptService);
+    }
+
+    @Test
+    void reviewerListRejectsMissingReviewerBeforeReadingPosts() {
+        when(userRepository.findByEmail(VIEWER_EMAIL)).thenReturn(Optional.empty());
+
+        assertUnauthorized(() -> postService.getReviewablePosts(VIEWER_EMAIL));
+
+        verifyNoInteractions(postRepository, contentCategoryRepository, postReviewRepository,
+                notificationService, auditService, postCreateAttemptService);
+    }
+
+    @Test
+    void reviewerDetailRejectsInactiveReviewerBeforeReadingPosts() {
+        when(userRepository.findByEmail(VIEWER_EMAIL)).thenReturn(Optional.of(user(VIEWER_ID, false)));
+
+        assertUnauthorized(() -> postService.getReviewablePost(VIEWER_EMAIL, 17L));
+
+        verifyNoInteractions(postRepository, contentCategoryRepository, postReviewRepository,
+                notificationService, auditService, postCreateAttemptService);
+    }
+
+    @Test
+    void reviewerReadsUseOrdinaryReadOnlyTransactions() throws NoSuchMethodException {
+        Method list = PostServiceImpl.class.getMethod("getReviewablePosts", String.class);
+        Method detail = PostServiceImpl.class.getMethod("getReviewablePost", String.class, Long.class);
+
+        assertThat(list.getAnnotation(Transactional.class)).isNotNull();
+        assertThat(list.getAnnotation(Transactional.class).readOnly()).isTrue();
+        assertThat(detail.getAnnotation(Transactional.class)).isNotNull();
+        assertThat(detail.getAnnotation(Transactional.class).readOnly()).isTrue();
     }
 
     @Test

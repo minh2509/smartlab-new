@@ -25,5 +25,9 @@ public interface PostService {
 
     List<PostSummaryResponse> getReadablePosts(String authenticatedEmail);
 
+    List<PostSummaryResponse> getReviewablePosts(String authenticatedEmail);
+
+    PostDetailResponse getReviewablePost(String authenticatedEmail, Long postId);
+
     PostDetailResponse getPostBySlug(String authenticatedEmail, String slug);
 }
