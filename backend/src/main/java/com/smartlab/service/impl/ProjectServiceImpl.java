@@ -18,6 +18,7 @@ import com.smartlab.enums.ProjectType;
 import com.smartlab.repo.ProjectMemberRepository;
 import com.smartlab.repo.ProjectRepository;
 import com.smartlab.repo.UserRepository;
+import com.smartlab.service.AuditService;
 import com.smartlab.service.PermissionService;
 import com.smartlab.service.ProjectService;
 import lombok.RequiredArgsConstructor;
@@ -40,6 +41,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static com.smartlab.service.AuditVocabulary.PROJECT_MEMBER;
+import static com.smartlab.service.AuditVocabulary.PROJECT_MEMBER_CREATED;
+import static com.smartlab.service.AuditVocabulary.PROJECT_MEMBER_UPDATED;
+
 @Service
 @RequiredArgsConstructor
 public class ProjectServiceImpl implements ProjectService {
@@ -55,6 +60,7 @@ public class ProjectServiceImpl implements ProjectService {
     private final ProjectMemberRepository projectMemberRepository;
     private final UserRepository userRepository;
     private final PermissionService permissionService;
+    private final AuditService auditService;
 
     @Override
     @Transactional(readOnly = true)
@@ -140,6 +146,9 @@ public class ProjectServiceImpl implements ProjectService {
                     .map(leader -> ProjectMemberEntity.createLeader(savedProject, leader))
                     .toList();
             projectMemberRepository.saveAllAndFlush(memberships);
+            auditMembershipChanges(memberships.stream()
+                    .map(membership -> new MembershipAuditChange(membership, null))
+                    .toList());
             return toResponse(savedProject, memberships);
         } catch (DataIntegrityViolationException exception) {
             throw new ResponseStatusException(
@@ -216,18 +225,22 @@ public class ProjectServiceImpl implements ProjectService {
         UserEntity newPrimaryLeader = lockedUsers.get(newPrimaryLeaderUserId);
         validateAssignableUser(newPrimaryLeader);
 
-        Map<Long, ProjectMemberEntity> retainedMemberships = new LinkedHashMap<>();
+        Map<Long, MembershipAuditChange> membershipChanges = new LinkedHashMap<>();
         if (oldPrimaryLeader != null) {
-            ProjectMemberEntity oldPrimaryMembership = activateLeaderMembership(project, oldPrimaryLeader);
-            retainedMemberships.put(oldPrimaryLeader.getId(), oldPrimaryMembership);
+            MembershipAuditChange oldPrimaryMembership = activateLeaderMembership(project, oldPrimaryLeader);
+            membershipChanges.put(oldPrimaryLeader.getId(), oldPrimaryMembership);
         }
-        if (!retainedMemberships.containsKey(newPrimaryLeader.getId())) {
-            retainedMemberships.put(
+        if (!membershipChanges.containsKey(newPrimaryLeader.getId())) {
+            membershipChanges.put(
                     newPrimaryLeader.getId(),
                     activateLeaderMembership(project, newPrimaryLeader)
             );
         }
-        projectMemberRepository.saveAllAndFlush(retainedMemberships.values());
+        List<ProjectMemberEntity> retainedMemberships = membershipChanges.values().stream()
+                .map(MembershipAuditChange::membership)
+                .toList();
+        projectMemberRepository.saveAllAndFlush(retainedMemberships);
+        auditMembershipChanges(membershipChanges.values());
 
         project.changeLeader(newPrimaryLeader);
         ProjectEntity savedProject = projectRepository.saveAndFlush(project);
@@ -269,25 +282,29 @@ public class ProjectServiceImpl implements ProjectService {
         currentLeaderMemberships.forEach(membership ->
                 currentMembershipsByUserId.put(membership.getUser().getId(), membership));
         List<ProjectMemberEntity> retainedMemberships = new ArrayList<>();
+        Map<Long, MembershipAuditChange> membershipChanges = new LinkedHashMap<>();
         for (String requestedUserId : requestedUserIds) {
             UserEntity leader = lockedUsers.get(requestedUserId);
             ProjectMemberEntity membership = currentMembershipsByUserId.get(leader.getId());
-            if (membership == null) {
-                membership = activateLeaderMembership(project, leader);
-            } else {
-                membership.activateAsLeader();
-            }
-            retainedMemberships.add(membership);
+            MembershipAuditChange change = membership == null
+                    ? activateLeaderMembership(project, leader)
+                    : activateAsLeader(membership);
+            retainedMemberships.add(change.membership());
+            membershipChanges.put(leader.getId(), change);
         }
 
         List<ProjectMemberEntity> removedMemberships = currentLeaderMemberships.stream()
                 .filter(membership -> !requestedUserIds.contains(membership.getUser().getUserId()))
                 .toList();
-        removedMemberships.forEach(ProjectMemberEntity::activateAsMember);
+        removedMemberships.forEach(membership -> membershipChanges.put(
+                membership.getUser().getId(),
+                activateAsMember(membership)
+        ));
         List<ProjectMemberEntity> changedMemberships = new ArrayList<>(retainedMemberships);
         changedMemberships.addAll(removedMemberships);
         if (!changedMemberships.isEmpty()) {
             projectMemberRepository.saveAllAndFlush(changedMemberships);
+            auditMembershipChanges(membershipChanges.values());
         }
 
         boolean clearedPrimaryLeader = primaryLeader != null
@@ -361,25 +378,29 @@ public class ProjectServiceImpl implements ProjectService {
         currentLeaderMemberships.forEach(membership ->
                 currentMembershipsByUserId.put(membership.getUser().getId(), membership));
         List<ProjectMemberEntity> retainedMemberships = new ArrayList<>();
+        Map<Long, MembershipAuditChange> membershipChanges = new LinkedHashMap<>();
         for (String requestedUserId : requestedUserIds) {
             UserEntity leader = lockedUsers.get(requestedUserId);
             ProjectMemberEntity membership = currentMembershipsByUserId.get(leader.getId());
-            if (membership == null) {
-                membership = activateLeaderMembership(project, leader);
-            } else {
-                membership.activateAsLeader();
-            }
-            retainedMemberships.add(membership);
+            MembershipAuditChange change = membership == null
+                    ? activateLeaderMembership(project, leader)
+                    : activateAsLeader(membership);
+            retainedMemberships.add(change.membership());
+            membershipChanges.put(leader.getId(), change);
         }
 
         List<ProjectMemberEntity> removedMemberships = currentLeaderMemberships.stream()
                 .filter(membership -> !requestedUserIds.contains(membership.getUser().getUserId()))
                 .toList();
-        removedMemberships.forEach(ProjectMemberEntity::activateAsMember);
+        removedMemberships.forEach(membership -> membershipChanges.put(
+                membership.getUser().getId(),
+                activateAsMember(membership)
+        ));
         List<ProjectMemberEntity> changedMemberships = new ArrayList<>(retainedMemberships);
         changedMemberships.addAll(removedMemberships);
         if (!changedMemberships.isEmpty()) {
             projectMemberRepository.saveAllAndFlush(changedMemberships);
+            auditMembershipChanges(membershipChanges.values());
         }
 
         UserEntity primaryLeader = primaryLeaderUserId == null
@@ -468,12 +489,57 @@ public class ProjectServiceImpl implements ProjectService {
         }
     }
 
-    private ProjectMemberEntity activateLeaderMembership(ProjectEntity project, UserEntity leader) {
-        ProjectMemberEntity membership = projectMemberRepository
-                .findByProject_IdAndUser_Id(project.getId(), leader.getId())
-                .orElseGet(() -> ProjectMemberEntity.createLeader(project, leader));
+    private MembershipAuditChange activateLeaderMembership(ProjectEntity project, UserEntity leader) {
+        return projectMemberRepository.findByProject_IdAndUser_Id(project.getId(), leader.getId())
+                .map(this::activateAsLeader)
+                .orElseGet(() -> new MembershipAuditChange(ProjectMemberEntity.createLeader(project, leader), null));
+    }
+
+    private MembershipAuditChange activateAsLeader(ProjectMemberEntity membership) {
+        Map<String, Object> before = membershipSnapshot(membership);
         membership.activateAsLeader();
-        return membership;
+        return new MembershipAuditChange(membership, before);
+    }
+
+    private MembershipAuditChange activateAsMember(ProjectMemberEntity membership) {
+        Map<String, Object> before = membershipSnapshot(membership);
+        membership.activateAsMember();
+        return new MembershipAuditChange(membership, before);
+    }
+
+    private void auditMembershipChanges(Collection<MembershipAuditChange> changes) {
+        for (MembershipAuditChange change : changes) {
+            Map<String, Object> after = membershipSnapshot(change.membership());
+            if (change.before() == null) {
+                auditService.log(
+                        PROJECT_MEMBER_CREATED,
+                        PROJECT_MEMBER,
+                        change.membership().getId().toString(),
+                        null,
+                        after
+                );
+            } else if (!change.before().equals(after)) {
+                auditService.log(
+                        PROJECT_MEMBER_UPDATED,
+                        PROJECT_MEMBER,
+                        change.membership().getId().toString(),
+                        change.before(),
+                        after
+                );
+            }
+        }
+    }
+
+    private Map<String, Object> membershipSnapshot(ProjectMemberEntity membership) {
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("projectId", membership.getProject().getId());
+        snapshot.put("userId", membership.getUser().getId());
+        snapshot.put("projectRole", membership.getProjectRole().name());
+        snapshot.put("status", membership.getStatus().name());
+        return snapshot;
+    }
+
+    private record MembershipAuditChange(ProjectMemberEntity membership, Map<String, Object> before) {
     }
 
     private UserEntity requireCurrentUser(String email) {

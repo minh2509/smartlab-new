@@ -212,6 +212,41 @@ class ProjectLeadershipD3PostgresIntegrationTest {
     }
 
     @Test
+    void persistsProjectMemberAuditSnapshotsWithoutIdempotentNoise() {
+        TestUser leader = insertMember("audit-leader");
+        ProjectResponse project = createProject("audit-membership");
+
+        assertThat(projectMemberAuditCount(project.getId())).isZero();
+
+        changePrimary(project.getId(), leader.userId());
+
+        Long membershipId = membershipId(project.getId(), leader.databaseId());
+        ProjectMemberAuditRow created = latestProjectMemberAudit(membershipId);
+        assertThat(created.action()).isEqualTo("PROJECT_MEMBER_CREATED");
+        assertThat(created.targetType()).isEqualTo("PROJECT_MEMBER");
+        assertThat(created.targetId()).isEqualTo(membershipId.toString());
+        assertThat(created.beforeJson()).isNull();
+        assertThat(created.afterProjectId()).isEqualTo(project.getId().toString());
+        assertThat(created.afterUserId()).isEqualTo(leader.databaseId().toString());
+        assertThat(created.afterRole()).isEqualTo("LEADER");
+        assertThat(created.afterStatus()).isEqualTo("ACTIVE");
+
+        replaceLeaders(project.getId(), List.of());
+
+        ProjectMemberAuditRow updated = latestProjectMemberAudit(membershipId);
+        assertThat(updated.action()).isEqualTo("PROJECT_MEMBER_UPDATED");
+        assertThat(updated.targetId()).isEqualTo(membershipId.toString());
+        assertThat(updated.beforeRole()).isEqualTo("LEADER");
+        assertThat(updated.beforeStatus()).isEqualTo("ACTIVE");
+        assertThat(updated.afterRole()).isEqualTo("MEMBER");
+        assertThat(updated.afterStatus()).isEqualTo("ACTIVE");
+
+        int auditCountBeforeRepeat = projectMemberAuditCount(project.getId());
+        replaceLeaders(project.getId(), List.of());
+        assertThat(projectMemberAuditCount(project.getId())).isEqualTo(auditCountBeforeRepeat);
+    }
+
+    @Test
     void leaderCandidateSearchIsCaseInsensitiveFilteredOrderedAndCappedAtTwenty() {
         String suffix = UUID.randomUUID().toString().substring(0, 8);
         String commonLabel = "candidate-search-" + suffix;
@@ -354,6 +389,66 @@ class ProjectLeadershipD3PostgresIntegrationTest {
         return count == null ? 0 : count;
     }
 
+    private Long membershipId(Long projectId, Long userDatabaseId) {
+        return jdbcTemplate.queryForObject(
+                "select id from project_members where project_id = ? and user_id = ?",
+                Long.class,
+                projectId,
+                userDatabaseId
+        );
+    }
+
+    private int projectMemberAuditCount(Long projectId) {
+        Integer count = jdbcTemplate.queryForObject(
+                """
+                        select count(*)
+                        from audit_logs audit
+                        join project_members membership on audit.target_id = membership.id::text
+                        where audit.target_type = 'PROJECT_MEMBER'
+                          and membership.project_id = ?
+                        """,
+                Integer.class,
+                projectId
+        );
+        return count == null ? 0 : count;
+    }
+
+    private ProjectMemberAuditRow latestProjectMemberAudit(Long membershipId) {
+        return jdbcTemplate.queryForObject(
+                """
+                        select
+                            action,
+                            target_type,
+                            target_id,
+                            before_json::text,
+                            after_json ->> 'projectId',
+                            after_json ->> 'userId',
+                            before_json ->> 'projectRole',
+                            before_json ->> 'status',
+                            after_json ->> 'projectRole',
+                            after_json ->> 'status'
+                        from audit_logs
+                        where target_type = 'PROJECT_MEMBER'
+                          and target_id = ?
+                        order by id desc
+                        limit 1
+                        """,
+                (resultSet, rowNumber) -> new ProjectMemberAuditRow(
+                        resultSet.getString(1),
+                        resultSet.getString(2),
+                        resultSet.getString(3),
+                        resultSet.getString(4),
+                        resultSet.getString(5),
+                        resultSet.getString(6),
+                        resultSet.getString(7),
+                        resultSet.getString(8),
+                        resultSet.getString(9),
+                        resultSet.getString(10)
+                ),
+                membershipId.toString()
+        );
+    }
+
     private Integer rowCount(String sql, Object parameter) {
         return jdbcTemplate.queryForObject(sql, Integer.class, parameter);
     }
@@ -425,5 +520,19 @@ class ProjectLeadershipD3PostgresIntegrationTest {
     }
 
     private record UserRoleSnapshot(Long id, String code, String assignedBy) {
+    }
+
+    private record ProjectMemberAuditRow(
+            String action,
+            String targetType,
+            String targetId,
+            String beforeJson,
+            String afterProjectId,
+            String afterUserId,
+            String beforeRole,
+            String beforeStatus,
+            String afterRole,
+            String afterStatus
+    ) {
     }
 }
