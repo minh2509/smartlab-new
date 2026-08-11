@@ -35,6 +35,35 @@ public interface PostRepository extends JpaRepository<PostEntity, Long> {
 
     @Query("""
             select p from PostEntity p
+            where p.deletedAt is null
+              and p.status = com.smartlab.enums.PostStatus.PENDING_REVIEW
+              and (
+                p.authorUserId is null
+                or p.authorUserId <> :reviewerUserId
+              )
+            order by p.createdAt desc, p.id desc
+            """)
+    List<PostEntity> findActivePendingReviewableByReviewerUserId(
+            @Param("reviewerUserId") Long reviewerUserId
+    );
+
+    @Query("""
+            select p from PostEntity p
+            where p.id = :id
+              and p.deletedAt is null
+              and p.status = com.smartlab.enums.PostStatus.PENDING_REVIEW
+              and (
+                p.authorUserId is null
+                or p.authorUserId <> :reviewerUserId
+              )
+            """)
+    Optional<PostEntity> findActivePendingReviewableByIdAndReviewerUserId(
+            @Param("id") Long postId,
+            @Param("reviewerUserId") Long reviewerUserId
+    );
+
+    @Query("""
+            select p from PostEntity p
             where p.slug = :slug
               and p.deletedAt is null
             """)

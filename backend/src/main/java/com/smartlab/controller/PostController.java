@@ -67,6 +67,18 @@ public class PostController {
         return postService.getReadablePosts(authentication.getName());
     }
 
+    @GetMapping("/review-queue")
+    @PreAuthorize("hasAuthority('posts.review')")
+    public List<PostSummaryResponse> getReviewQueue(Authentication authentication) {
+        return postService.getReviewablePosts(authentication.getName());
+    }
+
+    @GetMapping("/review-queue/{id}")
+    @PreAuthorize("hasAuthority('posts.review')")
+    public PostDetailResponse getReviewQueuePost(Authentication authentication, @PathVariable Long id) {
+        return postService.getReviewablePost(authentication.getName(), id);
+    }
+
     @GetMapping("/{slug}")
     public PostDetailResponse getPostBySlug(Authentication authentication, @PathVariable String slug) {
         return postService.getPostBySlug(authentication.getName(), slug);
