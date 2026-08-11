@@ -12,10 +12,13 @@ import com.smartlab.entity.PostReviewEntity;
 import com.smartlab.entity.UserEntity;
 import com.smartlab.enums.PostVisibility;
 import com.smartlab.enums.PostStatus;
+import com.smartlab.enums.ProjectMemberStatus;
 import com.smartlab.enums.ReviewDecision;
 import com.smartlab.repo.ContentCategoryRepository;
 import com.smartlab.repo.PostRepository;
 import com.smartlab.repo.PostReviewRepository;
+import com.smartlab.repo.ProjectMemberRepository;
+import com.smartlab.repo.ProjectRepository;
 import com.smartlab.repo.UserRepository;
 import com.smartlab.service.NotificationService;
 import com.smartlab.service.AuditService;
@@ -53,16 +56,19 @@ public class PostServiceImpl implements PostService {
     private final PostContentRenderer postContentRenderer;
     private final NotificationService notificationService;
     private final AuditService auditService;
+    private final ProjectRepository projectRepository;
+    private final ProjectMemberRepository projectMemberRepository;
 
     @Override
     public PostDetailResponse createPost(String authenticatedEmail, CreatePostRequest request) {
         UserEntity author = resolveActiveAuthor(authenticatedEmail);
         ContentCategoryEntity category = resolveActiveCategory(request.getCategoryId());
+        PostVisibility visibility = request.getVisibility() == null ? PostVisibility.LAB : request.getVisibility();
+        Long projectId = resolveProjectId(author, visibility, request.getProjectId(), true);
         Map<String, Object> contentJson = request.getContentJson() == null
                 ? new LinkedHashMap<>()
                 : request.getContentJson();
         String contentHtml = postContentRenderer.renderAndSanitize(contentJson).orElse(null);
-        PostVisibility visibility = request.getVisibility() == null ? PostVisibility.LAB : request.getVisibility();
         Instant creationTime = Instant.now();
         for (int candidateNumber = 1; candidateNumber <= postSlugGenerator.maxCandidates(); candidateNumber++) {
             String candidate = postSlugGenerator.candidateFor(request.getTitle(), candidateNumber);
@@ -79,6 +85,7 @@ public class PostServiceImpl implements PostService {
                     contentHtml,
                     visibility,
                     category == null ? null : category.getId(),
+                    projectId,
                     creationTime
             );
             try {
@@ -122,6 +129,8 @@ public class PostServiceImpl implements PostService {
                         .orElse(post.getContentHtml())
                 : post.getContentHtml();
         PostVisibility resolvedVisibility = request.hasVisibility() ? request.getVisibility() : post.getVisibility();
+        Long requestedProjectId = request.hasProjectId() ? request.getProjectId() : post.getProjectId();
+        Long resolvedProjectId = resolveProjectId(viewer, resolvedVisibility, requestedProjectId, false);
         Instant transitionInstant = Instant.now();
 
         post.applyDraftUpdate(
@@ -131,6 +140,7 @@ public class PostServiceImpl implements PostService {
                 resolvedContentHtml,
                 resolvedVisibility,
                 resolvedCategoryId,
+                resolvedProjectId,
                 transitionInstant
         );
 
@@ -260,7 +270,8 @@ public class PostServiceImpl implements PostService {
     @Transactional(readOnly = true)
     public List<PostSummaryResponse> getReadablePosts(String authenticatedEmail) {
         UserEntity viewer = resolveActiveAuthor(authenticatedEmail);
-        List<PostEntity> posts = postRepository.findActiveReadableByViewerUserId(viewer.getId());
+        List<Long> activeProjectIds = activeProjectIdsOrNoMatch(viewer.getId());
+        List<PostEntity> posts = postRepository.findActiveReadableByViewerUserId(viewer.getId(), activeProjectIds);
         Map<Long, PostCategoryResponse> categoriesById = findCategoryResponses(posts);
 
         return posts.stream()
@@ -300,7 +311,10 @@ public class PostServiceImpl implements PostService {
         PostEntity post = postRepository.findActiveBySlug(slug)
                 .orElseThrow(this::postNotFound);
 
-        if (!isReadableBy(post, viewer.getId())) {
+        if (post.getAuthorUserId() != null && post.getAuthorUserId().equals(viewer.getId())) {
+            return toDetailResponse(post, findCategoryResponse(post.getCategoryId()));
+        }
+        if (!isReadableBy(post, activeProjectIdsOrNoMatch(viewer.getId()))) {
             throw postNotFound();
         }
 
@@ -322,6 +336,40 @@ public class PostServiceImpl implements PostService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Category is unavailable"));
     }
 
+    private Long resolveProjectId(
+            UserEntity author,
+            PostVisibility visibility,
+            Long projectId,
+            boolean rejectProjectIdForNonProjectVisibility
+    ) {
+        if (visibility != PostVisibility.PROJECT) {
+            if (rejectProjectIdForNonProjectVisibility && projectId != null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "PUBLIC and LAB visibility must not include projectId");
+            }
+            return null;
+        }
+        if (projectId == null || projectId <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "PROJECT visibility requires projectId");
+        }
+        if (projectRepository.findByIdAndDeletedAtIsNull(projectId).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Project is unavailable");
+        }
+        if (!projectMemberRepository.existsByProject_IdAndUser_IdAndStatus(
+                projectId,
+                author.getId(),
+                ProjectMemberStatus.ACTIVE
+        )) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Authenticated user is not an active project member");
+        }
+        return projectId;
+    }
+
+    private List<Long> activeProjectIdsOrNoMatch(Long viewerUserId) {
+        List<Long> activeProjectIds = projectMemberRepository.findActiveProjectIdsByUserId(viewerUserId);
+        return activeProjectIds.isEmpty() ? List.of(-1L) : activeProjectIds;
+    }
+
     private PostDetailResponse toDetailResponse(PostEntity post, ContentCategoryEntity category) {
         return toDetailResponse(post, toCategoryResponse(category));
     }
@@ -334,6 +382,7 @@ public class PostServiceImpl implements PostService {
                 .excerpt(post.getExcerpt())
                 .contentJson(post.getContentJson())
                 .visibility(post.getVisibility())
+                .projectId(post.getProjectId())
                 .status(post.getStatus())
                 .category(category)
                 .publishedAt(post.getPublishedAt())
@@ -349,6 +398,7 @@ public class PostServiceImpl implements PostService {
                 .slug(post.getSlug())
                 .excerpt(post.getExcerpt())
                 .visibility(post.getVisibility())
+                .projectId(post.getProjectId())
                 .status(post.getStatus())
                 .category(category)
                 .publishedAt(post.getPublishedAt())
@@ -386,10 +436,13 @@ public class PostServiceImpl implements PostService {
         return post.getCategoryId() == null ? null : categoriesById.get(post.getCategoryId());
     }
 
-    private boolean isReadableBy(PostEntity post, Long viewerUserId) {
-        return (post.getAuthorUserId() != null && post.getAuthorUserId().equals(viewerUserId))
-                || (post.getStatus() == PostStatus.PUBLISHED
-                && (post.getVisibility() == PostVisibility.PUBLIC || post.getVisibility() == PostVisibility.LAB));
+    private boolean isReadableBy(PostEntity post, List<Long> activeProjectIds) {
+        return post.getStatus() == PostStatus.PUBLISHED
+                && (post.getVisibility() == PostVisibility.PUBLIC
+                || post.getVisibility() == PostVisibility.LAB
+                || (post.getVisibility() == PostVisibility.PROJECT
+                && post.getProjectId() != null
+                && activeProjectIds.contains(post.getProjectId())));
     }
 
     private static String reviewNotificationMessage(ReviewDecision decision) {

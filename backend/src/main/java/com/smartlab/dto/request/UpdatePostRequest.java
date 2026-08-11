@@ -34,6 +34,11 @@ public class UpdatePostRequest {
 
     private Long categoryId;
 
+    @JsonIgnore
+    private boolean projectIdPresent;
+
+    private Long projectId;
+
     public String getTitle() {
         return title;
     }
@@ -104,10 +109,25 @@ public class UpdatePostRequest {
         return categoryIdPresent;
     }
 
+    public Long getProjectId() {
+        return projectId;
+    }
+
+    @JsonSetter("projectId")
+    public void setProjectId(Long projectId) {
+        this.projectIdPresent = true;
+        this.projectId = projectId;
+    }
+
+    public boolean hasProjectId() {
+        return projectIdPresent;
+    }
+
     @AssertTrue(message = "At least one mutable post field must be provided")
     @JsonIgnore
     public boolean isPatchNotEmpty() {
-        return titlePresent || excerptPresent || contentJsonPresent || visibilityPresent || categoryIdPresent;
+        return titlePresent || excerptPresent || contentJsonPresent || visibilityPresent || categoryIdPresent
+                || projectIdPresent;
     }
 
     @AssertTrue(message = "title must be nonblank and at most 250 characters when provided")
@@ -122,15 +142,21 @@ public class UpdatePostRequest {
         return !excerptPresent || excerpt == null || excerpt.length() <= 500;
     }
 
-    @AssertTrue(message = "visibility must be PUBLIC or LAB when provided")
+    @AssertTrue(message = "visibility is required when provided")
     @JsonIgnore
     public boolean isVisibilityValid() {
-        return !visibilityPresent || (visibility != null && visibility != PostVisibility.PROJECT);
+        return !visibilityPresent || visibility != null;
     }
 
     @AssertTrue(message = "categoryId must be positive when provided")
     @JsonIgnore
     public boolean isCategoryIdValid() {
         return !categoryIdPresent || categoryId == null || categoryId > 0;
+    }
+
+    @AssertTrue(message = "projectId must be positive when provided")
+    @JsonIgnore
+    public boolean isProjectIdValid() {
+        return !projectIdPresent || projectId == null || projectId > 0;
     }
 }

@@ -26,12 +26,22 @@ public interface PostRepository extends JpaRepository<PostEntity, Long> {
                 p.authorUserId = :viewerUserId
                 or (
                   p.status = com.smartlab.enums.PostStatus.PUBLISHED
-                  and p.visibility in (com.smartlab.enums.PostVisibility.PUBLIC, com.smartlab.enums.PostVisibility.LAB)
+                  and (
+                    p.visibility in (com.smartlab.enums.PostVisibility.PUBLIC, com.smartlab.enums.PostVisibility.LAB)
+                    or (
+                      p.visibility = com.smartlab.enums.PostVisibility.PROJECT
+                      and p.projectId is not null
+                      and p.projectId in :activeProjectIds
+                    )
+                  )
                 )
               )
             order by p.createdAt desc, p.id desc
             """)
-    List<PostEntity> findActiveReadableByViewerUserId(@Param("viewerUserId") Long viewerUserId);
+    List<PostEntity> findActiveReadableByViewerUserId(
+            @Param("viewerUserId") Long viewerUserId,
+            @Param("activeProjectIds") List<Long> activeProjectIds
+    );
 
     @Query("""
             select p from PostEntity p

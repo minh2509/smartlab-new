@@ -67,6 +67,8 @@ class PostReadServiceImplTest {
     @Mock
     private NotificationService notificationService;
     @Mock private com.smartlab.service.AuditService auditService;
+    @Mock private com.smartlab.repo.ProjectRepository projectRepository;
+    @Mock private com.smartlab.repo.ProjectMemberRepository projectMemberRepository;
 
     private PostServiceImpl postService;
 
@@ -81,7 +83,9 @@ class PostReadServiceImplTest {
                 postCreateAttemptService,
                 postContentRenderer,
                 notificationService,
-                auditService
+                auditService,
+                projectRepository,
+                projectMemberRepository
         );
     }
 
@@ -92,15 +96,32 @@ class PostReadServiceImplTest {
         PostEntity publishedPublic = post(3L, 99L, PostStatus.PUBLISHED, PostVisibility.PUBLIC, null, "public", 3);
         PostEntity publishedLab = post(2L, 98L, PostStatus.PUBLISHED, PostVisibility.LAB, null, "lab", 2);
         activeViewer();
-        when(postRepository.findActiveReadableByViewerUserId(VIEWER_ID))
+        when(projectMemberRepository.findActiveProjectIdsByUserId(VIEWER_ID)).thenReturn(List.of(12L));
+        when(postRepository.findActiveReadableByViewerUserId(VIEWER_ID, List.of(12L)))
                 .thenReturn(List.of(ownDraft, ownProject, publishedPublic, publishedLab));
 
         List<PostSummaryResponse> responses = postService.getReadablePosts(VIEWER_EMAIL);
 
         assertThat(responses).extracting(PostSummaryResponse::getId).containsExactly(5L, 4L, 3L, 2L);
-        verify(postRepository).findActiveReadableByViewerUserId(VIEWER_ID);
+        verify(postRepository).findActiveReadableByViewerUserId(VIEWER_ID, List.of(12L));
         verify(postRepository, never()).save(any(PostEntity.class));
         verifyNoInteractions(contentCategoryRepository, postSlugGenerator);
+    }
+
+    @Test
+    void listUsesActiveProjectMembershipsOnceForPublishedProjectPosts() throws ReflectiveOperationException {
+        PostEntity ownDraft = post(5L, VIEWER_ID, PostStatus.DRAFT, PostVisibility.LAB, null, "own", 5);
+        PostEntity projectPost = post(4L, 99L, PostStatus.PUBLISHED, PostVisibility.PROJECT, null, "project", 4);
+        set(projectPost, "projectId", 17L);
+        activeViewer();
+        when(projectMemberRepository.findActiveProjectIdsByUserId(VIEWER_ID)).thenReturn(List.of(17L));
+        when(postRepository.findActiveReadableByViewerUserId(VIEWER_ID, List.of(17L)))
+                .thenReturn(List.of(ownDraft, projectPost));
+
+        List<PostSummaryResponse> responses = postService.getReadablePosts(VIEWER_EMAIL);
+
+        assertThat(responses).extracting(PostSummaryResponse::getProjectId).containsExactly(null, 17L);
+        verify(projectMemberRepository).findActiveProjectIdsByUserId(VIEWER_ID);
     }
 
     @Test
@@ -206,7 +227,9 @@ class PostReadServiceImplTest {
         PostEntity missing = post(3L, VIEWER_ID, PostStatus.DRAFT, PostVisibility.LAB, 8L, "missing", 3);
         ContentCategoryEntity inactiveNews = category(7L, "NEWS", "News", false);
         activeViewer();
-        when(postRepository.findActiveReadableByViewerUserId(VIEWER_ID)).thenReturn(List.of(first, second, missing));
+        when(projectMemberRepository.findActiveProjectIdsByUserId(VIEWER_ID)).thenReturn(List.of());
+        when(postRepository.findActiveReadableByViewerUserId(VIEWER_ID, List.of(-1L)))
+                .thenReturn(List.of(first, second, missing));
         when(contentCategoryRepository.findAllById(any(Iterable.class))).thenReturn(List.of(inactiveNews));
 
         List<PostSummaryResponse> responses = postService.getReadablePosts(VIEWER_EMAIL);
@@ -277,6 +300,39 @@ class PostReadServiceImplTest {
 
         assertNotFound(() -> postService.getPostBySlug(VIEWER_EMAIL, "hidden"));
         verifyNoInteractions(contentCategoryRepository);
+    }
+
+    @Test
+    void detailAllowsPublishedProjectPostOnlyForAnActiveProjectMember() throws ReflectiveOperationException {
+        PostEntity post = post(1L, 99L, PostStatus.PUBLISHED, PostVisibility.PROJECT, null, "project", 1);
+        set(post, "projectId", 17L);
+        activeViewer();
+        when(postRepository.findActiveBySlug("project")).thenReturn(Optional.of(post));
+        when(projectMemberRepository.findActiveProjectIdsByUserId(VIEWER_ID)).thenReturn(List.of(17L));
+
+        PostDetailResponse response = postService.getPostBySlug(VIEWER_EMAIL, "project");
+
+        assertThat(response.getProjectId()).isEqualTo(17L);
+    }
+
+    @Test
+    void detailConcealsProjectPostForNonMemberRemovedMemberOrSoftDeletedProject() throws ReflectiveOperationException {
+        PostEntity post = post(1L, 99L, PostStatus.PUBLISHED, PostVisibility.PROJECT, null, "project", 1);
+        set(post, "projectId", 17L);
+        activeViewer();
+        when(postRepository.findActiveBySlug("project")).thenReturn(Optional.of(post));
+        when(projectMemberRepository.findActiveProjectIdsByUserId(VIEWER_ID)).thenReturn(List.of());
+
+        assertNotFound(() -> postService.getPostBySlug(VIEWER_EMAIL, "project"));
+    }
+
+    @Test
+    void detailConcealsPublishedProjectPostWithoutProjectAssociation() {
+        PostEntity post = post(1L, 99L, PostStatus.PUBLISHED, PostVisibility.PROJECT, null, "project", 1);
+        activeViewer();
+        when(postRepository.findActiveBySlug("project")).thenReturn(Optional.of(post));
+
+        assertNotFound(() -> postService.getPostBySlug(VIEWER_EMAIL, "project"));
     }
 
     @Test

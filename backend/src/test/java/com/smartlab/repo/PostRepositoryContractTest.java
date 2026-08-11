@@ -27,13 +27,15 @@ class PostRepositoryContractTest {
     }
 
     @Test
-    void activeListQueryIncludesOwnerOrPublishedPublicLabAndDeterministicOrdering() throws NoSuchMethodException {
-        String query = queryFor("findActiveReadableByViewerUserId", Long.class);
+    void activeListQueryIncludesOwnerPublicLabOrActiveProjectMembershipAndDeterministicOrdering()
+            throws NoSuchMethodException {
+        String query = queryFor("findActiveReadableByViewerUserId", Long.class, java.util.List.class);
 
         assertThat(query).contains("p.deletedAt is null");
         assertThat(query).contains("p.authorUserId = :viewerUserId");
         assertThat(query).contains("PostStatus.PUBLISHED");
         assertThat(query).contains("PostVisibility.PUBLIC", "PostVisibility.LAB");
+        assertThat(query).contains("PostVisibility.PROJECT", "p.projectId is not null", "p.projectId in :activeProjectIds");
         assertThat(query).contains("order by p.createdAt desc, p.id desc");
     }
 

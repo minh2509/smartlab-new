@@ -15,6 +15,7 @@ public class PostSummaryResponse {
     String slug;
     String excerpt;
     PostVisibility visibility;
+    Long projectId;
     PostStatus status;
     PostCategoryResponse category;
     Instant publishedAt;
