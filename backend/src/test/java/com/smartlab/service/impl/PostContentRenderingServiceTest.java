@@ -280,9 +280,9 @@ class PostContentRenderingServiceTest {
     }
 
     @Test
-    void disabledProductionRendererDoesNotPretendRenderingExists() {
-        DisabledPostContentRenderer renderer =
-                new DisabledPostContentRenderer();
+    void productionRendererRejectsUnsupportedContentWithoutGuessing() {
+        PlainTextPostContentRenderer renderer =
+                new PlainTextPostContentRenderer();
 
         assertThat(renderer.renderAndSanitize(
                 Map.of("type", "doc")
