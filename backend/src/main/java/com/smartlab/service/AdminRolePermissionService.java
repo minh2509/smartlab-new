@@ -2,6 +2,7 @@ package com.smartlab.service;
 
 import com.smartlab.dto.request.PermissionRequest;
 import com.smartlab.dto.request.RoleRequest;
+import com.smartlab.dto.response.RoleResponse;
 import com.smartlab.entity.PermissionEntity;
 import com.smartlab.entity.RoleEntity;
 
@@ -10,6 +11,8 @@ import java.util.Set;
 
 public interface AdminRolePermissionService {
     List<RoleEntity> getRoles();
+
+    List<RoleResponse> getRoleResponses();
 
     RoleEntity createRole(RoleRequest request);
 

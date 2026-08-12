@@ -2,6 +2,7 @@ package com.smartlab.repo;
 
 import com.smartlab.entity.UserEntity;
 import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Lock;
@@ -18,6 +19,13 @@ public interface UserRepository extends JpaRepository<UserEntity,Long> {
     Optional<UserEntity> findByEmail(String email);
 
     Optional<UserEntity> findByUserId(String userId);
+
+    @Query("""
+            select u
+            from UserEntity u
+            order by lower(u.name), lower(u.email), u.id
+            """)
+    Page<UserEntity> findAccounts(Pageable pageable);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select u from UserEntity u where u.userId in :userIds order by u.id")

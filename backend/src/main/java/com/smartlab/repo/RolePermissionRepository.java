@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Set;
 
 @Repository
@@ -20,6 +21,14 @@ public interface RolePermissionRepository extends JpaRepository<RolePermissionEn
               and rp.permission.isActive = true
             """)
     Set<String> findActivePermissionCodesByRoleIds(@Param("roleIds") Collection<Long> roleIds);
+
+    @Query("""
+            select rp.permission.code
+            from RolePermissionEntity rp
+            where rp.role.id = :roleId
+            order by rp.permission.module, rp.permission.code
+            """)
+    List<String> findPermissionCodesByRoleId(@Param("roleId") Long roleId);
 
     @Modifying
     void deleteByRoleId(Long roleId);

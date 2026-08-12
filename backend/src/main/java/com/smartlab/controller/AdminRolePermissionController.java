@@ -7,6 +7,7 @@ import com.smartlab.dto.request.PermissionRequest;
 import com.smartlab.dto.request.RolePermissionRequest;
 import com.smartlab.dto.request.RoleRequest;
 import com.smartlab.dto.response.ErrorResponse;
+import com.smartlab.dto.response.RoleResponse;
 import com.smartlab.service.AdminRolePermissionService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -46,12 +47,12 @@ public class AdminRolePermissionController {
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Roles returned",
-                    content = @Content(array = @ArraySchema(schema = @Schema(implementation = RoleEntity.class)))),
+                    content = @Content(array = @ArraySchema(schema = @Schema(implementation = RoleResponse.class)))),
             @ApiResponse(responseCode = "403", description = "Missing ROLE_MANAGE permission",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
-    public List<RoleEntity> getRoles() {
-        return adminRolePermissionService.getRoles();
+    public List<RoleResponse> getRoles() {
+        return adminRolePermissionService.getRoleResponses();
     }
 
     @PostMapping("/roles")

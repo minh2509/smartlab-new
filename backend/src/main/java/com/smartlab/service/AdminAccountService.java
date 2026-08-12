@@ -5,13 +5,13 @@ import com.smartlab.dto.request.InvitationAcceptRequest;
 import com.smartlab.dto.request.PermissionOverrideRequest;
 import com.smartlab.dto.response.AccountResponse;
 import com.smartlab.dto.response.InvitationResponse;
+import com.smartlab.dto.response.PageResponse;
 import com.smartlab.entity.UserEntity;
 
-import java.util.List;
 import java.util.Set;
 
 public interface AdminAccountService {
-    List<AccountResponse> listAccounts();
+    PageResponse<AccountResponse> listAccounts(int page, int size);
 
     InvitationResponse provision(AccountProvisionRequest request, String adminUserId);
 

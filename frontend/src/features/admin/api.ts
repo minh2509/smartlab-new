@@ -1,5 +1,5 @@
 import { apiClient, toQuery } from '../../lib/apiClient'
-import type { AccountResponse, InvitationResponse, Permission, Role } from '../../shared/types/api'
+import type { AccountResponse, InvitationResponse, PaginatedResponse, Permission, Role } from '../../shared/types/api'
 
 export type ProvisionAccountPayload = {
   name: string
@@ -26,8 +26,8 @@ export function listRoles(token: string) {
   return apiClient<Role[]>('/admin/roles', { token })
 }
 
-export function listAccounts(token: string) {
-  return apiClient<AccountResponse[]>('/admin/accounts', { token })
+export function listAccounts(token: string, page = 0, size = 10) {
+  return apiClient<PaginatedResponse<AccountResponse>>(`/admin/accounts${toQuery({ page, size })}`, { token })
 }
 
 export function createRole(token: string, payload: RolePayload) {

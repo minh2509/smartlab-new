@@ -9,6 +9,7 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -32,7 +33,7 @@ public class UserEntity {
     private Boolean isActive;
     private Boolean isAccountVerified;
     private String resetOtp;
-    private Long resetOtpExpireAt;
+    private Instant resetOtpExpireAt;
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private Timestamp createdAt;
@@ -41,5 +42,17 @@ public class UserEntity {
 
     @OneToMany(mappedBy = "user")
     private Set<UserRoleEntity> roles = new HashSet<>();
+
+    public static class UserEntityBuilder {
+        public UserEntityBuilder resetOtpExpireAt(Instant resetOtpExpireAt) {
+            this.resetOtpExpireAt = resetOtpExpireAt;
+            return this;
+        }
+
+        public UserEntityBuilder resetOtpExpireAt(Long epochMillis) {
+            this.resetOtpExpireAt = epochMillis == null || epochMillis <= 0 ? null : Instant.ofEpochMilli(epochMillis);
+            return this;
+        }
+    }
 
 }

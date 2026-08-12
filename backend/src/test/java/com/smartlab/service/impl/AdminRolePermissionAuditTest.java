@@ -66,6 +66,18 @@ class AdminRolePermissionAuditTest {
                 Map.of("permissionCodes", List.of("A", "B")), Map.of("permissionCodes", List.of("A", "C")));
     }
 
+    @Test void systemRoleCannotChangeActiveState() {
+        RoleEntity existing = RoleEntity.builder().id(1L).code("ADMIN").name("Admin").description("system")
+                .isSystem(true).isActive(true).build();
+        when(roles.findByCode("ADMIN")).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> service.updateRole("admin", role("ignored", "Admin", "system", false)))
+                .isInstanceOf(ResponseStatusException.class);
+
+        verify(roles, never()).save(any());
+        verifyNoInteractions(audit);
+    }
+
     @Test void createAndUpdatePermissionAuditSnapshotsAndValidationFailureDoesNotAudit() {
         when(permissions.save(any())).thenAnswer(inv -> { PermissionEntity p = inv.getArgument(0); p.setId(8L); return p; });
         service.createPermission(permissionRequest("read", "Read", "POST", "create", true));

@@ -12,6 +12,7 @@ import com.smartlab.dto.request.AccountProvisionRequest;
 import com.smartlab.dto.response.AccountResponse;
 import com.smartlab.dto.request.InvitationAcceptRequest;
 import com.smartlab.dto.response.InvitationResponse;
+import com.smartlab.dto.response.PageResponse;
 import com.smartlab.dto.request.PermissionOverrideRequest;
 import com.smartlab.repo.AccountInvitationRepository;
 import com.smartlab.repo.MemberProfileRepository;
@@ -28,6 +29,7 @@ import com.smartlab.service.TokenHashService;
 import com.smartlab.service.UserSessionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -39,7 +41,6 @@ import java.security.SecureRandom;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Base64;
-import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.LinkedHashMap;
@@ -75,11 +76,11 @@ public class AdminAccountServiceImpl implements AdminAccountService {
 
     @Transactional(readOnly = true)
     @Override
-    public List<AccountResponse> listAccounts() {
-        return userRepository.findAll().stream()
-                .sorted(Comparator.comparing(UserEntity::getName, String.CASE_INSENSITIVE_ORDER))
-                .map(this::toResponse)
-                .toList();
+    public PageResponse<AccountResponse> listAccounts(int page, int size) {
+        int safePage = Math.max(page, 0);
+        int safeSize = Math.min(Math.max(size, 1), 50);
+        return PageResponse.from(userRepository.findAccounts(PageRequest.of(safePage, safeSize))
+                .map(this::toResponse));
     }
 
     @Transactional
@@ -98,7 +99,6 @@ public class AdminAccountServiceImpl implements AdminAccountService {
                 .password(passwordEncoder.encode(temporaryPassword))
                 .isActive(false)
                 .isAccountVerified(false)
-                .resetOtpExpireAt(0L)
                 .build();
         UserEntity savedUser = userRepository.save(user);
         memberProfileRepository.save(MemberProfileEntity.create(savedUser));
