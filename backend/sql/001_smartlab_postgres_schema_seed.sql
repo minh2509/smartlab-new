@@ -17,10 +17,30 @@ CREATE TABLE IF NOT EXISTS tbl_user (
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
   is_account_verified BOOLEAN NOT NULL DEFAULT FALSE,
   reset_otp VARCHAR(20),
-  reset_otp_expire_at BIGINT NOT NULL DEFAULT 0,
+  reset_otp_expire_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'tbl_user'
+      AND column_name = 'reset_otp_expire_at'
+      AND data_type = 'bigint'
+  ) THEN
+    ALTER TABLE tbl_user
+      ALTER COLUMN reset_otp_expire_at DROP DEFAULT,
+      ALTER COLUMN reset_otp_expire_at DROP NOT NULL,
+      ALTER COLUMN reset_otp_expire_at TYPE TIMESTAMPTZ
+        USING CASE
+          WHEN reset_otp_expire_at IS NULL OR reset_otp_expire_at <= 0 THEN NULL
+          ELSE to_timestamp(reset_otp_expire_at / 1000.0)
+        END;
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS roles (
   id BIGSERIAL PRIMARY KEY,
@@ -375,16 +395,16 @@ SET name = EXCLUDED.name,
 
 INSERT INTO permissions (code, name, module, description, is_active)
 VALUES
-  ('USER_MANAGE', 'Manage users', 'USER', 'Provision accounts, resend invitations, and activate/deactivate users', TRUE),
-  ('ROLE_MANAGE', 'Manage roles', 'ROLE', 'Create and update roles and assign roles to users', TRUE),
-  ('PERMISSION_MANAGE', 'Manage permissions', 'PERMISSION', 'Create permissions, assign permissions to roles, and override user permissions', TRUE),
-  ('PROFILE_READ', 'Read own profile', 'PROFILE', 'Read own account profile and effective permissions', TRUE),
-  ('DASHBOARD_READ', 'Read dashboard', 'DASHBOARD', 'Read SmartLab dashboard', TRUE),
-  ('PROJECT_READ', 'Read projects', 'PROJECT', 'Read project information', TRUE),
-  ('PROJECT_MANAGE', 'Manage projects', 'PROJECT', 'Create and update projects', TRUE),
-  ('TASK_READ', 'Read tasks', 'TASK', 'Read project tasks', TRUE),
-  ('TASK_MANAGE', 'Manage tasks', 'TASK', 'Create and update project tasks', TRUE),
-  ('POST_MANAGE', 'Manage posts', 'POST', 'Create, review, and publish posts', TRUE)
+  ('USER_MANAGE', 'Quản lý tài khoản', 'USER', 'Cấp tài khoản, gửi lại invite, khoá hoặc mở đăng nhập cho thành viên', TRUE),
+  ('ROLE_MANAGE', 'Quản lý vai trò', 'ROLE', 'Tạo, cập nhật role và gán role cho thành viên', TRUE),
+  ('PERMISSION_MANAGE', 'Quản lý quyền', 'PERMISSION', 'Gán quyền cho role và cấp quyền riêng cho thành viên khi cần', TRUE),
+  ('PROFILE_READ', 'Xem hồ sơ cá nhân', 'PROFILE', 'Xem thông tin tài khoản và quyền hiệu lực của chính mình', TRUE),
+  ('DASHBOARD_READ', 'Xem bảng điều khiển', 'DASHBOARD', 'Xem tổng quan hoạt động của Smart Lab', TRUE),
+  ('PROJECT_READ', 'Xem dự án', 'PROJECT', 'Xem thông tin dự án', TRUE),
+  ('PROJECT_MANAGE', 'Quản lý dự án', 'PROJECT', 'Tạo và cập nhật dự án', TRUE),
+  ('TASK_READ', 'Xem công việc', 'TASK', 'Xem công việc trong dự án', TRUE),
+  ('TASK_MANAGE', 'Quản lý công việc', 'TASK', 'Tạo và cập nhật công việc trong dự án', TRUE),
+  ('POST_MANAGE', 'Quản lý bài viết', 'POST', 'Tạo, duyệt và xuất bản bài viết', TRUE)
 ON CONFLICT (code) DO UPDATE
 SET name = EXCLUDED.name,
     module = EXCLUDED.module,
@@ -423,7 +443,7 @@ VALUES (
   crypt('Admin@123456', gen_salt('bf', 10)),
   TRUE,
   TRUE,
-  0
+  NULL
 )
 ON CONFLICT (email) DO UPDATE
 SET name = EXCLUDED.name,

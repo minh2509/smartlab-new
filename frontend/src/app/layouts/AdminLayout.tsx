@@ -1,4 +1,4 @@
-import { Files, FlaskConical, FolderKanban, KeyRound, LogOut, ShieldCheck, UserCircle, UsersRound } from 'lucide-react'
+import { Files, FlaskConical, FolderKanban, LogOut, ShieldCheck, UserCircle, UsersRound } from 'lucide-react'
 import { NavLink, Navigate, Outlet } from 'react-router-dom'
 import { useAuth } from '../../features/auth/authContext'
 import { Logo } from '../../shared/components/Logo'
@@ -52,10 +52,6 @@ export function AdminLayout() {
                 <UserCircle />
                 Hồ sơ thành viên
               </NavLink>}
-              <NavLink to="/forgot-password">
-                <KeyRound />
-                Đổi mật khẩu
-              </NavLink>
             </nav>
 
             <button className="admin-logout-btn admin-logout-bottom" type="button" onClick={() => void logout()}>

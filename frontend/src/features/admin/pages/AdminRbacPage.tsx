@@ -1,6 +1,9 @@
-import { useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Plus, RefreshCw, Save, X } from 'lucide-react'
+import { useGSAP } from '@gsap/react'
+import gsap from 'gsap'
+import { ScrollTrigger } from 'gsap/ScrollTrigger'
+import { ChevronRight, Plus, Power, RefreshCw, Save, X } from 'lucide-react'
 import { useAuth } from '../../auth/authContext'
 import { createRole, listPermissions, listRoles, replaceRolePermissions, updateRole } from '../api'
 import type { Permission, Role } from '../../../shared/types/api'
@@ -15,10 +18,18 @@ type RoleForm = {
   mode: 'create' | 'update'
 }
 
+type PermissionGroup = {
+  module: string
+  permissions: Permission[]
+}
+
 const emptyRoleForm: RoleForm = { code: '', name: '', description: '', isActive: true, mode: 'create' }
+
+gsap.registerPlugin(useGSAP, ScrollTrigger)
 
 export function AdminRbacPage() {
   const { token } = useAuth()
+  const rbacRootRef = useRef<HTMLElement | null>(null)
   const [roles, setRoles] = useState<Role[]>([])
   const [permissions, setPermissions] = useState<Permission[]>([])
   const [roleForm, setRoleForm] = useState<RoleForm>(emptyRoleForm)
@@ -29,6 +40,48 @@ export function AdminRbacPage() {
   const [error, setError] = useState('')
   const [isLoading, setLoading] = useState(false)
 
+  const permissionGroups = useMemo(() => groupPermissions(permissions), [permissions])
+  const selectedPermissionSet = useMemo(() => new Set(selectedPermissionCodes), [selectedPermissionCodes])
+  const selectedRole = roles.find((role) => role.code === rolePermissionCode)
+  const editingSystemRole = roleForm.mode === 'update' && roles.some((role) => role.code === roleForm.code && role.isSystem)
+
+  useGSAP(
+    () => {
+      if (!rbacRootRef.current) return
+      const media = gsap.matchMedia()
+      media.add('(prefers-reduced-motion: no-preference)', () => {
+        const context = gsap.context(() => {
+          gsap.from('.rbac-panel-head > *, .rbac-matrix-wrap, .rbac-save-row', {
+            autoAlpha: 0,
+            duration: 0.58,
+            ease: 'power3.out',
+            stagger: 0.07,
+            y: 18,
+          })
+          const matrix = rbacRootRef.current?.querySelector('.rbac-matrix-wrap')
+          const rows = gsap.utils.toArray<HTMLElement>('.permission-module-row')
+          if (matrix && rows.length) {
+            gsap.from(rows, {
+              autoAlpha: 0,
+              duration: 0.42,
+              ease: 'power2.out',
+              stagger: 0.035,
+              scrollTrigger: {
+                trigger: matrix,
+                start: 'top 84%',
+                once: true,
+              },
+              x: -12,
+            })
+          }
+        }, rbacRootRef)
+        return () => context.revert()
+      })
+      return () => media.revert()
+    },
+    { dependencies: [permissionGroups.length, rolePermissionCode], scope: rbacRootRef },
+  )
+
   const loadCatalogs = useCallback(async () => {
     if (!token) return
     setLoading(true)
@@ -37,7 +90,12 @@ export function AdminRbacPage() {
       const [roleResult, permissionResult] = await Promise.all([listRoles(token), listPermissions(token)])
       setRoles(roleResult)
       setPermissions(permissionResult)
-      setRolePermissionCode((current) => current || roleResult[0]?.code || '')
+      setRolePermissionCode((current) => {
+        const nextCode = current || roleResult[0]?.code || ''
+        const nextRole = roleResult.find((role) => role.code === nextCode) || roleResult[0]
+        setSelectedPermissionCodes(nextRole?.permissionCodes ?? [])
+        return nextRole?.code ?? ''
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không tải được dữ liệu RBAC')
     } finally {
@@ -48,6 +106,31 @@ export function AdminRbacPage() {
   useEffect(() => {
     void loadCatalogs()
   }, [loadCatalogs])
+
+  function handleRolePermissionChange(nextCode: string) {
+    setRolePermissionCode(nextCode)
+    setSelectedPermissionCodes(roles.find((role) => role.code === nextCode)?.permissionCodes ?? [])
+  }
+
+  function togglePermission(permissionCode: string) {
+    setSelectedPermissionCodes((current) =>
+      current.includes(permissionCode)
+        ? current.filter((code) => code !== permissionCode)
+        : [...current, permissionCode],
+    )
+  }
+
+  function setGroupPermissions(group: PermissionGroup, checked: boolean) {
+    const groupCodes = group.permissions.map((permission) => permission.code)
+    setSelectedPermissionCodes((current) => {
+      const currentSet = new Set(current)
+      groupCodes.forEach((code) => {
+        if (checked) currentSet.add(code)
+        else currentSet.delete(code)
+      })
+      return Array.from(currentSet).sort()
+    })
+  }
 
   async function handleRoleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -63,13 +146,47 @@ export function AdminRbacPage() {
       }
       const result =
         roleForm.mode === 'create' ? await createRole(token, payload) : await updateRole(token, roleForm.code.trim(), payload)
-      setRoles((current) => upsertByCode(current, result))
+      setRoles((current) => upsertByCode(current, mergeRolePermissions(result, current)))
       setRoleForm(emptyRoleForm)
       setRoleDialogOpen(false)
       setMessage(roleForm.mode === 'create' ? 'Đã tạo role.' : 'Đã cập nhật role.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không lưu được role')
     }
+  }
+
+  async function handleToggleSelectedRoleActive() {
+    if (!token || !selectedRole) return
+    if (selectedRole.isSystem) {
+      setError('Role hệ thống không được khoá hoặc kích hoạt thủ công.')
+      return
+    }
+    setMessage('')
+    setError('')
+    try {
+      const result = await updateRole(token, selectedRole.code, {
+        code: selectedRole.code,
+        name: selectedRole.name,
+        description: selectedRole.description,
+        isActive: !selectedRole.isActive,
+      })
+      setRoles((current) => upsertByCode(current, mergeRolePermissions(result, current)))
+      setMessage(result.isActive ? 'Đã kích hoạt role.' : 'Đã khoá role.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không cập nhật được trạng thái role')
+    }
+  }
+
+  function openSelectedRoleEditor() {
+    if (!selectedRole) return
+    setRoleForm({
+      code: selectedRole.code,
+      name: selectedRole.name,
+      description: selectedRole.description ?? '',
+      isActive: selectedRole.isActive,
+      mode: 'update',
+    })
+    setRoleDialogOpen(true)
   }
 
   async function handleRolePermissionsSubmit(event: FormEvent<HTMLFormElement>) {
@@ -79,7 +196,9 @@ export function AdminRbacPage() {
     setError('')
     try {
       await replaceRolePermissions(token, rolePermissionCode, selectedPermissionCodes)
-      setSelectedPermissionCodes([])
+      setRoles((current) =>
+        current.map((role) => role.code === rolePermissionCode ? { ...role, permissionCodes: selectedPermissionCodes } : role),
+      )
       setMessage('Đã cập nhật permission cho role.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không cập nhật được permission cho role')
@@ -91,7 +210,7 @@ export function AdminRbacPage() {
       <div className="page-title">
         <div>
           <h1>Vai trò & quyền</h1>
-          <p>Admin quản lý role và gán permission backend-defined vào từng role.</p>
+          <p>Admin quản lý vai trò hệ thống và gán quyền mặc định cho từng vai trò.</p>
         </div>
         <button className="btn" type="button" onClick={() => void loadCatalogs()} disabled={isLoading}>
           <RefreshCw />
@@ -100,20 +219,6 @@ export function AdminRbacPage() {
       </div>
 
       <Feedback message={message} error={error} />
-
-      <div className="account-actions">
-        <button
-          className="btn primary"
-          type="button"
-          onClick={() => {
-            setRoleForm(emptyRoleForm)
-            setRoleDialogOpen(true)
-          }}
-        >
-          <Plus />
-          Tạo role
-        </button>
-      </div>
 
       {isRoleDialogOpen ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => setRoleDialogOpen(false)}>
@@ -166,6 +271,7 @@ export function AdminRbacPage() {
                 <input
                   type="checkbox"
                   checked={roleForm.isActive}
+                  disabled={editingSystemRole}
                   onChange={(event) => setRoleForm((form) => ({ ...form, isActive: event.target.checked }))}
                 />
                 Đang hoạt động
@@ -179,148 +285,210 @@ export function AdminRbacPage() {
         </div>
       ) : null}
 
-      <section className="panel page-section">
-        <div className="panel-head">
+      <section className="panel page-section rbac-command-panel" ref={rbacRootRef}>
+        <div className="panel-head rbac-panel-head">
           <div>
-            <h2>Gán permission cho role</h2>
-            <p>Chọn toàn bộ permission cần áp dụng cho role.</p>
+            <h2>Gán quyền cho vai trò</h2>
+            <p>Chọn vai trò, mở từng module và tick các quyền con cần áp dụng.</p>
           </div>
+          <button
+            className="btn primary"
+            type="button"
+            onClick={() => {
+              setRoleForm(emptyRoleForm)
+              setRoleDialogOpen(true)
+            }}
+          >
+            <Plus />
+            Tạo role
+          </button>
         </div>
         <form className="form-stack" onSubmit={handleRolePermissionsSubmit}>
-          <label className="field">
-            <span>Role</span>
-            <select className="select" value={rolePermissionCode} onChange={(event) => setRolePermissionCode(event.target.value)} required>
-              {roles.map((role) => (
-                <option key={role.code} value={role.code}>
-                  {role.code} - {role.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          {permissions.length ? (
-            <div className="checkbox-grid">
-              {permissions.map((permission) => (
-                <label className="check-tile" key={permission.code}>
-                  <input
-                    type="checkbox"
-                    checked={selectedPermissionCodes.includes(permission.code)}
-                    onChange={(event) =>
-                      setSelectedPermissionCodes((current) =>
-                        event.target.checked ? [...current, permission.code] : current.filter((code) => code !== permission.code),
-                      )
-                    }
-                  />
-                  <span>
-                    <strong>{permission.code}</strong>
-                    <small>{permission.name}</small>
-                  </span>
-                </label>
-              ))}
+          <div className="role-permission-head rbac-command-deck rbac-role-toolbar">
+            <label className="field role-select-field rbac-role-select">
+              <span>Role</span>
+              <select className="select" value={rolePermissionCode} onChange={(event) => handleRolePermissionChange(event.target.value)} required>
+                {roles.map((role) => (
+                  <option key={role.code} value={role.code}>
+                    {role.code} - {role.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="role-permission-summary rbac-role-state">
+              <span className={selectedRole?.isActive ? 'badge success' : 'badge danger'}>
+                {selectedRole?.isActive ? 'Đang hoạt động' : 'Đã khoá'}
+              </span>
+              <span className="permission-count-pill">
+                <strong>{selectedPermissionCodes.length}</strong>
+                <small>quyền đang chọn</small>
+              </span>
             </div>
+            <div className="rbac-role-actions">
+              <button className="btn table-btn" type="button" onClick={openSelectedRoleEditor} disabled={!selectedRole}>
+                Sửa role
+              </button>
+              <button
+                className="btn table-btn"
+                type="button"
+                onClick={() => void handleToggleSelectedRoleActive()}
+                disabled={!selectedRole || selectedRole.isSystem}
+                title={selectedRole?.isSystem ? 'Role hệ thống không được khoá' : undefined}
+              >
+                <Power />
+                {selectedRole?.isActive ? 'Khoá role' : 'Kích hoạt'}
+              </button>
+            </div>
+          </div>
+
+          {permissionGroups.length ? (
+            <PermissionModuleTable
+              groups={permissionGroups}
+              selectedPermissionSet={selectedPermissionSet}
+              onTogglePermission={togglePermission}
+              onSetGroup={setGroupPermissions}
+            />
           ) : (
             <EmptyState title="Chưa có permission" description="Permission được định nghĩa ở backend và seed dữ liệu hệ thống." />
           )}
-          <button className="btn primary" type="submit" disabled={!rolePermissionCode}>
-            <Save />
-            Lưu permission của role
-          </button>
+          <div className="rbac-save-row">
+            <button className="btn primary rbac-save-btn" type="submit" disabled={!rolePermissionCode}>
+              <Save />
+              Lưu quyền của vai trò
+            </button>
+          </div>
         </form>
       </section>
 
-      <div className="panel-grid page-section">
-        <section className="panel">
-          <div className="panel-head">
-            <div>
-              <h2>Danh sách role</h2>
-              <p>Dữ liệu lấy trực tiếp từ backend.</p>
-            </div>
-          </div>
-          {roles.length ? (
-            <div className="scroll-table">
-              <table className="tbl">
-                <thead>
-                  <tr>
-                    <th>Code</th>
-                    <th>Tên</th>
-                    <th>Loại</th>
-                    <th>Trạng thái</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {roles.map((role) => (
-                    <tr key={role.code}>
-                      <td className="mono">{role.code}</td>
-                      <td>{role.name}</td>
-                      <td>{role.isSystem ? 'System' : 'Custom'}</td>
-                      <td>
-                        <span className={role.isActive ? 'badge success' : 'badge danger'}>
-                          {role.isActive ? 'Active' : 'Inactive'}
-                        </span>
-                      </td>
-                      <td>
-                        <button
-                          className="btn sm"
-                          type="button"
-                          onClick={() => {
-                            setRoleForm({ ...role, description: role.description ?? '', mode: 'update' })
-                            setRoleDialogOpen(true)
-                          }}
-                        >
-                          Sửa
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <EmptyState title="Chưa có role" description="Backend chưa trả role nào cho tài khoản hiện tại." />
-          )}
-        </section>
-
-        <section className="panel">
-          <div className="panel-head">
-            <div>
-              <h2>Danh sách permission</h2>
-              <p>Permission là dữ liệu hệ thống do backend định nghĩa.</p>
-            </div>
-          </div>
-          {permissions.length ? (
-            <div className="scroll-table">
-              <table className="tbl">
-                <thead>
-                  <tr>
-                    <th>Code</th>
-                    <th>Tên</th>
-                    <th>Module</th>
-                    <th>Trạng thái</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {permissions.map((permission) => (
-                    <tr key={permission.code}>
-                      <td className="mono">{permission.code}</td>
-                      <td>{permission.name}</td>
-                      <td>{permission.module || '-'}</td>
-                      <td>
-                        <span className={permission.isActive ? 'badge success' : 'badge danger'}>
-                          {permission.isActive ? 'Active' : 'Inactive'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <EmptyState title="Chưa có permission" description="Backend chưa trả permission nào cho tài khoản hiện tại." />
-          )}
-        </section>
-      </div>
     </>
   )
+}
+
+function PermissionModuleTable({
+  groups,
+  selectedPermissionSet,
+  onTogglePermission,
+  onSetGroup,
+}: {
+  groups: PermissionGroup[]
+  selectedPermissionSet: Set<string>
+  onTogglePermission: (permissionCode: string) => void
+  onSetGroup: (group: PermissionGroup, checked: boolean) => void
+}) {
+  const [expandedModule, setExpandedModule] = useState<string | null>(null)
+
+  return (
+    <div className="admin-table-wrap permission-module-table-wrap rbac-matrix-wrap">
+      <table className="admin-table permission-module-table rbac-matrix">
+        <thead>
+          <tr>
+            <th>Module</th>
+            <th>Đã chọn</th>
+            <th>Mô tả</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {groups.map((group) => {
+            const selectedCount = group.permissions.filter((permission) => selectedPermissionSet.has(permission.code)).length
+            const allSelected = selectedCount === group.permissions.length
+            const isExpanded = expandedModule === group.module
+            return (
+              <Fragment key={group.module}>
+                <tr className={isExpanded ? 'permission-module-row expanded' : 'permission-module-row'}>
+                  <td>
+                    <strong>{group.module}</strong>
+                  </td>
+                  <td>
+                    <span className={selectedCount ? 'badge success' : 'badge info'}>
+                      {selectedCount}/{group.permissions.length} quyền
+                    </span>
+                  </td>
+                  <td>{describeModule(group)}</td>
+                  <td>
+                    <button
+                      className="btn table-btn permission-menu-trigger"
+                      type="button"
+                      onClick={() => setExpandedModule(isExpanded ? null : group.module)}
+                      aria-expanded={isExpanded}
+                    >
+                      {isExpanded ? 'Ẩn quyền' : 'Chọn quyền'}
+                      <ChevronRight />
+                    </button>
+                  </td>
+                </tr>
+                {isExpanded ? (
+                  <tr className="permission-expand-row">
+                    <td colSpan={4}>
+                      <div className="permission-expand-panel rbac-permission-drawer">
+                        <div className="permission-expand-head">
+                          <div>
+                            <strong>{group.module}</strong>
+                            <span>{selectedCount}/{group.permissions.length} quyền đang chọn</span>
+                          </div>
+                          <div className="permission-expand-actions">
+                            <button className="btn table-btn" type="button" onClick={() => onSetGroup(group, true)} disabled={allSelected}>
+                              Chọn tất cả
+                            </button>
+                            <button className="btn table-btn" type="button" onClick={() => onSetGroup(group, false)} disabled={!selectedCount}>
+                              Bỏ chọn
+                            </button>
+                          </div>
+                        </div>
+                        <div className="permission-expand-list">
+                          {group.permissions.map((permission) => (
+                            <label className="permission-expand-item" key={permission.code}>
+                              <input
+                                type="checkbox"
+                                checked={selectedPermissionSet.has(permission.code)}
+                                onChange={() => onTogglePermission(permission.code)}
+                              />
+                              <span>
+                                <strong>{permission.code}</strong>
+                                <small>{permission.name}</small>
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                ) : null}
+              </Fragment>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function groupPermissions(permissions: Permission[]): PermissionGroup[] {
+  const groups = new Map<string, Permission[]>()
+  for (const permission of permissions) {
+    const module = (permission.module || permission.code.split('_')[0] || 'SYSTEM').toUpperCase()
+    groups.set(module, [...(groups.get(module) ?? []), permission])
+  }
+  return Array.from(groups.entries())
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([module, items]) => ({
+      module,
+      permissions: items.sort((left, right) => left.code.localeCompare(right.code)),
+    }))
+}
+
+function describeModule(group: PermissionGroup) {
+  return group.permissions
+    .slice(0, 2)
+    .map((permission) => permission.name)
+    .join(', ')
+}
+
+function mergeRolePermissions(role: Role, currentRoles: Role[]): Role {
+  return {
+    ...role,
+    permissionCodes: role.permissionCodes ?? currentRoles.find((current) => current.code === role.code)?.permissionCodes ?? [],
+  }
 }
 
 function upsertByCode<T extends { code: string }>(items: T[], item: T) {
