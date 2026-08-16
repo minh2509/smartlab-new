@@ -9,6 +9,8 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.concurrent.ThreadLocalRandom;
 
 @Service
@@ -23,7 +25,7 @@ public class PasswordResetServiceImpl implements PasswordResetService {
         UserEntity existingUser = userRepository.findByEmail(email)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + email));
         String otp = String.valueOf(ThreadLocalRandom.current().nextInt(100000, 999999));
-        long expiryTime = System.currentTimeMillis() + (15 * 60 * 1000);
+        Instant expiryTime = Instant.now().plus(Duration.ofMinutes(15));
 
         existingUser.setResetOtp(otp);
         existingUser.setResetOtpExpireAt(expiryTime);
@@ -51,7 +53,7 @@ public class PasswordResetServiceImpl implements PasswordResetService {
 
         existingUser.setPassword(passwordEncoder.encode(newPassword));
         existingUser.setResetOtp(null);
-        existingUser.setResetOtpExpireAt(0L);
+        existingUser.setResetOtpExpireAt(null);
         userRepository.save(existingUser);
     }
 
@@ -59,7 +61,7 @@ public class PasswordResetServiceImpl implements PasswordResetService {
         if (existingUser.getResetOtp() == null || !existingUser.getResetOtp().equals(otp)) {
             throw new RuntimeException("Reset OTP is not valid");
         }
-        if (existingUser.getResetOtpExpireAt() < System.currentTimeMillis()) {
+        if (existingUser.getResetOtpExpireAt() == null || Instant.now().isAfter(existingUser.getResetOtpExpireAt())) {
             throw new RuntimeException("Reset OTP expired");
         }
     }

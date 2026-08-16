@@ -129,7 +129,7 @@ class PostReviewPostgresIntegrationTest {
         );
 
         ReviewSnapshot persisted = inNewTransaction(() -> jdbc.queryForObject("""
-                select p.status, p.updated_at, r.id, r.reviewer_user_id,
+                select p.status, p.updated_at, p.published_at, r.id, r.reviewer_user_id,
                        r.decision, r.reason, r.created_at
                 from posts p
                 join post_reviews r on r.post_id = p.id
@@ -137,6 +137,7 @@ class PostReviewPostgresIntegrationTest {
                 """, (rs, rowNum) -> new ReviewSnapshot(
                 PostStatus.valueOf(rs.getString("status")),
                 rs.getTimestamp("updated_at").toInstant(),
+                rs.getTimestamp("published_at") == null ? null : rs.getTimestamp("published_at").toInstant(),
                 rs.getLong("id"),
                 rs.getLong("reviewer_user_id"),
                 ReviewDecision.valueOf(rs.getString("decision")),
@@ -156,6 +157,13 @@ class PostReviewPostgresIntegrationTest {
         assertThat(persisted.decision()).isEqualTo(reviewCase.decision());
         assertThat(persisted.reason()).isEqualTo(reviewCase.reason());
         assertThat(persisted.postUpdatedAt()).isEqualTo(persisted.reviewCreatedAt());
+        if (reviewCase.decision() == ReviewDecision.APPROVED) {
+            assertThat(persisted.postPublishedAt()).isEqualTo(persisted.reviewCreatedAt());
+            assertThat(response.getPublishedAt()).isEqualTo(persisted.reviewCreatedAt());
+        } else {
+            assertThat(persisted.postPublishedAt()).isNull();
+            assertThat(response.getPublishedAt()).isNull();
+        }
     }
 
     @Test
@@ -207,7 +215,7 @@ class PostReviewPostgresIntegrationTest {
                 new ReviewPostRequest(ReviewDecision.APPROVED, "rollback evidence")
         )).isInstanceOf(DataIntegrityViolationException.class)
                 .satisfies(exception -> assertThat(postgresConstraint(exception))
-                        .isEqualTo("fk_post_reviews_reviewer"));
+                        .isEqualTo("post_reviews_reviewer_user_id_fkey"));
 
         RollbackSnapshot after = inNewTransaction(() -> jdbc.queryForObject("""
                 select p.status, p.updated_at,
@@ -232,7 +240,7 @@ class PostReviewPostgresIntegrationTest {
                 insert into tbl_user (
                     user_id, name, email, password, is_active,
                     is_account_verified, reset_otp_expire_at
-                ) values (?, ?, ?, ?, true, true, 0)
+                ) values (?, ?, ?, ?, true, true, NULL)
                 returning id
                 """, Long.class,
                 "t10" + marker.replace("-", ""),
@@ -300,7 +308,7 @@ class PostReviewPostgresIntegrationTest {
                 new SuccessfulReviewCase(
                         "approved",
                         ReviewDecision.APPROVED,
-                        PostStatus.APPROVED,
+                        PostStatus.PUBLISHED,
                         "  approved evidence  "
                 ),
                 new SuccessfulReviewCase(
@@ -356,6 +364,7 @@ class PostReviewPostgresIntegrationTest {
     private record ReviewSnapshot(
             PostStatus status,
             Instant postUpdatedAt,
+            Instant postPublishedAt,
             Long reviewId,
             Long reviewerUserId,
             ReviewDecision decision,

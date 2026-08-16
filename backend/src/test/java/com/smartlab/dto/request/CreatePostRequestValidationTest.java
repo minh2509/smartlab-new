@@ -160,8 +160,19 @@ class CreatePostRequestValidationTest {
     }
 
     @Test
-    void rejectsProjectVisibilityForCreateRequest() {
-        assertInvalid(request("Title", null, null, PostVisibility.PROJECT, null));
+    void acceptsProjectVisibilityWithPositiveProjectId() {
+        assertValid(request("Title", null, null, PostVisibility.PROJECT, null, 1L));
+    }
+
+    @Test
+    void rejectsProjectVisibilityWithoutProjectId() {
+        assertInvalid(request("Title", null, null, PostVisibility.PROJECT, null, null));
+    }
+
+    @Test
+    void rejectsProjectIdForPublicOrLabVisibility() {
+        assertInvalid(request("Title", null, null, PostVisibility.PUBLIC, null, 1L));
+        assertInvalid(request("Title", null, null, PostVisibility.LAB, null, 1L));
     }
 
     @Test
@@ -189,7 +200,7 @@ class CreatePostRequestValidationTest {
         assertThat(Arrays.stream(CreatePostRequest.class.getDeclaredFields())
                 .map(field -> field.getName())
                 .toList())
-                .containsExactlyInAnyOrder("title", "excerpt", "contentJson", "visibility", "categoryId");
+                .containsExactlyInAnyOrder("title", "excerpt", "contentJson", "visibility", "categoryId", "projectId");
     }
 
     private static CreatePostRequest request(
@@ -205,6 +216,19 @@ class CreatePostRequestValidationTest {
         request.setContentJson(contentJson);
         request.setVisibility(visibility);
         request.setCategoryId(categoryId);
+        return request;
+    }
+
+    private static CreatePostRequest request(
+            String title,
+            String excerpt,
+            Map<String, Object> contentJson,
+            PostVisibility visibility,
+            Long categoryId,
+            Long projectId
+    ) {
+        CreatePostRequest request = request(title, excerpt, contentJson, visibility, categoryId);
+        request.setProjectId(projectId);
         return request;
     }
 

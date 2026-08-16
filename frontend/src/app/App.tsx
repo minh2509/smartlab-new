@@ -12,10 +12,23 @@ import { AdminRbacPage } from '../features/admin/pages/AdminRbacPage'
 import { ProfilePage } from '../features/profile/pages/ProfilePage'
 import { ResearchFieldsPage } from '../features/profile/pages/ResearchFieldsPage'
 import { AdminMembersPage } from '../features/profile/pages/AdminMembersPage'
+import { MyPostsPage } from '../features/posts/pages/PostListPage'
+import { PostFeedPage } from '../features/posts/pages/PostFeedPage'
+import { PostDetailPage } from '../features/posts/pages/PostDetailPage'
+import { PostCreatePage } from '../features/posts/pages/PostCreatePage'
+import { PostEditPage } from '../features/posts/pages/PostEditPage'
+import { PostReviewQueuePage } from '../features/posts/pages/PostReviewQueuePage'
+import { PostReviewDetailPage } from '../features/posts/pages/PostReviewDetailPage'
 import { HomePage } from '../features/public/pages/HomePage'
 import { StaticPublicPage } from '../features/public/pages/StaticPublicPage'
 import { RequirePermissions } from './RequirePermissions'
 import { FilesPage } from '../features/files/pages/FilesPage'
+import { ProjectListPage } from '../features/projects/pages/ProjectListPage'
+import { ProjectDetailPage } from '../features/projects/pages/ProjectDetailPage'
+import { ProjectManagementPage } from '../features/projects/pages/ProjectManagementPage'
+import { EventManagementPage } from '../features/events/pages/EventManagementPage'
+import { MyEvaluationsPage } from '../features/evaluations/pages/MyEvaluationsPage'
+import { TasksPage } from '../features/tasks/pages/TasksPage'
 
 export function App() {
   return (
@@ -43,16 +56,8 @@ export function App() {
             />
           }
         />
-        <Route
-          path="/du-an"
-          element={
-            <StaticPublicPage
-              kind="projects"
-              title="Dự án"
-              description="Danh sách dự án nghiên cứu và sản phẩm của Smart Lab trên các lĩnh vực trọng tâm."
-            />
-          }
-        />
+        <Route path="/du-an" element={<ProjectListPage />} />
+        <Route path="/du-an/:id" element={<ProjectDetailPage />} />
         <Route
           path="/thanh-vien"
           element={
@@ -74,6 +79,13 @@ export function App() {
           }
         />
         <Route path="/blog" element={<Navigate to="/bai-viet" replace />} />
+        <Route path="/posts" element={<PostFeedPage />} />
+        <Route path="/my-posts" element={<MyPostsPage />} />
+        <Route path="/posts/new" element={<RequirePermissions allOf={[]}><PostCreatePage /></RequirePermissions>} />
+        <Route path="/posts/review-queue" element={<RequirePermissions allOf={['posts.review']}><PostReviewQueuePage /></RequirePermissions>} />
+        <Route path="/posts/review-queue/:id" element={<RequirePermissions allOf={['posts.review']}><PostReviewDetailPage /></RequirePermissions>} />
+        <Route path="/posts/:slug/edit" element={<RequirePermissions allOf={[]}><PostEditPage /></RequirePermissions>} />
+        <Route path="/posts/:slug" element={<PostDetailPage />} />
         <Route
           path="/tai-lieu"
           element={
@@ -137,7 +149,11 @@ export function App() {
 
       <Route element={<AdminLayout />}>
         <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/my-evaluations" element={<MyEvaluationsPage />} />
         <Route path="/files" element={<RequirePermissions allOf={['FILE_UPLOAD']}><FilesPage /></RequirePermissions>} />
+        <Route path="/admin/projects" element={<ProjectManagementPage />} />
+        <Route path="/admin/events" element={<EventManagementPage />} />
+        <Route path="/admin/tasks" element={<TasksPage />} />
         <Route path="/admin/research-fields" element={<RequirePermissions allOf={['RESEARCH_FIELD_MANAGE']}><ResearchFieldsPage /></RequirePermissions>} />
         <Route path="/admin/members" element={<RequirePermissions allOf={['MEMBER_MANAGE']}><AdminMembersPage /></RequirePermissions>} />
         <Route path="/admin/accounts" element={<RequirePermissions allOf={['USER_MANAGE', 'ROLE_MANAGE', 'PERMISSION_MANAGE']}><AdminAccountsPage /></RequirePermissions>} />

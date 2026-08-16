@@ -5,6 +5,7 @@ import com.smartlab.entity.RoleEntity;
 import com.smartlab.entity.RolePermissionEntity;
 import com.smartlab.dto.request.PermissionRequest;
 import com.smartlab.dto.request.RoleRequest;
+import com.smartlab.dto.response.RoleResponse;
 import com.smartlab.repo.PermissionRepository;
 import com.smartlab.repo.RolePermissionRepository;
 import com.smartlab.repo.RoleRepository;
@@ -37,6 +38,14 @@ public class AdminRolePermissionServiceImpl implements AdminRolePermissionServic
         return roleRepository.findAll();
     }
 
+    @Transactional(readOnly = true)
+    @Override
+    public List<RoleResponse> getRoleResponses() {
+        return roleRepository.findAll().stream()
+                .map(this::toRoleResponse)
+                .toList();
+    }
+
     @Transactional
     @Override
     public RoleEntity createRole(RoleRequest request) {
@@ -63,6 +72,9 @@ public class AdminRolePermissionServiceImpl implements AdminRolePermissionServic
         role.setName(request.getName());
         role.setDescription(request.getDescription());
         if (request.getIsActive() != null) {
+            if (Boolean.TRUE.equals(role.getIsSystem()) && !request.getIsActive().equals(role.getIsActive())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "System roles cannot be activated or deactivated");
+            }
             role.setIsActive(request.getIsActive());
         }
         RoleEntity saved = roleRepository.save(role);
@@ -140,6 +152,18 @@ public class AdminRolePermissionServiceImpl implements AdminRolePermissionServic
     private RoleEntity getRole(String code) {
         return roleRepository.findByCode(code.toUpperCase())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Role not found"));
+    }
+
+    private RoleResponse toRoleResponse(RoleEntity role) {
+        return RoleResponse.builder()
+                .id(role.getId())
+                .code(role.getCode())
+                .name(role.getName())
+                .description(role.getDescription())
+                .isSystem(role.getIsSystem())
+                .isActive(role.getIsActive())
+                .permissionCodes(rolePermissionRepository.findPermissionCodesByRoleId(role.getId()))
+                .build();
     }
 
     private static Map<String, Object> roleSnapshot(RoleEntity role) {

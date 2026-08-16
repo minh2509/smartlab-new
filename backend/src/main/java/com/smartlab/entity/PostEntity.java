@@ -100,6 +100,7 @@ public class PostEntity {
                 null,
                 visibility,
                 categoryId,
+                null,
                 creationTime
         );
     }
@@ -115,6 +116,32 @@ public class PostEntity {
             Long categoryId,
             Instant creationTime
     ) {
+        return createDraft(
+                authorUserId,
+                title,
+                slug,
+                excerpt,
+                contentJson,
+                contentHtml,
+                visibility,
+                categoryId,
+                null,
+                creationTime
+        );
+    }
+
+    public static PostEntity createDraft(
+            Long authorUserId,
+            String title,
+            String slug,
+            String excerpt,
+            Map<String, Object> contentJson,
+            String contentHtml,
+            PostVisibility visibility,
+            Long categoryId,
+            Long projectId,
+            Instant creationTime
+    ) {
         PostEntity post = new PostEntity();
         post.authorUserId = authorUserId;
         post.title = title;
@@ -124,6 +151,7 @@ public class PostEntity {
         post.contentHtml = contentHtml;
         post.visibility = visibility;
         post.categoryId = categoryId;
+        post.projectId = projectId;
         post.status = PostStatus.DRAFT;
         post.createdAt = creationTime;
         post.updatedAt = creationTime;
@@ -145,6 +173,7 @@ public class PostEntity {
                 this.contentHtml,
                 visibility,
                 categoryId,
+                this.projectId,
                 updatedAt
         );
     }
@@ -158,6 +187,28 @@ public class PostEntity {
             Long categoryId,
             Instant updatedAt
     ) {
+        applyDraftUpdate(
+                title,
+                excerpt,
+                contentJson,
+                contentHtml,
+                visibility,
+                categoryId,
+                this.projectId,
+                updatedAt
+        );
+    }
+
+    public void applyDraftUpdate(
+            String title,
+            String excerpt,
+            Map<String, Object> contentJson,
+            String contentHtml,
+            PostVisibility visibility,
+            Long categoryId,
+            Long projectId,
+            Instant updatedAt
+    ) {
         if (status != PostStatus.DRAFT) {
             throw new IllegalStateException("Only draft posts can be updated");
         }
@@ -168,6 +219,7 @@ public class PostEntity {
         this.contentHtml = contentHtml;
         this.visibility = visibility;
         this.categoryId = categoryId;
+        this.projectId = projectId;
         this.updatedAt = updatedAt;
     }
 
@@ -189,10 +241,13 @@ public class PostEntity {
         }
 
         this.status = switch (decision) {
-            case APPROVED -> PostStatus.APPROVED;
+            case APPROVED -> PostStatus.PUBLISHED;
             case REVISION_REQUIRED -> PostStatus.REVISION_REQUIRED;
             case REJECTED -> PostStatus.REJECTED;
         };
+        if (decision == ReviewDecision.APPROVED) {
+            this.publishedAt = mutationInstant;
+        }
         this.updatedAt = mutationInstant;
     }
 

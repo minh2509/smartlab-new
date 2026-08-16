@@ -10,10 +10,13 @@ public final class AuditVocabulary {
     public static final String USER_PERMISSION_OVERRIDE_SET = "USER_PERMISSION_OVERRIDE_SET";
     public static final String USER_PERMISSION_OVERRIDE_REMOVED = "USER_PERMISSION_OVERRIDE_REMOVED";
     public static final String POST_REVIEWED = "POST_REVIEWED";
+    public static final String PROJECT_MEMBER_CREATED = "PROJECT_MEMBER_CREATED";
+    public static final String PROJECT_MEMBER_UPDATED = "PROJECT_MEMBER_UPDATED";
     public static final String ROLE = "ROLE";
     public static final String PERMISSION = "PERMISSION";
     public static final String USER = "USER";
     public static final String POST = "POST";
+    public static final String PROJECT_MEMBER = "PROJECT_MEMBER";
 
     private AuditVocabulary() {
     }

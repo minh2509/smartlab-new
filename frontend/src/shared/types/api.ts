@@ -14,6 +14,16 @@ export type AccountResponse = {
   permissions: string[]
 }
 
+export type PaginatedResponse<T> = {
+  content: T[]
+  page: number
+  size: number
+  totalElements: number
+  totalPages: number
+  first: boolean
+  last: boolean
+}
+
 export type InvitationResponse = {
   email: string
   status: string
@@ -28,6 +38,7 @@ export type Role = {
   description?: string
   isSystem: boolean
   isActive: boolean
+  permissionCodes?: string[]
 }
 
 export type Permission = {

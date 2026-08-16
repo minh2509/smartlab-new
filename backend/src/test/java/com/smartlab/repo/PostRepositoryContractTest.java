@@ -27,13 +27,15 @@ class PostRepositoryContractTest {
     }
 
     @Test
-    void activeListQueryIncludesOwnerOrPublishedPublicLabAndDeterministicOrdering() throws NoSuchMethodException {
-        String query = queryFor("findActiveReadableByViewerUserId", Long.class);
+    void activeListQueryIncludesOwnerPublicLabOrActiveProjectMembershipAndDeterministicOrdering()
+            throws NoSuchMethodException {
+        String query = queryFor("findActiveReadableByViewerUserId", Long.class, java.util.List.class);
 
         assertThat(query).contains("p.deletedAt is null");
         assertThat(query).contains("p.authorUserId = :viewerUserId");
         assertThat(query).contains("PostStatus.PUBLISHED");
         assertThat(query).contains("PostVisibility.PUBLIC", "PostVisibility.LAB");
+        assertThat(query).contains("PostVisibility.PROJECT", "p.projectId is not null", "p.projectId in :activeProjectIds");
         assertThat(query).contains("order by p.createdAt desc, p.id desc");
     }
 
@@ -43,6 +45,43 @@ class PostRepositoryContractTest {
 
         assertThat(query).contains("p.slug = :slug");
         assertThat(query).contains("p.deletedAt is null");
+    }
+
+    @Test
+    void reviewerListQueryReturnsOnlyActiveNonSelfPendingPostsInDeterministicOrder()
+            throws NoSuchMethodException {
+        Method method = PostRepository.class.getMethod(
+                "findActivePendingReviewableByReviewerUserId",
+                Long.class
+        );
+        String query = method.getAnnotation(Query.class).value();
+
+        assertThat(query).contains("p.deletedAt is null");
+        assertThat(query).contains("PostStatus.PENDING_REVIEW");
+        assertThat(query).contains("p.authorUserId is null", "p.authorUserId <> :reviewerUserId");
+        assertThat(query).contains("order by p.createdAt desc, p.id desc");
+        assertThat(query).doesNotContain("PostVisibility");
+        assertThat(method.isAnnotationPresent(Lock.class)).isFalse();
+        assertThat(method.isAnnotationPresent(Modifying.class)).isFalse();
+    }
+
+    @Test
+    void reviewerDetailQueryConcealsEveryPostOutsideTheSameReviewabilityPredicate()
+            throws NoSuchMethodException {
+        Method method = PostRepository.class.getMethod(
+                "findActivePendingReviewableByIdAndReviewerUserId",
+                Long.class,
+                Long.class
+        );
+        String query = method.getAnnotation(Query.class).value();
+
+        assertThat(query).contains("p.id = :id");
+        assertThat(query).contains("p.deletedAt is null");
+        assertThat(query).contains("PostStatus.PENDING_REVIEW");
+        assertThat(query).contains("p.authorUserId is null", "p.authorUserId <> :reviewerUserId");
+        assertThat(query).doesNotContain("PostVisibility");
+        assertThat(method.isAnnotationPresent(Lock.class)).isFalse();
+        assertThat(method.isAnnotationPresent(Modifying.class)).isFalse();
     }
 
     @Test

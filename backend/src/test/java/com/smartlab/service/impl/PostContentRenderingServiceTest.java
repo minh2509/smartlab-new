@@ -45,6 +45,8 @@ class PostContentRenderingServiceTest {
     private PostContentRenderer postContentRenderer;
     private NotificationService notificationService;
     private AuditService auditService;
+    private com.smartlab.repo.ProjectRepository projectRepository;
+    private com.smartlab.repo.ProjectMemberRepository projectMemberRepository;
 
     private PostServiceImpl service;
 
@@ -59,6 +61,8 @@ class PostContentRenderingServiceTest {
         postContentRenderer = mock(PostContentRenderer.class);
         notificationService = mock(NotificationService.class);
         auditService = mock(AuditService.class);
+        projectRepository = mock(com.smartlab.repo.ProjectRepository.class);
+        projectMemberRepository = mock(com.smartlab.repo.ProjectMemberRepository.class);
 
         service = new PostServiceImpl(
                 userRepository,
@@ -69,7 +73,9 @@ class PostContentRenderingServiceTest {
                 postCreateAttemptService,
                 postContentRenderer,
                 notificationService,
-                auditService
+                auditService,
+                projectRepository,
+                projectMemberRepository
         );
 
         UserEntity user = mock(UserEntity.class);
@@ -274,9 +280,9 @@ class PostContentRenderingServiceTest {
     }
 
     @Test
-    void disabledProductionRendererDoesNotPretendRenderingExists() {
-        DisabledPostContentRenderer renderer =
-                new DisabledPostContentRenderer();
+    void productionRendererRejectsUnsupportedContentWithoutGuessing() {
+        PlainTextPostContentRenderer renderer =
+                new PlainTextPostContentRenderer();
 
         assertThat(renderer.renderAndSanitize(
                 Map.of("type", "doc")

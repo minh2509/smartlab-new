@@ -10,14 +10,17 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.time.Instant;
 
 import com.smartlab.entity.PostEntity;
 import com.smartlab.entity.UserEntity;
+import com.smartlab.enums.PostVisibility;
 import com.smartlab.repo.PostRepository;
 import com.smartlab.repo.UserRepository;
 import com.smartlab.service.AppUserDetailService;
@@ -84,8 +87,37 @@ class PostSecurityFilterChainIntegrationTest {
     }
 
     @Test
-    void missingTokenIsRejectedBeforeReadAndWriteRequestValidation() throws Exception {
+    void anonymousAccessIsLimitedToFeedAndDedicatedPublicPermalink() throws Exception {
         mockMvc.perform(get("/posts"))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/posts/public/missing-public-post"))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(get("/posts/mine"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/posts/review-queue"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/posts/review-queue/999999"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/posts/protected-slug"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(put("/posts/999999/reaction")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reaction\":\"LIKE\"}"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(delete("/posts/999999/reaction"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/posts/999999/comments"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/posts/999999/comments")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"test\"}"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(patch("/posts/999999/comments/999999")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"test\"}"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(delete("/posts/999999/comments/999999"))
                 .andExpect(status().isUnauthorized());
         mockMvc.perform(post("/posts")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -97,6 +129,62 @@ class PostSecurityFilterChainIntegrationTest {
                 .andExpect(status().isUnauthorized());
         mockMvc.perform(delete("/posts/999999"))
                 .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/posts/999999/submit"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/posts/999999/reviews")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"decision\":\"APPROVED\",\"comment\":\"test\"}"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/posts/999999/publish"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/posts/999999/direct-publish"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void anonymousReadSurfacesReturnPublicPublishedContentWithoutPrivateIdentity() throws Exception {
+        UserEntity author = storedActiveUser("anonymous-author");
+        Instant publishedAt = Instant.parse("2026-08-11T08:00:00Z");
+        PostEntity publicPost = postRepository.saveAndFlush(publishedPost(
+                author.getId(), "r15-anonymous-public", PostVisibility.PUBLIC, publishedAt
+        ));
+        postRepository.saveAndFlush(publishedPost(
+                author.getId(), "r15-anonymous-lab", PostVisibility.LAB, publishedAt.plusSeconds(1)
+        ));
+        postRepository.saveAndFlush(PostEntity.createDraft(
+                author.getId(), "R15 anonymous draft", "r15-anonymous-draft", "Draft",
+                Map.of("body", "Hidden draft"), PostVisibility.PUBLIC, null, publishedAt
+        ));
+
+        MvcResult feedResult = mockMvc.perform(get("/posts"))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode feed = objectMapper.readTree(feedResult.getResponse().getContentAsString());
+        JsonNode publicItem = null;
+        for (JsonNode item : feed.get("items")) {
+            assertThat(item.get("slug").asText()).isNotIn("r15-anonymous-lab", "r15-anonymous-draft");
+            if (item.get("id").asLong() == publicPost.getId()) {
+                publicItem = item;
+            }
+        }
+        assertThat(publicItem).isNotNull();
+        assertThat(publicItem.get("visibility").asText()).isEqualTo("PUBLIC");
+        assertThat(publicItem.get("viewerReaction").isNull()).isTrue();
+        assertThat(publicItem.get("author").has("userId")).isTrue();
+        assertThat(publicItem.get("author").has("id")).isFalse();
+        assertThat(publicItem.get("author").has("email")).isFalse();
+        assertThat(publicItem.get("author").has("password")).isFalse();
+
+        MvcResult detailResult = mockMvc.perform(get("/posts/public/{slug}", publicPost.getSlug()))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode detail = objectMapper.readTree(detailResult.getResponse().getContentAsString());
+        assertThat(detail.get("id").asLong()).isEqualTo(publicPost.getId());
+        assertThat(detail.get("visibility").asText()).isEqualTo("PUBLIC");
+        assertThat(detail.get("status").asText()).isEqualTo("PUBLISHED");
+        assertThat(detail.get("author").has("id")).isFalse();
+        assertThat(detail.get("author").has("email")).isFalse();
+        assertThat(detail.get("author").has("password")).isFalse();
     }
 
     @Test
@@ -125,6 +213,18 @@ class PostSecurityFilterChainIntegrationTest {
     }
 
     @Test
+    void authenticatedUserWithoutReviewPermissionCannotReadReviewQueue() throws Exception {
+        AuthenticatedUser actor = activeUser("review-denied");
+
+        mockMvc.perform(get("/posts/review-queue")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(actor)))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/posts/review-queue/999999")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(actor)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void validJwtCreatesPostForCanonicalUserWithoutPostManage() throws Exception {
         AuthenticatedUser actor = activeUser("create");
         String title = uniqueTitle("Create");
@@ -142,11 +242,11 @@ class PostSecurityFilterChainIntegrationTest {
     }
 
     @Test
-    void validJwtReadsOwnedDraftThroughListAndDetailEndpoints() throws Exception {
+    void validJwtReadsOwnedDraftThroughMineAndDetailEndpoints() throws Exception {
         AuthenticatedUser actor = activeUser("read");
         CreatedPost created = createPost(actor, uniqueTitle("Read"));
 
-        MvcResult listResult = mockMvc.perform(get("/posts")
+        MvcResult listResult = mockMvc.perform(get("/posts/mine")
                         .header(HttpHeaders.AUTHORIZATION, bearer(actor)))
                 .andExpect(status().isOk())
                 .andReturn();
@@ -263,6 +363,30 @@ class PostSecurityFilterChainIntegrationTest {
         String sessionId = UUID.randomUUID().toString();
         String jwt = jwtUtil.generateToken(userDetails, sessionId);
         return new AuthenticatedUser(saved, email, userDetails, sessionId, jwt);
+    }
+
+    private UserEntity storedActiveUser(String tag) {
+        String token = UUID.randomUUID().toString();
+        return userRepository.saveAndFlush(UserEntity.builder()
+                .userId("r15" + token.replace("-", ""))
+                .name("R15 " + tag)
+                .email("r15-" + tag + "-" + token + "@example.test")
+                .password("r15-integration-only")
+                .isActive(true)
+                .isAccountVerified(true)
+                .resetOtpExpireAt(0L)
+                .build());
+    }
+
+    private PostEntity publishedPost(
+            Long authorUserId, String slug, PostVisibility visibility, Instant publishedAt
+    ) {
+        PostEntity post = PostEntity.createDraft(
+                authorUserId, "R15 " + slug, slug, "Public read integration",
+                Map.of("body", "Body " + slug), visibility, null, publishedAt.minusSeconds(1)
+        );
+        post.publishDirect(publishedAt);
+        return post;
     }
 
     private CreatedPost createPost(AuthenticatedUser actor, String title) throws Exception {

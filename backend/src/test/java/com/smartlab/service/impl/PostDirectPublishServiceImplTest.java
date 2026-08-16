@@ -66,6 +66,8 @@ class PostDirectPublishServiceImplTest {
     @Mock
     private NotificationService notificationService;
     @Mock private com.smartlab.service.AuditService auditService;
+    @Mock private com.smartlab.repo.ProjectRepository projectRepository;
+    @Mock private com.smartlab.repo.ProjectMemberRepository projectMemberRepository;
 
     private PostService postService;
 
@@ -80,7 +82,9 @@ class PostDirectPublishServiceImplTest {
                 postCreateAttemptService,
                 postContentRenderer,
                 notificationService,
-                auditService
+                auditService,
+                projectRepository,
+                projectMemberRepository
         );
     }
 
@@ -264,11 +268,20 @@ class PostDirectPublishServiceImplTest {
             return post;
         }
 
-        post.applyReviewDecision(ReviewDecision.APPROVED, createdAt.plusSeconds(2));
-        if (status == PostStatus.PUBLISHED) {
-            post.publish(createdAt.plusSeconds(3));
+        if (status == PostStatus.APPROVED) {
+            setStatus(post, PostStatus.APPROVED);
+        } else {
+            post.applyReviewDecision(ReviewDecision.APPROVED, createdAt.plusSeconds(2));
         }
         return post;
+    }
+
+    private static void setStatus(PostEntity post, PostStatus status) {
+        try {
+            setField(post, "status", status);
+        } catch (ReflectiveOperationException exception) {
+            throw new AssertionError(exception);
+        }
     }
 
     private static void setField(PostEntity post, String fieldName, Object value) throws ReflectiveOperationException {

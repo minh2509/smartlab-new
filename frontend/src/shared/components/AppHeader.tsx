@@ -1,7 +1,8 @@
-import { Bell, ChevronDown, LogIn, LogOut, Shield } from 'lucide-react'
+import { ClipboardCheck, ChevronDown, LogIn, LogOut, Newspaper } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../../features/auth/authContext'
+import { NotificationPopover } from '../../features/notifications/components/NotificationPopover'
 import { Logo } from './Logo'
 
 const publicLinks = [
@@ -19,7 +20,10 @@ const aboutLinks = [
 ]
 
 export function AppHeader() {
-  const { isAuthenticated, profile, logout } = useAuth()
+  const { isAuthenticated, logout, profile } = useAuth()
+  const role = resolveHeaderRole(profile?.roles)
+  const canReviewPosts = profile?.permissions.includes('posts.review') ?? false
+  const canReadNotifications = profile?.permissions.includes('notifications.read_own') ?? false
 
   return (
     <header className="site-nav">
@@ -45,9 +49,15 @@ export function AppHeader() {
               <li>
                 <NavLink to="/profile">Hồ sơ</NavLink>
               </li>
-              <li>
-                <NavLink to="/admin/accounts">Admin</NavLink>
-              </li>
+              {role ? (
+                <li>
+                  {role === 'Admin' ? (
+                    <NavLink to="/admin/accounts">Admin</NavLink>
+                  ) : (
+                    <span className="nav-role-label">{role}</span>
+                  )}
+                </li>
+              ) : null}
             </>
           ) : null}
         </ul>
@@ -55,30 +65,60 @@ export function AppHeader() {
         <div className="nav-act">
           {isAuthenticated ? (
             <>
-              <span className="chip accent hide-md">
-                <Shield size={14} />
-                {profile?.roles?.join(', ') || 'Đã đăng nhập'}
-              </span>
-              <button className="icon-btn" type="button" aria-label="Thông báo">
-                <Bell />
-              </button>
+              <NavLink
+                end
+                className={({ isActive }) => `nav-private-link${isActive ? ' is-active' : ''}`}
+                to="/posts"
+              >
+                <Newspaper size={15} aria-hidden="true" />
+                Bảng tin
+              </NavLink>
+              {canReviewPosts ? (
+                <NavLink
+                  className={({ isActive }) => `nav-private-link${isActive ? ' is-active' : ''}`}
+                  to="/posts/review-queue"
+                >
+                  <ClipboardCheck size={15} aria-hidden="true" />
+                  Duyệt bài
+                </NavLink>
+              ) : null}
+              {canReadNotifications ? (
+                <NotificationPopover />
+              ) : null}
               <button className="btn sm" type="button" onClick={() => void logout()}>
                 <LogOut size={15} />
                 Đăng xuất
               </button>
             </>
           ) : (
-            <NavLink className="nav-login-btn" to="/login">
-              <span className="nav-login-ico">
-                <LogIn size={15} />
-              </span>
-              <span>Đăng nhập</span>
-            </NavLink>
+            <>
+              <NavLink
+                end
+                className={({ isActive }) => `nav-private-link nav-public-feed-link${isActive ? ' is-active' : ''}`}
+                to="/posts"
+              >
+                <Newspaper size={15} aria-hidden="true" />
+                Bảng tin
+              </NavLink>
+              <NavLink className="nav-login-btn" to="/login">
+                <span className="nav-login-ico">
+                  <LogIn size={15} />
+                </span>
+                <span>Đăng nhập</span>
+              </NavLink>
+            </>
           )}
         </div>
       </div>
     </header>
   )
+}
+
+function resolveHeaderRole(roles: string[] | undefined) {
+  if (roles?.includes('ADMIN')) return 'Admin'
+  if (roles?.includes('LEADER')) return 'Leader'
+  if (roles?.includes('MEMBER')) return 'Member'
+  return null
 }
 
 function AboutDropdown() {

@@ -28,13 +28,14 @@ import static org.mockito.Mockito.*;
 class AdminAccountAuditTest {
     @Mock UserRepository users; @Mock RoleRepository roles; @Mock PermissionRepository permissions;
     @Mock UserRoleRepository userRoles; @Mock UserPermissionOverrideRepository overrides;
-    @Mock AccountInvitationRepository invitations; @Mock PermissionService permissionService; @Mock EmailService email;
+    @Mock AccountInvitationRepository invitations; @Mock MemberProfileRepository memberProfiles;
+    @Mock PermissionService permissionService; @Mock EmailService email;
     @Mock UserSessionService sessions; @Mock TokenHashService hashes; @Mock PasswordEncoder encoder; @Mock AuditService audit;
     AdminAccountServiceImpl service;
     UserEntity user;
 
     @BeforeEach void setUp() {
-        service = new AdminAccountServiceImpl(users, roles, permissions, userRoles, overrides, invitations,
+        service = new AdminAccountServiceImpl(users, roles, permissions, userRoles, overrides, invitations, memberProfiles,
                 permissionService, email, sessions, hashes, encoder, audit);
         user = UserEntity.builder().id(11L).userId("external-user-id").email("member@test").name("Member").isActive(true).build();
         when(users.findByUserId("external-user-id")).thenReturn(Optional.of(user));

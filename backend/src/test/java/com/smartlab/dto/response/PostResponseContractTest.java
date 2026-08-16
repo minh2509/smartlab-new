@@ -19,8 +19,10 @@ class PostResponseContractTest {
                 "slug",
                 "excerpt",
                 "visibility",
+                "projectId",
                 "status",
                 "category",
+                "author",
                 "publishedAt",
                 "createdAt",
                 "updatedAt"
@@ -41,8 +43,10 @@ class PostResponseContractTest {
                 "excerpt",
                 "contentJson",
                 "visibility",
+                "projectId",
                 "status",
                 "category",
+                "author",
                 "publishedAt",
                 "createdAt",
                 "updatedAt"
@@ -59,7 +63,6 @@ class PostResponseContractTest {
         Set<String> forbiddenFields = Set.of(
                 "authorUserId",
                 "contentHtml",
-                "projectId",
                 "coverFileId",
                 "deletedAt"
         );
@@ -71,6 +74,11 @@ class PostResponseContractTest {
     @Test
     void categoryResponseExposesOnlyIdCodeAndName() {
         assertThat(fieldNames(PostCategoryResponse.class)).containsExactlyInAnyOrder("id", "code", "name");
+    }
+
+    @Test
+    void authorResponseExposesOnlyPublicUserIdAndName() {
+        assertThat(fieldNames(PostAuthorResponse.class)).containsExactlyInAnyOrder("userId", "name");
     }
 
     @Test

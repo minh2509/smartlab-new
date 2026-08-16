@@ -17,8 +17,10 @@ public class PostDetailResponse {
     String excerpt;
     Map<String, Object> contentJson;
     PostVisibility visibility;
+    Long projectId;
     PostStatus status;
     PostCategoryResponse category;
+    PostAuthorResponse author;
     Instant publishedAt;
     Instant createdAt;
     Instant updatedAt;

@@ -61,6 +61,6 @@ class NotificationPostgresIntegrationTest {
     }
     private void canonical(UserEntity user) { when(users.findByEmail(user.getEmail())).thenReturn(Optional.of(user)); }
     private NotificationEntity save(Long recipient, Long actor, String type, Instant time) { return notifications.saveAndFlush(NotificationEntity.create(recipient, actor, type, type, null, null, null, time)); }
-    private UserEntity fixture(String tag) { String u = UUID.randomUUID().toString().replace("-", ""); Long id = jdbc.queryForObject("insert into tbl_user(user_id,name,email,password,is_active,is_account_verified,reset_otp_expire_at) values(?,?,?,?,true,true,0) returning id", Long.class, "n2"+u, "N2", "n2-"+tag+"-"+u+"@test", "x"); userIds.add(id); return UserEntity.builder().id(id).email("n2-"+tag+"-"+u+"@test").isActive(true).build(); }
+    private UserEntity fixture(String tag) { String u = UUID.randomUUID().toString().replace("-", ""); Long id = jdbc.queryForObject("insert into tbl_user(user_id,name,email,password,is_active,is_account_verified,reset_otp_expire_at) values(?,?,?,?,true, true, NULL) returning id", Long.class, "n2"+u, "N2", "n2-"+tag+"-"+u+"@test", "x"); userIds.add(id); return UserEntity.builder().id(id).email("n2-"+tag+"-"+u+"@test").isActive(true).build(); }
     private long count(String table) { return jdbc.queryForObject("select count(*) from " + table, Long.class); }
 }

@@ -3,9 +3,9 @@ package com.smartlab.config;
 import com.smartlab.filter.JwtRequestFilter;
 import com.smartlab.service.AppUserDetailService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpMethod;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.Customizer;
@@ -41,21 +41,29 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 "/login",
+                                "/refresh",
                                 "/send-reset-otp",
                                 "/verify-reset-otp",
-                        "/reset-password",
+                                "/reset-password",
                                 "/logout",
                                 "/error",
                                 "/invitations/accept",
-                        "/research-fields",
-                        "/members",
-                        "/swagger-ui",
+                                "/research-fields",
+                                "/members",
+                                "/swagger-ui",
                                 "/swagger-ui/**",
                                 "/v3/api-docs",
                                 "/v3/api-docs/**",
-                        "/swagger-ui.html"
+                                "/swagger-ui.html"
                         ).permitAll()
-                        .requestMatchers(HttpMethod.GET, "/files/*").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/posts", "/posts/public/*", "/posts/*/files/*").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/projects/leader-candidates").authenticated()
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/files/*",
+                                "/projects",
+                                "/projects/*"
+                        ).permitAll()
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))

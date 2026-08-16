@@ -124,7 +124,7 @@ class PostWorkflowConcurrencyPostgresIntegrationTest {
                 reviewerA,
                 ReviewDecision.APPROVED,
                 "  concurrency approval  ",
-                PostStatus.APPROVED
+                PostStatus.PUBLISHED
         );
         ReviewAttempt rejected = new ReviewAttempt(
                 reviewerB,
@@ -513,7 +513,7 @@ class PostWorkflowConcurrencyPostgresIntegrationTest {
                 insert into tbl_user (
                     user_id, name, email, password, is_active,
                     is_account_verified, reset_otp_expire_at
-                ) values (?, ?, ?, ?, true, true, 0)
+                ) values (?, ?, ?, ?, true, true, NULL)
                 returning id
                 """, Long.class, userId, "T11 " + tag, email, "t11-integration-only");
         assertThat(id).isNotNull();
@@ -546,14 +546,14 @@ class PostWorkflowConcurrencyPostgresIntegrationTest {
             if (targetStatus == PostStatus.PENDING_REVIEW || targetStatus == PostStatus.APPROVED) {
                 post.submitForReview(createdAt.plusSeconds(30));
             }
-            if (targetStatus == PostStatus.APPROVED) {
-                post.applyReviewDecision(ReviewDecision.APPROVED, createdAt.plusSeconds(60));
-            }
-            if (post.getStatus() != targetStatus) {
+            if (post.getStatus() != targetStatus && targetStatus != PostStatus.APPROVED) {
                 throw new IllegalArgumentException("Unsupported fixture status: " + targetStatus);
             }
             return postRepository.saveAndFlush(post).getId();
         });
+        if (targetStatus == PostStatus.APPROVED) {
+            jdbc.update("update posts set status = 'APPROVED' where id = ?", id);
+        }
         assertThat(id).isNotNull();
         postIds.add(id);
         return new PostFixture(id);

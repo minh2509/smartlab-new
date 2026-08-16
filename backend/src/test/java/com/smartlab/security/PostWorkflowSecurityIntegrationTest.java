@@ -5,6 +5,7 @@ import com.smartlab.config.SecurityConfig;
 import com.smartlab.controller.PostController;
 import com.smartlab.dto.request.ReviewPostRequest;
 import com.smartlab.dto.response.PostDetailResponse;
+import com.smartlab.dto.response.PostSummaryResponse;
 import com.smartlab.enums.PostStatus;
 import com.smartlab.enums.PostVisibility;
 import com.smartlab.filter.JwtRequestFilter;
@@ -15,6 +16,7 @@ import com.smartlab.util.JwtUtil;
 import jakarta.servlet.Filter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -32,6 +34,7 @@ import org.springframework.web.context.WebApplicationContext;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 import java.util.stream.Stream;
+import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -40,6 +43,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.setup.MockMvcBuilders.webAppContextSetup;
@@ -155,6 +159,60 @@ class PostWorkflowSecurityIntegrationTest {
         verifyNoInteractions(postService);
     }
 
+    @ParameterizedTest(name = "reviewer read {0} without authentication returns 401")
+    @MethodSource("reviewerReadEndpoints")
+    void unauthenticatedReviewerReadsReturnUnauthorizedBeforeService(
+            String path,
+            boolean detail
+    ) throws Exception {
+        mockMvc.perform(get(path))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(postService, appUserDetailService);
+        verify(userSessionService, never()).touchSession(anyString());
+    }
+
+    @ParameterizedTest(name = "reviewer read {0} without exact authority returns 403")
+    @MethodSource("reviewerReadEndpoints")
+    void reviewerReadsRejectMissingOrWrongAuthorityBeforeService(
+            String path,
+            boolean detail
+    ) throws Exception {
+        String token = tokenWithAuthorities("posts.submit");
+
+        mockMvc.perform(get(path).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isForbidden());
+
+        verifyAuthenticatedFilterPath();
+        verifyNoInteractions(postService);
+    }
+
+    @ParameterizedTest(name = "reviewer read {0} with exact authority reaches service")
+    @MethodSource("reviewerReadEndpoints")
+    void reviewerReadsAllowExactAuthorityAndDelegateCanonicalIdentity(
+            String path,
+            boolean detail
+    ) throws Exception {
+        String token = tokenWithAuthorities("posts.review");
+        if (detail) {
+            when(postService.getReviewablePost(EMAIL, POST_ID))
+                    .thenReturn(response(PostStatus.PENDING_REVIEW));
+        } else {
+            when(postService.getReviewablePosts(EMAIL))
+                    .thenReturn(List.of(summaryResponse()));
+        }
+
+        mockMvc.perform(get(path).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk());
+
+        verifyAuthenticatedFilterPath();
+        if (detail) {
+            verify(postService).getReviewablePost(EMAIL, POST_ID);
+        } else {
+            verify(postService).getReviewablePosts(EMAIL);
+        }
+    }
+
     private String tokenWithAuthorities(String... authorities) {
         UserDetails userDetails = User.withUsername(EMAIL)
                 .password("t08-not-used")
@@ -214,6 +272,23 @@ class PostWorkflowSecurityIntegrationTest {
                 .build();
     }
 
+    private static PostSummaryResponse summaryResponse() {
+        return PostSummaryResponse.builder()
+                .id(POST_ID)
+                .title("Post")
+                .slug("post")
+                .visibility(PostVisibility.LAB)
+                .status(PostStatus.PENDING_REVIEW)
+                .build();
+    }
+
+    private static Stream<Arguments> reviewerReadEndpoints() {
+        return Stream.of(
+                Arguments.of("/posts/review-queue", false),
+                Arguments.of("/posts/review-queue/17", true)
+        );
+    }
+
     private static Stream<WorkflowEndpoint> workflowEndpoints() {
         return Stream.of(
                 new WorkflowEndpoint(
@@ -230,7 +305,7 @@ class PostWorkflowSecurityIntegrationTest {
                         "{\"decision\":\"APPROVED\",\"reason\":\"ready\"}",
                         "posts.review",
                         "posts.submit",
-                        PostStatus.APPROVED
+                        PostStatus.PUBLISHED
                 ),
                 new WorkflowEndpoint(
                         Operation.PUBLISH,

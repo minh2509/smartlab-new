@@ -27,6 +27,7 @@ import java.lang.reflect.Method;
 import java.util.Arrays;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -95,7 +96,7 @@ class PostWorkflowControllerTest {
     @Test
     void workflowPostMappingsReturnOkAndSerializeCanonicalServiceResponses() throws Exception {
         when(postService.submitForReview(EMAIL, POST_ID)).thenReturn(response(PostStatus.PENDING_REVIEW));
-        when(postService.reviewPost(any(), any(), any())).thenReturn(response(PostStatus.APPROVED));
+        when(postService.reviewPost(any(), any(), any())).thenReturn(response(PostStatus.PUBLISHED));
         when(postService.publishPost(EMAIL, POST_ID)).thenReturn(response(PostStatus.PUBLISHED));
 
         mockMvc.perform(post("/posts/{id}/submit", POST_ID).principal(authentication()))
@@ -106,7 +107,7 @@ class PostWorkflowControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"decision\":\"APPROVED\",\"reason\":\"ready\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("APPROVED"));
+                .andExpect(jsonPath("$.status").value("PUBLISHED"));
         mockMvc.perform(post("/posts/{id}/publish", POST_ID).principal(authentication()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("PUBLISHED"));
@@ -164,6 +165,17 @@ class PostWorkflowControllerTest {
         assertThat(submit.getAnnotation(PreAuthorize.class).value()).isEqualTo("hasAuthority('posts.submit')");
         assertThat(review.getAnnotation(PreAuthorize.class).value()).isEqualTo("hasAuthority('posts.review')");
         assertThat(publish.getAnnotation(PreAuthorize.class).value()).isEqualTo("hasAuthority('posts.publish')");
+    }
+
+    @Test
+    void controllerDoesNotExposePublisherQueueMethods() {
+        assertThatThrownBy(() -> PostController.class.getMethod("getPublishQueue", Authentication.class))
+                .isInstanceOf(NoSuchMethodException.class);
+        assertThatThrownBy(() -> PostController.class.getMethod(
+                "getPublishQueuePost",
+                Authentication.class,
+                Long.class
+        )).isInstanceOf(NoSuchMethodException.class);
     }
 
     private void assertInvalidReviewBody(String body) throws Exception {

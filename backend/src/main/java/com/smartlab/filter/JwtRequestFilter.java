@@ -29,6 +29,7 @@ public class JwtRequestFilter extends OncePerRequestFilter {
 
     private static final List<String> PUBLIC_URLS = List.of(
             "/login",
+            "/refresh",
             "/send-reset-otp",
             "/verify-reset-otp",
             "/reset-password",

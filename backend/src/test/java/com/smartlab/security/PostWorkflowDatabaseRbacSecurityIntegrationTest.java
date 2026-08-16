@@ -2,14 +2,20 @@ package com.smartlab.security;
 
 import com.smartlab.dto.request.ReviewPostRequest;
 import com.smartlab.dto.response.PostDetailResponse;
+import com.smartlab.dto.response.PostSummaryResponse;
+import com.smartlab.entity.PermissionEntity;
 import com.smartlab.entity.RoleEntity;
 import com.smartlab.entity.UserEntity;
+import com.smartlab.entity.UserPermissionOverrideEntity;
 import com.smartlab.entity.UserRoleEntity;
 import com.smartlab.entity.UserSessionEntity;
+import com.smartlab.enums.PermissionOverrideEffect;
 import com.smartlab.enums.PostStatus;
 import com.smartlab.enums.PostVisibility;
 import com.smartlab.enums.ReviewDecision;
 import com.smartlab.repo.RoleRepository;
+import com.smartlab.repo.PermissionRepository;
+import com.smartlab.repo.UserPermissionOverrideRepository;
 import com.smartlab.repo.UserRepository;
 import com.smartlab.repo.UserRoleRepository;
 import com.smartlab.service.AppUserDetailService;
@@ -26,6 +32,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
@@ -33,6 +40,7 @@ import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
@@ -54,16 +62,17 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
 @AutoConfigureMockMvc
+@TestPropertySource(properties = "jwt.secret.key=t08-controlled-runtime-jwt-secret-key-for-tests-only")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class PostWorkflowDatabaseRbacSecurityIntegrationTest {
 
-    private static final String TARGET_DATABASE = "smartlab_rich_editor_deploy_rehearsal";
     private static final String MARKER = "t13-rbac-acceptance";
     private static final String ADMIN_EMAIL = "t13-admin-rbac-acceptance@example.test";
     private static final String LEADER_EMAIL = "t13-leader-rbac-acceptance@example.test";
@@ -87,6 +96,10 @@ class PostWorkflowDatabaseRbacSecurityIntegrationTest {
     @Autowired
     private RoleRepository roleRepository;
     @Autowired
+    private PermissionRepository permissionRepository;
+    @Autowired
+    private UserPermissionOverrideRepository userPermissionOverrideRepository;
+    @Autowired
     private PermissionService permissionService;
     @Autowired
     private AppUserDetailService appUserDetailService;
@@ -98,16 +111,20 @@ class PostWorkflowDatabaseRbacSecurityIntegrationTest {
     @MockitoBean
     private PostService postService;
 
+    @Value("${smartlab.test.target-database:smartlab_rich_editor_deploy_rehearsal}")
+    private String targetDatabase;
+
     private final Map<String, FixtureActor> actors = new LinkedHashMap<>();
     private final List<Long> sessionIds = new ArrayList<>();
     private final List<Long> userRoleIds = new ArrayList<>();
     private final List<Long> userIds = new ArrayList<>();
+    private final List<Long> overrideIds = new ArrayList<>();
     private BaselineCounts baseline;
     private PersistentRbacSnapshot persistentRbacSnapshot;
 
     @BeforeAll
     void createCommittedRbacSessionFixtures() {
-        assertThat(currentDatabase()).isEqualTo(TARGET_DATABASE);
+        assertThat(currentDatabase()).isEqualTo(targetDatabase);
         assertThat(countFixtureUsers()).isZero();
         assertPersistedT12Policy();
 
@@ -131,7 +148,7 @@ class PostWorkflowDatabaseRbacSecurityIntegrationTest {
 
     @AfterAll
     void cleanFixturesAndVerifyPersistentState() {
-        if (!TARGET_DATABASE.equals(currentDatabase())) {
+        if (!targetDatabase.equals(currentDatabase())) {
             return;
         }
 
@@ -146,10 +163,10 @@ class PostWorkflowDatabaseRbacSecurityIntegrationTest {
     @Test
     @Order(1)
     void databaseIdentityAndPersistedT12PolicyAreExact() {
-        assertThat(currentDatabase()).isEqualTo(TARGET_DATABASE);
+        assertThat(currentDatabase()).isEqualTo(targetDatabase);
         assertPersistedT12Policy();
-        assertThat(baseline.permissions()).isEqualTo(16);
-        assertThat(baseline.rolePermissions()).isEqualTo(31);
+        assertThat(baseline.permissions()).isEqualTo(21);
+        assertThat(baseline.rolePermissions()).isEqualTo(42);
     }
 
     @Test
@@ -188,7 +205,7 @@ class PostWorkflowDatabaseRbacSecurityIntegrationTest {
                 .andExpect(status().isForbidden());
         perform(admin, "/posts/1313/reviews", reviewBody())
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("APPROVED"));
+                .andExpect(jsonPath("$.status").value("PUBLISHED"));
         perform(admin, "/posts/1313/publish", null)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("PUBLISHED"));
@@ -252,6 +269,49 @@ class PostWorkflowDatabaseRbacSecurityIntegrationTest {
 
     @Test
     @Order(7)
+    void effectiveGrantAllowsMemberToUseReviewerReadsWithoutRoleNameAuthorization() throws Exception {
+        FixtureActor member = actor("MEMBER");
+        UserPermissionOverrideEntity override = saveReviewOverride(member, PermissionOverrideEffect.GRANT);
+        when(postService.getReviewablePosts(member.email())).thenReturn(List.of(summaryResponse()));
+        when(postService.getReviewablePost(member.email(), POST_ID))
+                .thenReturn(response(PostStatus.PENDING_REVIEW));
+
+        try {
+            assertThat(permissionService.getEffectivePermissionCodes(member.user())).contains("posts.review");
+            performGet(member, "/posts/review-queue")
+                    .andExpect(status().isOk());
+            performGet(member, "/posts/review-queue/1313")
+                    .andExpect(status().isOk());
+
+            verify(postService).getReviewablePosts(member.email());
+            verify(postService).getReviewablePost(member.email(), POST_ID);
+        } finally {
+            deleteOverride(override);
+        }
+    }
+
+    @Test
+    @Order(8)
+    void effectiveDenyBlocksAdminReviewerReadsDespiteRoleDerivedPermission() throws Exception {
+        FixtureActor admin = actor("ADMIN");
+        UserPermissionOverrideEntity override = saveReviewOverride(admin, PermissionOverrideEffect.DENY);
+
+        try {
+            assertThat(permissionService.getEffectivePermissionCodes(admin.user())).doesNotContain("posts.review");
+            performGet(admin, "/posts/review-queue")
+                    .andExpect(status().isForbidden());
+            performGet(admin, "/posts/review-queue/1313")
+                    .andExpect(status().isForbidden());
+
+            verify(postService, never()).getReviewablePosts(any());
+            verify(postService, never()).getReviewablePost(any(), any());
+        } finally {
+            deleteOverride(override);
+        }
+    }
+
+    @Test
+    @Order(9)
     void unauthenticatedWorkflowRequestIsRejectedBeforeBusinessService() throws Exception {
         mockMvc.perform(post("/posts/1313/direct-publish"))
                 .andExpect(status().isUnauthorized());
@@ -260,7 +320,7 @@ class PostWorkflowDatabaseRbacSecurityIntegrationTest {
     }
 
     @Test
-    @Order(8)
+    @Order(10)
     void revokedRealSessionInvalidatesExistingProductionJwt() throws Exception {
         FixtureActor admin = actor("ADMIN");
         stubDirectPublish(admin.email());
@@ -387,6 +447,14 @@ class PostWorkflowDatabaseRbacSecurityIntegrationTest {
         return mockMvc.perform(request);
     }
 
+    private org.springframework.test.web.servlet.ResultActions performGet(
+            FixtureActor actor,
+            String path
+    ) throws Exception {
+        return mockMvc.perform(get(path)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + actor.jwt()));
+    }
+
     private void stubSubmit(String email) {
         when(postService.submitForReview(email, POST_ID))
                 .thenReturn(response(PostStatus.PENDING_REVIEW));
@@ -394,7 +462,7 @@ class PostWorkflowDatabaseRbacSecurityIntegrationTest {
 
     private void stubReview(String email) {
         when(postService.reviewPost(eq(email), eq(POST_ID), any(ReviewPostRequest.class)))
-                .thenReturn(response(PostStatus.APPROVED));
+                .thenReturn(response(PostStatus.PUBLISHED));
     }
 
     private void stubPublish(String email) {
@@ -415,6 +483,39 @@ class PostWorkflowDatabaseRbacSecurityIntegrationTest {
                 .visibility(PostVisibility.LAB)
                 .status(status)
                 .build();
+    }
+
+    private PostSummaryResponse summaryResponse() {
+        return PostSummaryResponse.builder()
+                .id(POST_ID)
+                .title("T13 Post")
+                .slug("t13-post")
+                .visibility(PostVisibility.LAB)
+                .status(PostStatus.PENDING_REVIEW)
+                .build();
+    }
+
+    private UserPermissionOverrideEntity saveReviewOverride(
+            FixtureActor actor,
+            PermissionOverrideEffect effect
+    ) {
+        PermissionEntity permission = permissionRepository.findByCode("posts.review").orElseThrow();
+        UserPermissionOverrideEntity override = userPermissionOverrideRepository.saveAndFlush(
+                UserPermissionOverrideEntity.builder()
+                        .user(actor.user())
+                        .permission(permission)
+                        .effect(effect)
+                        .changedBy(MARKER)
+                        .build()
+        );
+        overrideIds.add(override.getId());
+        return override;
+    }
+
+    private void deleteOverride(UserPermissionOverrideEntity override) {
+        userPermissionOverrideRepository.deleteById(override.getId());
+        userPermissionOverrideRepository.flush();
+        overrideIds.remove(override.getId());
     }
 
     private String reviewBody() {
@@ -540,12 +641,17 @@ class PostWorkflowDatabaseRbacSecurityIntegrationTest {
     }
 
     private void cleanExactFixtures() {
+        if (!overrideIds.isEmpty()) {
+            userPermissionOverrideRepository.deleteAllById(List.copyOf(overrideIds));
+            userPermissionOverrideRepository.flush();
+        }
         sessionIds.forEach(id -> jdbc.update("delete from user_sessions where id = ?", id));
         userRoleIds.forEach(id -> jdbc.update("delete from user_roles where id = ?", id));
         userIds.forEach(id -> jdbc.update("delete from tbl_user where id = ?", id));
         sessionIds.clear();
         userRoleIds.clear();
         userIds.clear();
+        overrideIds.clear();
         actors.clear();
     }
 

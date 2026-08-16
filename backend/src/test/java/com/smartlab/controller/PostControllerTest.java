@@ -11,6 +11,9 @@ import com.smartlab.repo.PostRepository;
 import com.smartlab.repo.UserRepository;
 import com.smartlab.service.PermissionService;
 import com.smartlab.service.PostService;
+import com.smartlab.service.PostSocialService;
+import com.smartlab.dto.response.CursorPageResponse;
+import com.smartlab.dto.response.PostFeedResponse;
 import jakarta.validation.Valid;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -19,6 +22,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -36,6 +40,7 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -59,24 +64,26 @@ class PostControllerTest {
 
     @Mock
     private PostService postService;
+    @Mock
+    private PostSocialService postSocialService;
 
     private PostController postController;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        postController = new PostController(postService);
+        postController = new PostController(postService, Optional.of(postSocialService));
         mockMvc = MockMvcBuilders.standaloneSetup(postController).build();
     }
 
     @Test
-    void isRestControllerAtPostsPathWithOnlyPostServiceDependency() {
+    void isRestControllerAtPostsPathWithPostDomainServiceDependencies() {
         RequestMapping requestMapping = PostController.class.getAnnotation(RequestMapping.class);
 
         assertThat(PostController.class.isAnnotationPresent(RestController.class)).isTrue();
         assertThat(requestMapping.value()).containsExactly("/posts");
         assertThat(PostController.class.getDeclaredFields()).extracting(Field::getType)
-                .containsExactly(PostService.class)
+                .containsExactly(PostService.class, PostSocialService.class)
                 .doesNotContain(PostRepository.class, UserRepository.class, ContentCategoryRepository.class, PermissionService.class);
     }
 
@@ -103,6 +110,31 @@ class PostControllerTest {
 
         assertThat(actual).isSameAs(response);
         verify(postService).getReadablePosts(EMAIL);
+    }
+
+    @Test
+    void reviewerListDelegatesTrustedAuthenticationNameAndIsNotTreatedAsSlug() throws Exception {
+        Authentication authentication = authentication();
+        List<PostSummaryResponse> response = List.of(summaryResponse());
+        when(postService.getReviewablePosts(EMAIL)).thenReturn(response);
+
+        mockMvc.perform(get("/posts/review-queue").principal(authentication))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(7));
+        verify(postService).getReviewablePosts(EMAIL);
+        verify(postService, org.mockito.Mockito.never()).getPostBySlug(EMAIL, "review-queue");
+    }
+
+    @Test
+    void reviewerDetailDelegatesTrustedAuthenticationNameAndPostId() throws Exception {
+        Authentication authentication = authentication();
+        when(postService.getReviewablePost(EMAIL, 17L)).thenReturn(detailResponse());
+
+        mockMvc.perform(get("/posts/review-queue/17").principal(authentication))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(7));
+
+        verify(postService).getReviewablePost(EMAIL, 17L);
     }
 
     @Test
@@ -164,15 +196,41 @@ class PostControllerTest {
 
     @Test
     void listAndDetailMappingsReturnOkServiceResponses() throws Exception {
-        when(postService.getReadablePosts(EMAIL)).thenReturn(List.of(summaryResponse()));
+        when(postSocialService.getFeed(EMAIL, null, 15)).thenReturn(new CursorPageResponse<>(
+                List.of(PostFeedResponse.builder().id(7L).slug("unchanged-slug").build()), null
+        ));
         when(postService.getPostBySlug(EMAIL, "unchanged-slug")).thenReturn(detailResponse());
 
         mockMvc.perform(get("/posts").principal(authentication()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].id").value(7));
+                .andExpect(jsonPath("$.items[0].id").value(7));
         mockMvc.perform(get("/posts/unchanged-slug").principal(authentication()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.slug").value("unchanged-slug"));
+    }
+
+    @Test
+    void anonymousFeedDelegatesAbsentAuthenticatedIdentity() throws Exception {
+        when(postSocialService.getFeed(null, null, 15)).thenReturn(new CursorPageResponse<>(
+                List.of(PostFeedResponse.builder().id(7L).slug("public-post").build()), null
+        ));
+
+        mockMvc.perform(get("/posts"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].slug").value("public-post"));
+
+        verify(postSocialService).getFeed(null, null, 15);
+    }
+
+    @Test
+    void publicPermalinkDelegatesAbsentAuthenticatedIdentity() throws Exception {
+        when(postService.getPostBySlug(null, "public-post")).thenReturn(detailResponse());
+
+        mockMvc.perform(get("/posts/public/public-post"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.slug").value("unchanged-slug"));
+
+        verify(postService).getPostBySlug(null, "public-post");
     }
 
     @Test
@@ -225,7 +283,7 @@ class PostControllerTest {
     @Test
     void mapsExpectedMethodsAndValidatesRequestBodies() throws NoSuchMethodException {
         Method create = PostController.class.getMethod("createPost", Authentication.class, CreatePostRequest.class);
-        Method list = PostController.class.getMethod("getPosts", Authentication.class);
+        Method list = PostController.class.getMethod("getPosts", Authentication.class, String.class, int.class);
         Method detail = PostController.class.getMethod("getPostBySlug", Authentication.class, String.class);
         Method patch = PostController.class.getMethod("updatePost", Authentication.class, Long.class, UpdatePostRequest.class);
         Method delete = PostController.class.getMethod("deletePost", Authentication.class, Long.class);
@@ -237,6 +295,19 @@ class PostControllerTest {
         assertThat(delete.getAnnotation(DeleteMapping.class).value()).containsExactly("/{id}");
         assertThat(hasValidAnnotation(create.getParameterAnnotations()[1])).isTrue();
         assertThat(hasValidAnnotation(patch.getParameterAnnotations()[2])).isTrue();
+    }
+
+    @Test
+    void mapsReviewerReadsWithExactStaticPathsAndAuthority() throws NoSuchMethodException {
+        Method list = PostController.class.getMethod("getReviewQueue", Authentication.class);
+        Method detail = PostController.class.getMethod("getReviewQueuePost", Authentication.class, Long.class);
+
+        assertThat(list.getAnnotation(GetMapping.class).value()).containsExactly("/review-queue");
+        assertThat(detail.getAnnotation(GetMapping.class).value()).containsExactly("/review-queue/{id}");
+        assertThat(list.getAnnotation(PreAuthorize.class).value())
+                .isEqualTo("hasAuthority('posts.review')");
+        assertThat(detail.getAnnotation(PreAuthorize.class).value())
+                .isEqualTo("hasAuthority('posts.review')");
     }
 
     private static boolean hasValidAnnotation(Annotation[] annotations) {

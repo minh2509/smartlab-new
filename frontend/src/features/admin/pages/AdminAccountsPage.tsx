@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
-import { KeyRound, RefreshCw, Save, Send, UserPlus, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Edit3, KeyRound, RefreshCw, Save, Send, UserPlus, X } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { ApiClientError } from '../../../lib/apiClient'
 import { useAuth } from '../../auth/authContext'
 import {
   listAccounts,
@@ -13,26 +15,41 @@ import {
   setUserPermissionOverride,
   updateAccountRoles,
 } from '../api'
-import type { AccountResponse, Permission, Role } from '../../../shared/types/api'
+import type { AccountResponse, PaginatedResponse, Permission, Role } from '../../../shared/types/api'
 import { EmptyState } from '../../../shared/components/EmptyState'
 import { Feedback } from '../../../shared/components/Feedback'
 
+const PAGE_SIZE = 10
+
 type AccountDialog = 'provision' | 'resend' | null
 
-type AccountRowEdit = {
+type EditDraft = {
   roleCode: string
   activeValue: string
   permissionCode: string
   permissionEffect: 'GRANT' | 'DENY'
 }
 
+const emptyPage: PaginatedResponse<AccountResponse> = {
+  content: [],
+  page: 0,
+  size: PAGE_SIZE,
+  totalElements: 0,
+  totalPages: 0,
+  first: true,
+  last: true,
+}
+
 export function AdminAccountsPage() {
-  const { token } = useAuth()
+  const navigate = useNavigate()
+  const { token, clearAuth } = useAuth()
   const [roles, setRoles] = useState<Role[]>([])
   const [permissions, setPermissions] = useState<Permission[]>([])
-  const [accounts, setAccounts] = useState<AccountResponse[]>([])
-  const [rowEdits, setRowEdits] = useState<Record<string, AccountRowEdit>>({})
+  const [accountPage, setAccountPage] = useState<PaginatedResponse<AccountResponse>>(emptyPage)
+  const [page, setPage] = useState(0)
   const [activeDialog, setActiveDialog] = useState<AccountDialog>(null)
+  const [editingAccount, setEditingAccount] = useState<AccountResponse | null>(null)
+  const [editDraft, setEditDraft] = useState<EditDraft>(createEditDraft(null, []))
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [provisionRole, setProvisionRole] = useState('')
@@ -41,58 +58,43 @@ export function AdminAccountsPage() {
   const [error, setError] = useState('')
   const [isLoading, setLoading] = useState(false)
 
-  const mergeRowEdits = useCallback(
-    (nextAccounts: AccountResponse[], current: Record<string, AccountRowEdit>) => {
-      const next: Record<string, AccountRowEdit> = {}
-      const fallbackPermission = permissions[0]?.code || ''
-      for (const account of nextAccounts) {
-        next[account.userId] = {
-          roleCode: account.roles[0] || current[account.userId]?.roleCode || '',
-          activeValue: String(account.isActive),
-          permissionCode: current[account.userId]?.permissionCode || fallbackPermission,
-          permissionEffect: current[account.userId]?.permissionEffect || 'GRANT',
-        }
-      }
-      return next
-    },
-    [permissions],
-  )
+  const accounts = accountPage.content
+  const pageStart = accountPage.totalElements === 0 ? 0 : accountPage.page * accountPage.size + 1
+  const pageEnd = Math.min((accountPage.page + 1) * accountPage.size, accountPage.totalElements)
 
-  const refreshAccounts = useCallback(async () => {
+  const loadAccounts = useCallback(async (targetPage = page) => {
     if (!token) return
-    const accountResult = await listAccounts(token)
-    setAccounts(accountResult)
-    setRowEdits((current) => mergeRowEdits(accountResult, current))
-  }, [mergeRowEdits, token])
+    const result = await listAccounts(token, targetPage, PAGE_SIZE)
+    setAccountPage(result)
+    if (result.totalPages > 0 && targetPage >= result.totalPages) {
+      setPage(result.totalPages - 1)
+    }
+  }, [clearAuth, navigate, page, token])
 
   const loadCatalogs = useCallback(async () => {
     if (!token) return
     setLoading(true)
     setError('')
     try {
-      const [roleResult, permissionResult, accountResult] = await Promise.all([listRoles(token), listPermissions(token), listAccounts(token)])
+      const [roleResult, permissionResult, accountResult] = await Promise.all([
+        listRoles(token),
+        listPermissions(token),
+        listAccounts(token, page, PAGE_SIZE),
+      ])
       setRoles(roleResult)
       setPermissions(permissionResult)
-      setAccounts(accountResult)
-      setRowEdits((current) => {
-        const next: Record<string, AccountRowEdit> = {}
-        const fallbackPermission = permissionResult[0]?.code || ''
-        for (const account of accountResult) {
-          next[account.userId] = {
-            roleCode: account.roles[0] || current[account.userId]?.roleCode || '',
-            activeValue: String(account.isActive),
-            permissionCode: current[account.userId]?.permissionCode || fallbackPermission,
-            permissionEffect: current[account.userId]?.permissionEffect || 'GRANT',
-          }
-        }
-        return next
-      })
+      setAccountPage(accountResult)
     } catch (err) {
+      if (err instanceof ApiClientError && err.status === 401) {
+        clearAuth()
+        navigate('/login', { replace: true })
+        return
+      }
       setError(err instanceof Error ? err.message : 'Không tải được dữ liệu quản trị')
     } finally {
       setLoading(false)
     }
-  }, [token])
+  }, [page, token])
 
   useEffect(() => {
     void loadCatalogs()
@@ -102,6 +104,17 @@ export function AdminAccountsPage() {
     setError('')
     setMessage('')
     setActiveDialog(dialog)
+  }
+
+  function openEditDialog(account: AccountResponse) {
+    setMessage('')
+    setError('')
+    setEditingAccount(account)
+    setEditDraft(createEditDraft(account, permissions))
+  }
+
+  function closeEditDialog() {
+    setEditingAccount(null)
   }
 
   async function handleProvision(event: FormEvent<HTMLFormElement>) {
@@ -119,7 +132,8 @@ export function AdminAccountsPage() {
       setEmail('')
       setProvisionRole('')
       setActiveDialog(null)
-      await refreshAccounts()
+      setPage(0)
+      await loadAccounts(0)
       setMessage('Đã cấp tài khoản và gửi invite qua email.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không cấp được tài khoản')
@@ -141,66 +155,44 @@ export function AdminAccountsPage() {
     }
   }
 
-  function updateRowEdit(userId: string, patch: Partial<AccountRowEdit>) {
-    setRowEdits((current) => ({
-      ...current,
-      [userId]: mergeSingleRowEdit(current[userId], patch, permissions[0]?.code || ''),
-    }))
-  }
-
-  async function handleRowRole(account: AccountResponse) {
-    if (!token) return
-    const row = rowEdits[account.userId]
-    if (!row?.roleCode) return
+  async function handleSaveAccount(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!token || !editingAccount || !editDraft.roleCode) return
     setMessage('')
     setError('')
     try {
-      await updateAccountRoles(token, account.userId, [row.roleCode])
-      await refreshAccounts()
-      setMessage('Đã cập nhật role của thành viên.')
+      await updateAccountRoles(token, editingAccount.userId, [editDraft.roleCode])
+      await setAccountActive(token, editingAccount.userId, editDraft.activeValue === 'true')
+      await loadAccounts()
+      closeEditDialog()
+      setMessage('Đã cập nhật role và trạng thái thành viên.')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Không cập nhật được role của thành viên')
+      setError(err instanceof Error ? err.message : 'Không cập nhật được thành viên')
     }
   }
 
-  async function handleRowActive(account: AccountResponse) {
-    if (!token) return
-    const row = rowEdits[account.userId]
+  async function handleSavePermissionOverride() {
+    if (!token || !editingAccount || !editDraft.permissionCode) return
     setMessage('')
     setError('')
     try {
-      await setAccountActive(token, account.userId, row?.activeValue === 'true')
-      await refreshAccounts()
-      setMessage('Đã cập nhật trạng thái tài khoản.')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Không cập nhật được trạng thái tài khoản')
-    }
-  }
-
-  async function handleRowPermissionOverride(account: AccountResponse) {
-    if (!token) return
-    const row = rowEdits[account.userId]
-    if (!row?.permissionCode) return
-    setMessage('')
-    setError('')
-    try {
-      await setUserPermissionOverride(token, account.userId, row.permissionCode, row.permissionEffect)
-      await refreshAccounts()
+      await setUserPermissionOverride(token, editingAccount.userId, editDraft.permissionCode, editDraft.permissionEffect)
+      await loadAccounts()
+      closeEditDialog()
       setMessage('Đã cập nhật permission riêng cho thành viên.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không cập nhật được permission riêng')
     }
   }
 
-  async function handleRowRemoveOverride(account: AccountResponse) {
-    if (!token) return
-    const row = rowEdits[account.userId]
-    if (!row?.permissionCode) return
+  async function handleRemovePermissionOverride() {
+    if (!token || !editingAccount || !editDraft.permissionCode) return
     setMessage('')
     setError('')
     try {
-      await removeUserPermissionOverride(token, account.userId, row.permissionCode)
-      await refreshAccounts()
+      await removeUserPermissionOverride(token, editingAccount.userId, editDraft.permissionCode)
+      await loadAccounts()
+      closeEditDialog()
       setMessage('Đã xoá override permission của thành viên.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không xoá được override permission')
@@ -233,76 +225,58 @@ export function AdminAccountsPage() {
         </button>
       </div>
 
-      {activeDialog ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => setActiveDialog(null)}>
-          <section
-            className="modal-panel account-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="account-dialog-title"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <div className="modal-head">
-              <div>
-                <h2 id="account-dialog-title">{activeDialog === 'provision' ? 'Cấp tài khoản' : 'Gửi lại invite'}</h2>
-                <p>{activeDialog === 'provision' ? 'Tạo tài khoản nội bộ và gửi link invite qua email.' : 'Cấp lại token invite mới cho tài khoản đã được tạo.'}</p>
-              </div>
-              <button className="icon-btn modal-close" type="button" onClick={() => setActiveDialog(null)} aria-label="Đóng popup">
-                <X />
-              </button>
-            </div>
+      <AccountActionDialog
+        activeDialog={activeDialog}
+        roles={roles}
+        name={name}
+        email={email}
+        provisionRole={provisionRole}
+        resendEmail={resendEmail}
+        onClose={() => setActiveDialog(null)}
+        onNameChange={setName}
+        onEmailChange={setEmail}
+        onProvisionRoleChange={setProvisionRole}
+        onResendEmailChange={setResendEmail}
+        onProvision={handleProvision}
+        onResend={handleResend}
+      />
 
-            {activeDialog === 'provision' ? (
-              <form className="form-stack" onSubmit={handleProvision}>
-                <label className="field">
-                  <span>Họ tên</span>
-                  <input className="input" value={name} onChange={(event) => setName(event.target.value)} required autoFocus />
-                </label>
-                <label className="field">
-                  <span>Email</span>
-                  <input className="input" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
-                </label>
-                <RoleSelect roles={roles} value={provisionRole} onChange={setProvisionRole} />
-                <button className="btn primary full" type="submit">
-                  <UserPlus />
-                  Cấp tài khoản
-                </button>
-              </form>
-            ) : (
-              <form className="form-stack" onSubmit={handleResend}>
-                <label className="field">
-                  <span>Email</span>
-                  <input className="input" type="email" value={resendEmail} onChange={(event) => setResendEmail(event.target.value)} required autoFocus />
-                </label>
-                <button className="btn brand full" type="submit">
-                  <Send />
-                  Gửi lại invite
-                </button>
-              </form>
-            )}
-          </section>
-        </div>
-      ) : null}
+      <EditAccountDialog
+        account={editingAccount}
+        roles={roles}
+        permissions={permissions}
+        draft={editDraft}
+        onDraftChange={(patch) => setEditDraft((current) => ({ ...current, ...patch }))}
+        onClose={closeEditDialog}
+        onSaveAccount={handleSaveAccount}
+        onSavePermission={() => void handleSavePermissionOverride()}
+        onRemovePermission={() => void handleRemovePermissionOverride()}
+      />
 
       <section className="panel page-section">
         <div className="panel-head">
           <div>
             <h2>Danh sách thành viên</h2>
-            <p>Quản lý role, trạng thái đăng nhập và permission riêng trực tiếp trên từng thành viên.</p>
+            <p>Bảng chỉ hiển thị thông tin chính. Bấm sửa để cập nhật role, trạng thái và permission riêng.</p>
           </div>
           <KeyRound />
         </div>
 
         <AccountsTable
           accounts={accounts}
-          roles={roles}
-          permissions={permissions}
-          rowEdits={rowEdits}
-          onEdit={updateRowEdit}
-          onSaveRole={(account) => void handleRowRole(account)}
-          onSaveActive={(account) => void handleRowActive(account)}
-          onSavePermission={(account) => void handleRowPermissionOverride(account)}
-          onRemovePermission={(account) => void handleRowRemoveOverride(account)}
+          page={accountPage.page}
+          size={accountPage.size}
+          onEdit={openEditDialog}
+        />
+
+        <PaginationBar
+          page={accountPage.page}
+          totalPages={accountPage.totalPages}
+          totalElements={accountPage.totalElements}
+          pageStart={pageStart}
+          pageEnd={pageEnd}
+          onPrevious={() => setPage((current) => Math.max(current - 1, 0))}
+          onNext={() => setPage((current) => current + 1)}
         />
       </section>
 
@@ -317,24 +291,14 @@ export function AdminAccountsPage() {
 
 function AccountsTable({
   accounts,
-  roles,
-  permissions,
-  rowEdits,
+  page,
+  size,
   onEdit,
-  onSaveRole,
-  onSaveActive,
-  onSavePermission,
-  onRemovePermission,
 }: {
   accounts: AccountResponse[]
-  roles: Role[]
-  permissions: Permission[]
-  rowEdits: Record<string, AccountRowEdit>
-  onEdit: (userId: string, patch: Partial<AccountRowEdit>) => void
-  onSaveRole: (account: AccountResponse) => void
-  onSaveActive: (account: AccountResponse) => void
-  onSavePermission: (account: AccountResponse) => void
-  onRemovePermission: (account: AccountResponse) => void
+  page: number
+  size: number
+  onEdit: (account: AccountResponse) => void
 }) {
   if (!accounts.length) {
     return <EmptyState title="Chưa có thành viên" description="Khi Admin cấp tài khoản, thành viên sẽ xuất hiện ở bảng này." />
@@ -345,112 +309,306 @@ function AccountsTable({
       <table className="admin-table accounts-table">
         <thead>
           <tr>
+            <th>#</th>
             <th>Thành viên</th>
             <th>Role</th>
             <th>Trạng thái</th>
-            <th>Permission riêng</th>
-            <th>User ID</th>
+            <th>Permission</th>
+            <th>Thao tác</th>
           </tr>
         </thead>
         <tbody>
-          {accounts.map((account) => {
-            const edit = rowEdits[account.userId] ?? {
-              roleCode: account.roles[0] || '',
-              activeValue: String(account.isActive),
-              permissionCode: permissions[0]?.code || '',
-              permissionEffect: 'GRANT' as const,
-            }
-            return (
-              <tr key={account.userId}>
-                <td>
-                  <div className="member-cell">
-                    <span className="member-avatar">{getInitials(account.name)}</span>
-                    <span>
-                      <strong>{account.name}</strong>
-                      <small>{account.email}</small>
-                      <span className="inline-badges">
-                        <span className={account.isActive ? 'badge success' : 'badge danger'}>{account.isActive ? 'Đang hoạt động' : 'Khoá'}</span>
-                        <span className={account.isAccountVerified ? 'badge success' : 'badge info'}>
-                          {account.isAccountVerified ? 'Đã kích hoạt' : 'Chờ invite'}
-                        </span>
-                      </span>
-                    </span>
-                  </div>
-                </td>
-                <td>
-                  <div className="table-control">
-                    <select className="select dense" value={edit.roleCode} onChange={(event) => onEdit(account.userId, { roleCode: event.target.value })}>
-                      <option value="">Chọn role</option>
-                      {roles.map((role) => (
-                        <option key={role.code} value={role.code}>
-                          {role.code}
-                        </option>
-                      ))}
-                    </select>
-                    <button className="btn table-btn" type="button" onClick={() => onSaveRole(account)} disabled={!edit.roleCode}>
-                      <Save />
-                      Lưu
-                    </button>
-                  </div>
-                </td>
-                <td>
-                  <div className="table-control">
-                    <select
-                      className="select dense"
-                      value={edit.activeValue}
-                      onChange={(event) => onEdit(account.userId, { activeValue: event.target.value })}
-                    >
-                      <option value="true">Mở đăng nhập</option>
-                      <option value="false">Khoá đăng nhập</option>
-                    </select>
-                    <button className="btn table-btn" type="button" onClick={() => onSaveActive(account)}>
-                      <Save />
-                      Lưu
-                    </button>
-                  </div>
-                </td>
-                <td>
-                  <div className="permission-table-cell">
-                    <div className="table-control">
-                      <select
-                        className="select dense"
-                        value={edit.permissionCode}
-                        onChange={(event) => onEdit(account.userId, { permissionCode: event.target.value })}
-                      >
-                        {permissions.map((permission) => (
-                          <option key={permission.code} value={permission.code}>
-                            {permission.code}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        className="select dense effect-select"
-                        value={edit.permissionEffect}
-                        onChange={(event) => onEdit(account.userId, { permissionEffect: event.target.value as 'GRANT' | 'DENY' })}
-                      >
-                        <option value="GRANT">GRANT</option>
-                        <option value="DENY">DENY</option>
-                      </select>
-                    </div>
-                    <div className="table-actions">
-                      <button className="btn table-btn primary" type="button" onClick={() => onSavePermission(account)} disabled={!edit.permissionCode}>
-                        Lưu quyền
-                      </button>
-                      <button className="btn table-btn" type="button" onClick={() => onRemovePermission(account)} disabled={!edit.permissionCode}>
-                        Xoá override
-                      </button>
-                    </div>
-                    <small>{account.permissions.length} permission hiệu lực</small>
-                  </div>
-                </td>
-                <td>
-                  <span className="mono user-id-text">{account.userId}</span>
-                </td>
-              </tr>
-            )
-          })}
+          {accounts.map((account, index) => (
+            <tr key={account.userId}>
+              <td className="row-number">{page * size + index + 1}</td>
+              <td>
+                <div className="member-cell">
+                  <span className="member-avatar">{getInitials(account.name)}</span>
+                  <span>
+                    <strong>{account.name}</strong>
+                    <small>{account.email}</small>
+                  </span>
+                </div>
+              </td>
+              <td>
+                <div className="role-stack">
+                  {account.roles.length ? account.roles.map((role) => <span className="badge info" key={role}>{role}</span>) : <span className="muted">Chưa có role</span>}
+                </div>
+              </td>
+              <td>
+                <span className={account.isActive ? 'badge success' : 'badge danger'}>{account.isActive ? 'Đang hoạt động' : 'Khoá đăng nhập'}</span>
+                <span className={account.isAccountVerified ? 'badge success account-verified' : 'badge info account-verified'}>
+                  {account.isAccountVerified ? 'Đã kích hoạt' : 'Chờ invite'}
+                </span>
+              </td>
+              <td>
+                <strong>{account.permissions.length}</strong>
+                <small className="table-muted">permission hiệu lực</small>
+              </td>
+              <td>
+                <button className="btn table-btn" type="button" onClick={() => onEdit(account)}>
+                  <Edit3 />
+                  Sửa
+                </button>
+              </td>
+            </tr>
+          ))}
         </tbody>
       </table>
+    </div>
+  )
+}
+
+function PaginationBar({
+  page,
+  totalPages,
+  totalElements,
+  pageStart,
+  pageEnd,
+  onPrevious,
+  onNext,
+}: {
+  page: number
+  totalPages: number
+  totalElements: number
+  pageStart: number
+  pageEnd: number
+  onPrevious: () => void
+  onNext: () => void
+}) {
+  if (totalElements === 0) return null
+
+  return (
+    <div className="pagination-bar">
+      <span>
+        Hiển thị {pageStart}-{pageEnd} / {totalElements} thành viên
+      </span>
+      <div className="pagination-actions">
+        <button className="btn table-btn" type="button" onClick={onPrevious} disabled={page <= 0}>
+          <ChevronLeft />
+          Trước
+        </button>
+        <strong>
+          Trang {page + 1} / {Math.max(totalPages, 1)}
+        </strong>
+        <button className="btn table-btn" type="button" onClick={onNext} disabled={totalPages === 0 || page + 1 >= totalPages}>
+          Sau
+          <ChevronRight />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function AccountActionDialog({
+  activeDialog,
+  roles,
+  name,
+  email,
+  provisionRole,
+  resendEmail,
+  onClose,
+  onNameChange,
+  onEmailChange,
+  onProvisionRoleChange,
+  onResendEmailChange,
+  onProvision,
+  onResend,
+}: {
+  activeDialog: AccountDialog
+  roles: Role[]
+  name: string
+  email: string
+  provisionRole: string
+  resendEmail: string
+  onClose: () => void
+  onNameChange: (next: string) => void
+  onEmailChange: (next: string) => void
+  onProvisionRoleChange: (next: string) => void
+  onResendEmailChange: (next: string) => void
+  onProvision: (event: FormEvent<HTMLFormElement>) => void
+  onResend: (event: FormEvent<HTMLFormElement>) => void
+}) {
+  if (!activeDialog) return null
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section
+        className="modal-panel account-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="account-dialog-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="modal-head">
+          <div>
+            <h2 id="account-dialog-title">{activeDialog === 'provision' ? 'Cấp tài khoản' : 'Gửi lại invite'}</h2>
+            <p>{activeDialog === 'provision' ? 'Tạo tài khoản nội bộ và gửi link invite qua email.' : 'Cấp lại token invite mới cho tài khoản đã được tạo.'}</p>
+          </div>
+          <button className="icon-btn modal-close" type="button" onClick={onClose} aria-label="Đóng popup">
+            <X />
+          </button>
+        </div>
+
+        {activeDialog === 'provision' ? (
+          <form className="form-stack" onSubmit={onProvision}>
+            <label className="field">
+              <span>Họ tên</span>
+              <input className="input" value={name} onChange={(event) => onNameChange(event.target.value)} required autoFocus />
+            </label>
+            <label className="field">
+              <span>Email</span>
+              <input className="input" type="email" value={email} onChange={(event) => onEmailChange(event.target.value)} required />
+            </label>
+            <RoleSelect roles={roles} value={provisionRole} onChange={onProvisionRoleChange} />
+            <button className="btn primary full" type="submit">
+              <UserPlus />
+              Cấp tài khoản
+            </button>
+          </form>
+        ) : (
+          <form className="form-stack" onSubmit={onResend}>
+            <label className="field">
+              <span>Email</span>
+              <input className="input" type="email" value={resendEmail} onChange={(event) => onResendEmailChange(event.target.value)} required autoFocus />
+            </label>
+            <button className="btn brand full" type="submit">
+              <Send />
+              Gửi lại invite
+            </button>
+          </form>
+        )}
+      </section>
+    </div>
+  )
+}
+
+function EditAccountDialog({
+  account,
+  roles,
+  permissions,
+  draft,
+  onDraftChange,
+  onClose,
+  onSaveAccount,
+  onSavePermission,
+  onRemovePermission,
+}: {
+  account: AccountResponse | null
+  roles: Role[]
+  permissions: Permission[]
+  draft: EditDraft
+  onDraftChange: (patch: Partial<EditDraft>) => void
+  onClose: () => void
+  onSaveAccount: (event: FormEvent<HTMLFormElement>) => void
+  onSavePermission: () => void
+  onRemovePermission: () => void
+}) {
+  const permissionOptions = useMemo(() => permissions.filter((permission) => permission.isActive), [permissions])
+  const [isPermissionOverrideOpen, setPermissionOverrideOpen] = useState(false)
+
+  useEffect(() => {
+    setPermissionOverrideOpen(false)
+  }, [account?.userId])
+
+  if (!account) return null
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section
+        className="modal-panel account-modal edit-account-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="edit-account-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="modal-head">
+          <div>
+            <h2 id="edit-account-title">Sửa thành viên</h2>
+            <p>Cập nhật role và trạng thái đăng nhập. Permission mặc định sẽ đi theo role.</p>
+          </div>
+          <button className="icon-btn modal-close" type="button" onClick={onClose} aria-label="Đóng popup">
+            <X />
+          </button>
+        </div>
+
+        <div className="edit-account-summary">
+          <span className="member-avatar">{getInitials(account.name)}</span>
+          <span>
+            <strong>{account.name}</strong>
+            <small>{account.email}</small>
+          </span>
+        </div>
+
+        <form className="form-stack" onSubmit={onSaveAccount}>
+          <RoleSelect roles={roles} value={draft.roleCode} onChange={(roleCode) => onDraftChange({ roleCode })} />
+          <label className="field">
+            <span>Trạng thái đăng nhập</span>
+            <select className="select" value={draft.activeValue} onChange={(event) => onDraftChange({ activeValue: event.target.value })}>
+              <option value="true">Mở đăng nhập</option>
+              <option value="false">Khoá đăng nhập</option>
+            </select>
+          </label>
+          <button className="btn primary full" type="submit" disabled={!draft.roleCode}>
+            <Save />
+            Lưu role & trạng thái
+          </button>
+        </form>
+
+        <div className="permission-action-box">
+          <div>
+            <strong>Permission riêng</strong>
+            <small>Tuỳ chọn mở rộng, chỉ dùng khi cần override ngoài permission mặc định của role.</small>
+          </div>
+          <button className="btn table-btn" type="button" onClick={() => setPermissionOverrideOpen((current) => !current)}>
+            <KeyRound />
+            {isPermissionOverrideOpen ? 'Ẩn override' : 'Cấp permission riêng'}
+          </button>
+        </div>
+
+        {isPermissionOverrideOpen ? (
+          <div className="permission-edit-box">
+            <div>
+              <h3>Override permission</h3>
+              <p>Grant hoặc deny một quyền riêng cho user này, nằm trên role permission.</p>
+            </div>
+            <div className="permission-edit-grid">
+              <label className="field">
+                <span>Permission</span>
+                <select className="select" value={draft.permissionCode} onChange={(event) => onDraftChange({ permissionCode: event.target.value })}>
+                  <option value="">Chọn permission</option>
+                  {permissionOptions.map((permission) => (
+                    <option key={permission.code} value={permission.code}>
+                      {permission.code}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>Hiệu lực</span>
+                <select
+                  className="select"
+                  value={draft.permissionEffect}
+                  onChange={(event) => onDraftChange({ permissionEffect: event.target.value as 'GRANT' | 'DENY' })}
+                >
+                  <option value="GRANT">GRANT</option>
+                  <option value="DENY">DENY</option>
+                </select>
+              </label>
+            </div>
+            <div className="form-actions">
+              <button className="btn brand" type="button" onClick={onSavePermission} disabled={!draft.permissionCode}>
+                <Save />
+                Lưu
+              </button>
+              <button className="btn" type="button" onClick={onRemovePermission} disabled={!draft.permissionCode}>
+                Xoá
+              </button>
+            </div>
+            <small>{account.permissions.length} permission hiệu lực hiện tại</small>
+          </div>
+        ) : null}
+      </section>
     </div>
   )
 }
@@ -472,7 +630,7 @@ function RoleSelect({
     <label className="field">
       <span>Role</span>
       <select className="select" value={value} onChange={(event) => onChange(event.target.value)}>
-        <option value="">Chọn role mặc định</option>
+        <option value="">Chọn role</option>
         {roles.map((role) => (
           <option key={role.code} value={role.code}>
             {role.code} - {role.name}
@@ -483,6 +641,15 @@ function RoleSelect({
   )
 }
 
+function createEditDraft(account: AccountResponse | null, permissions: Permission[]): EditDraft {
+  return {
+    roleCode: account?.roles[0] || '',
+    activeValue: String(account?.isActive ?? true),
+    permissionCode: permissions.find((permission) => permission.isActive)?.code || permissions[0]?.code || '',
+    permissionEffect: 'GRANT',
+  }
+}
+
 function getInitials(name: string) {
   return name
     .trim()
@@ -490,17 +657,4 @@ function getInitials(name: string) {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() || '')
     .join('')
-}
-
-function mergeSingleRowEdit(
-  current: AccountRowEdit | undefined,
-  patch: Partial<AccountRowEdit>,
-  fallbackPermission: string,
-): AccountRowEdit {
-  return {
-    roleCode: patch.roleCode ?? current?.roleCode ?? '',
-    activeValue: patch.activeValue ?? current?.activeValue ?? 'true',
-    permissionCode: patch.permissionCode ?? current?.permissionCode ?? fallbackPermission,
-    permissionEffect: patch.permissionEffect ?? current?.permissionEffect ?? 'GRANT',
-  }
 }

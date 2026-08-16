@@ -7,6 +7,7 @@ import com.smartlab.dto.request.AssignRolesRequest;
 import com.smartlab.dto.response.ErrorResponse;
 import com.smartlab.dto.response.InvitationResponse;
 import com.smartlab.dto.request.PermissionOverrideRequest;
+import com.smartlab.dto.response.PageResponse;
 import com.smartlab.service.AdminAccountService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -31,8 +32,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
-
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/admin/accounts")
@@ -45,16 +44,21 @@ public class AdminAccountController {
     @PreAuthorize("hasAuthority('USER_MANAGE')")
     @Operation(
             summary = "List lab accounts",
-            description = "Returns every account in the lab so admins can manage members from a table. Required permission: USER_MANAGE."
+            description = "Returns paginated lab accounts so admins can manage members from a table. Required permission: USER_MANAGE."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Accounts returned",
-                    content = @Content(schema = @Schema(implementation = AccountResponse.class))),
+                    content = @Content(schema = @Schema(implementation = PageResponse.class))),
             @ApiResponse(responseCode = "403", description = "Missing USER_MANAGE permission",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
-    public List<AccountResponse> listAccounts() {
-        return adminAccountService.listAccounts();
+    public PageResponse<AccountResponse> listAccounts(
+            @Parameter(description = "Zero-based page index", example = "0")
+            @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "Page size, capped at 50", example = "10")
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        return adminAccountService.listAccounts(page, size);
     }
 
     @PostMapping

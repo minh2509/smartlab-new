@@ -25,8 +25,16 @@ public class CreatePostRequest {
     @Positive
     private Long categoryId;
 
-    @AssertTrue(message = "PROJECT visibility is not available when creating a post")
-    public boolean isCreateVisibilityAllowed() {
-        return visibility == null || visibility != PostVisibility.PROJECT;
+    @Positive
+    private Long projectId;
+
+    @AssertTrue(message = "PROJECT visibility requires projectId")
+    public boolean isProjectAssociationValid() {
+        return visibility != PostVisibility.PROJECT || projectId != null;
+    }
+
+    @AssertTrue(message = "PUBLIC and LAB visibility must not include projectId")
+    public boolean isNonProjectVisibilityAssociationValid() {
+        return visibility == PostVisibility.PROJECT || projectId == null;
     }
 }

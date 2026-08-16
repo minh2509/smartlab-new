@@ -5,7 +5,6 @@ import com.smartlab.entity.PostEntity;
 import com.smartlab.entity.UserEntity;
 import com.smartlab.enums.PostStatus;
 import com.smartlab.enums.PostVisibility;
-import com.smartlab.enums.ReviewDecision;
 import com.smartlab.repo.PostRepository;
 import com.smartlab.repo.UserRepository;
 import com.smartlab.service.PostService;
@@ -209,7 +208,7 @@ class PostDirectPublishPostgresIntegrationTest {
                 insert into tbl_user (
                     user_id, name, email, password, is_active,
                     is_account_verified, reset_otp_expire_at
-                ) values (?, ?, ?, ?, true, true, 0)
+                ) values (?, ?, ?, ?, true, true, NULL)
                 returning id
                 """, Long.class, userId, "T11A4 " + tag, email, "t11a4-integration-only");
         assertThat(id).isNotNull();
@@ -241,13 +240,15 @@ class PostDirectPublishPostgresIntegrationTest {
             );
             if (targetStatus == PostStatus.APPROVED) {
                 post.submitForReview(createdAt.plusSeconds(30));
-                post.applyReviewDecision(ReviewDecision.APPROVED, createdAt.plusSeconds(60));
             }
-            if (post.getStatus() != targetStatus) {
+            if (post.getStatus() != targetStatus && targetStatus != PostStatus.APPROVED) {
                 throw new IllegalArgumentException("Unsupported fixture status: " + targetStatus);
             }
             return postRepository.saveAndFlush(post).getId();
         });
+        if (targetStatus == PostStatus.APPROVED) {
+            jdbc.update("update posts set status = 'APPROVED' where id = ?", id);
+        }
         assertThat(id).isNotNull();
         postIds.add(id);
         return new PostFixture(id);
