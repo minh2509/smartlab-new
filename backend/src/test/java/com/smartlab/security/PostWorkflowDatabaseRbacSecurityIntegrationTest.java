@@ -32,6 +32,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
@@ -72,7 +73,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class PostWorkflowDatabaseRbacSecurityIntegrationTest {
 
-    private static final String TARGET_DATABASE = "smartlab_rich_editor_deploy_rehearsal";
     private static final String MARKER = "t13-rbac-acceptance";
     private static final String ADMIN_EMAIL = "t13-admin-rbac-acceptance@example.test";
     private static final String LEADER_EMAIL = "t13-leader-rbac-acceptance@example.test";
@@ -111,6 +111,9 @@ class PostWorkflowDatabaseRbacSecurityIntegrationTest {
     @MockitoBean
     private PostService postService;
 
+    @Value("${smartlab.test.target-database:smartlab_rich_editor_deploy_rehearsal}")
+    private String targetDatabase;
+
     private final Map<String, FixtureActor> actors = new LinkedHashMap<>();
     private final List<Long> sessionIds = new ArrayList<>();
     private final List<Long> userRoleIds = new ArrayList<>();
@@ -121,7 +124,7 @@ class PostWorkflowDatabaseRbacSecurityIntegrationTest {
 
     @BeforeAll
     void createCommittedRbacSessionFixtures() {
-        assertThat(currentDatabase()).isEqualTo(TARGET_DATABASE);
+        assertThat(currentDatabase()).isEqualTo(targetDatabase);
         assertThat(countFixtureUsers()).isZero();
         assertPersistedT12Policy();
 
@@ -145,7 +148,7 @@ class PostWorkflowDatabaseRbacSecurityIntegrationTest {
 
     @AfterAll
     void cleanFixturesAndVerifyPersistentState() {
-        if (!TARGET_DATABASE.equals(currentDatabase())) {
+        if (!targetDatabase.equals(currentDatabase())) {
             return;
         }
 
@@ -160,10 +163,10 @@ class PostWorkflowDatabaseRbacSecurityIntegrationTest {
     @Test
     @Order(1)
     void databaseIdentityAndPersistedT12PolicyAreExact() {
-        assertThat(currentDatabase()).isEqualTo(TARGET_DATABASE);
+        assertThat(currentDatabase()).isEqualTo(targetDatabase);
         assertPersistedT12Policy();
-        assertThat(baseline.permissions()).isEqualTo(16);
-        assertThat(baseline.rolePermissions()).isEqualTo(31);
+        assertThat(baseline.permissions()).isEqualTo(21);
+        assertThat(baseline.rolePermissions()).isEqualTo(42);
     }
 
     @Test

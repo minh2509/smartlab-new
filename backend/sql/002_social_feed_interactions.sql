@@ -37,10 +37,11 @@ CREATE INDEX IF NOT EXISTS idx_post_comments_author_active
   ON post_comments(author_user_id, post_id)
   WHERE deleted_at IS NULL;
 
--- The local and deployed SmartLab application role uses explicit table grants.
+-- 002 is applied after 001, so grant only its own social-feed objects.
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'smartlab_user') THEN
+    GRANT USAGE ON SCHEMA public TO smartlab_user;
     GRANT SELECT, INSERT, UPDATE, DELETE ON post_reactions, post_comments TO smartlab_user;
     GRANT USAGE, SELECT ON SEQUENCE post_reactions_id_seq, post_comments_id_seq TO smartlab_user;
   END IF;

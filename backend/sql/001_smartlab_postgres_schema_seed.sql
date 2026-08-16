@@ -295,19 +295,21 @@ CREATE TABLE IF NOT EXISTS posts (
   author_user_id BIGINT REFERENCES tbl_user(id) ON DELETE SET NULL,
   category_id BIGINT REFERENCES content_categories(id) ON DELETE SET NULL,
   project_id BIGINT REFERENCES projects(id) ON DELETE SET NULL,
-  title VARCHAR(255) NOT NULL,
-  summary TEXT,
+  title VARCHAR(250) NOT NULL,
+  slug VARCHAR(260) NOT NULL,
+  excerpt VARCHAR(500),
   content_json JSONB NOT NULL DEFAULT '{}'::jsonb,
   content_html TEXT,
   cover_file_id BIGINT REFERENCES files(id) ON DELETE SET NULL,
   visibility VARCHAR(20) NOT NULL DEFAULT 'LAB',
-  status VARCHAR(20) NOT NULL DEFAULT 'DRAFT',
+  status VARCHAR(30) NOT NULL DEFAULT 'DRAFT',
   published_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   deleted_at TIMESTAMPTZ,
+  CONSTRAINT uk_posts_slug UNIQUE (slug),
   CONSTRAINT chk_posts_visibility CHECK (visibility IN ('PUBLIC', 'LAB', 'PROJECT')),
-  CONSTRAINT chk_posts_status CHECK (status IN ('DRAFT', 'PENDING_REVIEW', 'PUBLISHED', 'REJECTED', 'ARCHIVED'))
+  CONSTRAINT chk_posts_status CHECK (status IN ('DRAFT', 'PENDING_REVIEW', 'REVISION_REQUIRED', 'APPROVED', 'PUBLISHED', 'REJECTED'))
 );
 
 CREATE TABLE IF NOT EXISTS post_reviews (
@@ -315,18 +317,25 @@ CREATE TABLE IF NOT EXISTS post_reviews (
   post_id BIGINT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
   reviewer_user_id BIGINT REFERENCES tbl_user(id) ON DELETE SET NULL,
   decision VARCHAR(20) NOT NULL,
-  reject_reason TEXT,
-  reviewed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CONSTRAINT chk_post_reviews_decision CHECK (decision IN ('APPROVED', 'REJECTED')),
-  CONSTRAINT chk_post_reviews_reject_reason CHECK (decision <> 'REJECTED' OR reject_reason IS NOT NULL)
+  reason VARCHAR(1000),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT chk_post_reviews_decision CHECK (decision IN ('APPROVED', 'REVISION_REQUIRED', 'REJECTED')),
+  CONSTRAINT chk_post_reviews_rejected_reason CHECK (
+    decision <> 'REJECTED' OR (reason IS NOT NULL AND length(btrim(reason)) > 0)
+  )
 );
 
 CREATE TABLE IF NOT EXISTS notifications (
   id BIGSERIAL PRIMARY KEY,
   recipient_user_id BIGINT NOT NULL REFERENCES tbl_user(id) ON DELETE CASCADE,
-  message VARCHAR(500) NOT NULL,
-  link_url VARCHAR(500),
+  actor_user_id BIGINT,
+  type VARCHAR(100) NOT NULL,
+  message VARCHAR(1000) NOT NULL,
+  related_type VARCHAR(80),
+  related_id BIGINT,
+  target_url VARCHAR(500),
   is_read BOOLEAN NOT NULL DEFAULT FALSE,
+  deleted_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -358,13 +367,19 @@ CREATE TABLE IF NOT EXISTS events (
   project_id BIGINT REFERENCES projects(id) ON DELETE SET NULL,
   title VARCHAR(255) NOT NULL,
   description TEXT,
+  mode VARCHAR(20) NOT NULL DEFAULT 'IN_PERSON',
   location VARCHAR(255),
+  meeting_url VARCHAR(2048),
   start_at TIMESTAMPTZ NOT NULL,
   end_at TIMESTAMPTZ,
+  status VARCHAR(20) NOT NULL DEFAULT 'SCHEDULED',
   visibility VARCHAR(20) NOT NULL DEFAULT 'LAB',
   created_by_user_id BIGINT REFERENCES tbl_user(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ,
+  CONSTRAINT chk_events_mode CHECK (mode IN ('IN_PERSON', 'ONLINE')),
+  CONSTRAINT chk_events_status CHECK (status IN ('SCHEDULED', 'CANCELLED', 'COMPLETED')),
   CONSTRAINT chk_events_visibility CHECK (visibility IN ('PUBLIC', 'LAB', 'PROJECT'))
 );
 
@@ -380,6 +395,169 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   user_agent TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Current-lineage upgrades. These blocks intentionally target only shapes
+-- produced by earlier revisions of this 001 script; they are not a migration
+-- path for the unrelated legacy smartlab_db lineage.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'posts' AND column_name = 'summary') THEN
+    ALTER TABLE posts ADD COLUMN IF NOT EXISTS excerpt TEXT;
+    UPDATE posts SET excerpt = summary WHERE excerpt IS NULL AND summary IS NOT NULL;
+    ALTER TABLE posts DROP COLUMN summary;
+  END IF;
+
+  ALTER TABLE posts ADD COLUMN IF NOT EXISTS slug VARCHAR(260);
+  IF EXISTS (
+    SELECT 1
+    FROM posts missing_slug
+    JOIN posts existing_slug
+      ON existing_slug.slug = 'post-' || missing_slug.id
+     AND existing_slug.id <> missing_slug.id
+    WHERE missing_slug.slug IS NULL OR btrim(missing_slug.slug) = ''
+  ) THEN
+    RAISE EXCEPTION 'Cannot backfill posts.slug: generated post-<id> value collides with an existing slug';
+  END IF;
+  UPDATE posts
+  SET slug = 'post-' || id
+  WHERE slug IS NULL OR btrim(slug) = '';
+  ALTER TABLE posts ALTER COLUMN slug SET NOT NULL;
+
+  IF EXISTS (
+    SELECT 1
+    FROM posts
+    GROUP BY slug
+    HAVING count(*) > 1
+  ) THEN
+    RAISE EXCEPTION 'Cannot enforce UNIQUE(posts.slug): duplicate legacy slugs require manual resolution';
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM posts WHERE char_length(title) > 250) THEN
+    RAISE EXCEPTION 'Cannot narrow posts.title to VARCHAR(250): legacy data exceeds the runtime contract';
+  END IF;
+  ALTER TABLE posts ALTER COLUMN title TYPE VARCHAR(250);
+
+  IF EXISTS (SELECT 1 FROM posts WHERE char_length(excerpt) > 500) THEN
+    RAISE EXCEPTION 'Cannot narrow posts.excerpt to VARCHAR(500): legacy data exceeds the runtime contract';
+  END IF;
+  ALTER TABLE posts ALTER COLUMN excerpt TYPE VARCHAR(500);
+  ALTER TABLE posts ALTER COLUMN status TYPE VARCHAR(30);
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint constraint_metadata
+    WHERE constraint_metadata.conrelid = 'posts'::regclass
+      AND constraint_metadata.contype = 'u'
+      AND constraint_metadata.conkey = ARRAY[(
+        SELECT attribute.attnum
+        FROM pg_attribute attribute
+        WHERE attribute.attrelid = 'posts'::regclass
+          AND attribute.attname = 'slug'
+          AND NOT attribute.attisdropped
+      )]::smallint[]
+  ) THEN
+    ALTER TABLE posts ADD CONSTRAINT uk_posts_slug UNIQUE (slug);
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM posts
+    WHERE status IS NULL
+       OR status NOT IN ('DRAFT', 'PENDING_REVIEW', 'REVISION_REQUIRED', 'APPROVED', 'PUBLISHED', 'REJECTED')
+  ) THEN
+    RAISE EXCEPTION 'Cannot install canonical posts status constraint: legacy rows contain statuses outside PostStatus (for example ARCHIVED)';
+  END IF;
+  ALTER TABLE posts DROP CONSTRAINT IF EXISTS chk_posts_status;
+  ALTER TABLE posts ADD CONSTRAINT chk_posts_status CHECK (
+    status IN ('DRAFT', 'PENDING_REVIEW', 'REVISION_REQUIRED', 'APPROVED', 'PUBLISHED', 'REJECTED')
+  );
+END $$;
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'post_reviews' AND column_name = 'reject_reason') THEN
+    ALTER TABLE post_reviews ADD COLUMN IF NOT EXISTS reason TEXT;
+    UPDATE post_reviews SET reason = reject_reason WHERE reason IS NULL AND reject_reason IS NOT NULL;
+    ALTER TABLE post_reviews DROP COLUMN reject_reason;
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'post_reviews' AND column_name = 'reviewed_at') THEN
+    ALTER TABLE post_reviews ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;
+    UPDATE post_reviews SET created_at = reviewed_at WHERE created_at IS NULL;
+    ALTER TABLE post_reviews DROP COLUMN reviewed_at;
+  END IF;
+
+  UPDATE post_reviews SET created_at = now() WHERE created_at IS NULL;
+  ALTER TABLE post_reviews ALTER COLUMN created_at SET NOT NULL;
+  ALTER TABLE post_reviews ALTER COLUMN created_at SET DEFAULT now();
+  IF EXISTS (SELECT 1 FROM post_reviews WHERE char_length(reason) > 1000) THEN
+    RAISE EXCEPTION 'Cannot narrow post_reviews.reason to VARCHAR(1000): legacy data exceeds the runtime contract';
+  END IF;
+  ALTER TABLE post_reviews ALTER COLUMN reason TYPE VARCHAR(1000);
+
+  IF EXISTS (
+    SELECT 1
+    FROM post_reviews
+    WHERE decision NOT IN ('APPROVED', 'REVISION_REQUIRED', 'REJECTED')
+  ) THEN
+    RAISE EXCEPTION 'Cannot install canonical post review decision constraint: legacy rows contain unsupported decisions';
+  END IF;
+  IF EXISTS (
+    SELECT 1
+    FROM post_reviews
+    WHERE decision = 'REJECTED' AND (reason IS NULL OR btrim(reason) = '')
+  ) THEN
+    RAISE EXCEPTION 'Cannot install canonical rejected-review constraint: rejected legacy rows require a non-blank reason';
+  END IF;
+  ALTER TABLE post_reviews DROP CONSTRAINT IF EXISTS chk_post_reviews_decision;
+  ALTER TABLE post_reviews DROP CONSTRAINT IF EXISTS chk_post_reviews_reject_reason;
+  ALTER TABLE post_reviews DROP CONSTRAINT IF EXISTS chk_post_reviews_rejected_reason;
+  ALTER TABLE post_reviews ADD CONSTRAINT chk_post_reviews_decision CHECK (
+    decision IN ('APPROVED', 'REVISION_REQUIRED', 'REJECTED')
+  );
+  ALTER TABLE post_reviews ADD CONSTRAINT chk_post_reviews_rejected_reason CHECK (
+    decision <> 'REJECTED' OR (reason IS NOT NULL AND length(btrim(reason)) > 0)
+  );
+END $$;
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'notifications' AND column_name = 'link_url') THEN
+    ALTER TABLE notifications ADD COLUMN IF NOT EXISTS target_url VARCHAR(500);
+    UPDATE notifications SET target_url = link_url WHERE target_url IS NULL AND link_url IS NOT NULL;
+    ALTER TABLE notifications DROP COLUMN link_url;
+  END IF;
+
+  ALTER TABLE notifications ADD COLUMN IF NOT EXISTS actor_user_id BIGINT;
+  ALTER TABLE notifications ADD COLUMN IF NOT EXISTS type VARCHAR(100);
+  ALTER TABLE notifications ADD COLUMN IF NOT EXISTS related_type VARCHAR(80);
+  ALTER TABLE notifications ADD COLUMN IF NOT EXISTS related_id BIGINT;
+  ALTER TABLE notifications ADD COLUMN IF NOT EXISTS target_url VARCHAR(500);
+  ALTER TABLE notifications ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+  UPDATE notifications SET type = 'LEGACY' WHERE type IS NULL OR btrim(type) = '';
+  ALTER TABLE notifications ALTER COLUMN type SET NOT NULL;
+  ALTER TABLE notifications ALTER COLUMN message TYPE VARCHAR(1000);
+END $$;
+
+DO $$
+BEGIN
+  ALTER TABLE events ADD COLUMN IF NOT EXISTS mode VARCHAR(20);
+  ALTER TABLE events ADD COLUMN IF NOT EXISTS meeting_url VARCHAR(2048);
+  ALTER TABLE events ADD COLUMN IF NOT EXISTS status VARCHAR(20);
+  ALTER TABLE events ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+  UPDATE events SET mode = 'IN_PERSON' WHERE mode IS NULL;
+  UPDATE events SET status = 'SCHEDULED' WHERE status IS NULL;
+  ALTER TABLE events ALTER COLUMN mode SET NOT NULL;
+  ALTER TABLE events ALTER COLUMN mode SET DEFAULT 'IN_PERSON';
+  ALTER TABLE events ALTER COLUMN status SET NOT NULL;
+  ALTER TABLE events ALTER COLUMN status SET DEFAULT 'SCHEDULED';
+  ALTER TABLE events DROP CONSTRAINT IF EXISTS chk_events_mode;
+  ALTER TABLE events DROP CONSTRAINT IF EXISTS chk_events_status;
+  ALTER TABLE events DROP CONSTRAINT IF EXISTS chk_events_visibility;
+  ALTER TABLE events ADD CONSTRAINT chk_events_mode CHECK (mode IN ('IN_PERSON', 'ONLINE'));
+  ALTER TABLE events ADD CONSTRAINT chk_events_status CHECK (status IN ('SCHEDULED', 'CANCELLED', 'COMPLETED'));
+  ALTER TABLE events ADD CONSTRAINT chk_events_visibility CHECK (visibility IN ('PUBLIC', 'LAB', 'PROJECT'));
+END $$;
 
 INSERT INTO roles (code, name, description, is_system, is_active)
 VALUES
@@ -404,7 +582,18 @@ VALUES
   ('PROJECT_MANAGE', 'Quản lý dự án', 'PROJECT', 'Tạo và cập nhật dự án', TRUE),
   ('TASK_READ', 'Xem công việc', 'TASK', 'Xem công việc trong dự án', TRUE),
   ('TASK_MANAGE', 'Quản lý công việc', 'TASK', 'Tạo và cập nhật công việc trong dự án', TRUE),
-  ('POST_MANAGE', 'Quản lý bài viết', 'POST', 'Tạo, duyệt và xuất bản bài viết', TRUE)
+  ('POST_MANAGE', 'Quản lý bài viết', 'POST', 'Quản lý nội dung bài viết', TRUE),
+  ('FILE_UPLOAD', 'Tải tệp lên', 'FILE', 'Tải tệp lên SmartLab', TRUE),
+  ('FILE_DELETE', 'Xoá tệp', 'FILE', 'Xoá tệp do người dùng quản lý', TRUE),
+  ('PROFILE_UPDATE', 'Cập nhật hồ sơ cá nhân', 'PROFILE', 'Cập nhật thông tin hồ sơ của chính mình', TRUE),
+  ('MEMBER_MANAGE', 'Quản lý thành viên', 'MEMBER', 'Quản lý hồ sơ và trạng thái thành viên', TRUE),
+  ('RESEARCH_FIELD_MANAGE', 'Quản lý lĩnh vực nghiên cứu', 'RESEARCH_FIELD', 'Quản lý danh mục lĩnh vực nghiên cứu', TRUE),
+  ('posts.submit', 'Submit Post', 'POST', 'Gửi bài viết để duyệt', TRUE),
+  ('posts.review', 'Review Post', 'POST', 'Duyệt bài viết đang chờ duyệt', TRUE),
+  ('posts.publish', 'Publish Post', 'POST', 'Xuất bản bài viết đã được phê duyệt', TRUE),
+  ('posts.publish.direct', 'Direct Publish Post', 'POST', 'Xuất bản bài viết trực tiếp', TRUE),
+  ('notifications.read_own', 'Xem thông báo cá nhân', 'NOTIFICATION', 'Xem thông báo của chính mình', TRUE),
+  ('notifications.mark_read_own', 'Đánh dấu đã đọc thông báo', 'NOTIFICATION', 'Đánh dấu thông báo của chính mình là đã đọc', TRUE)
 ON CONFLICT (code) DO UPDATE
 SET name = EXCLUDED.name,
     module = EXCLUDED.module,
@@ -412,27 +601,58 @@ SET name = EXCLUDED.name,
     is_active = EXCLUDED.is_active,
     updated_at = now();
 
-INSERT INTO role_permissions (role_id, permission_id)
-SELECT r.id, p.id
-FROM roles r
-CROSS JOIN permissions p
-WHERE r.code = 'ADMIN'
-ON CONFLICT (role_id, permission_id) DO NOTHING;
+-- Fresh bootstrap creates 20 ADMIN, 12 LEADER, and 10 MEMBER mappings. Re-runs
+-- add missing canonical grants without removing operator-managed grants.
 
 INSERT INTO role_permissions (role_id, permission_id)
 SELECT r.id, p.id
-FROM roles r
-JOIN permissions p ON p.code IN (
-  'PROFILE_READ', 'DASHBOARD_READ', 'PROJECT_READ', 'PROJECT_MANAGE', 'TASK_READ', 'TASK_MANAGE'
-)
-WHERE r.code = 'LEADER'
-ON CONFLICT (role_id, permission_id) DO NOTHING;
-
-INSERT INTO role_permissions (role_id, permission_id)
-SELECT r.id, p.id
-FROM roles r
-JOIN permissions p ON p.code IN ('PROFILE_READ', 'DASHBOARD_READ', 'PROJECT_READ', 'TASK_READ')
-WHERE r.code = 'MEMBER'
+FROM (
+  VALUES
+    ('ADMIN', 'USER_MANAGE'),
+    ('ADMIN', 'ROLE_MANAGE'),
+    ('ADMIN', 'PERMISSION_MANAGE'),
+    ('ADMIN', 'PROFILE_READ'),
+    ('ADMIN', 'PROFILE_UPDATE'),
+    ('ADMIN', 'DASHBOARD_READ'),
+    ('ADMIN', 'PROJECT_READ'),
+    ('ADMIN', 'PROJECT_MANAGE'),
+    ('ADMIN', 'TASK_READ'),
+    ('ADMIN', 'TASK_MANAGE'),
+    ('ADMIN', 'POST_MANAGE'),
+    ('ADMIN', 'FILE_UPLOAD'),
+    ('ADMIN', 'FILE_DELETE'),
+    ('ADMIN', 'MEMBER_MANAGE'),
+    ('ADMIN', 'RESEARCH_FIELD_MANAGE'),
+    ('ADMIN', 'posts.review'),
+    ('ADMIN', 'posts.publish'),
+    ('ADMIN', 'posts.publish.direct'),
+    ('ADMIN', 'notifications.read_own'),
+    ('ADMIN', 'notifications.mark_read_own'),
+    ('LEADER', 'PROFILE_READ'),
+    ('LEADER', 'PROFILE_UPDATE'),
+    ('LEADER', 'DASHBOARD_READ'),
+    ('LEADER', 'PROJECT_READ'),
+    ('LEADER', 'PROJECT_MANAGE'),
+    ('LEADER', 'TASK_READ'),
+    ('LEADER', 'TASK_MANAGE'),
+    ('LEADER', 'FILE_UPLOAD'),
+    ('LEADER', 'FILE_DELETE'),
+    ('LEADER', 'posts.submit'),
+    ('LEADER', 'notifications.read_own'),
+    ('LEADER', 'notifications.mark_read_own'),
+    ('MEMBER', 'PROFILE_READ'),
+    ('MEMBER', 'PROFILE_UPDATE'),
+    ('MEMBER', 'DASHBOARD_READ'),
+    ('MEMBER', 'PROJECT_READ'),
+    ('MEMBER', 'TASK_READ'),
+    ('MEMBER', 'FILE_UPLOAD'),
+    ('MEMBER', 'FILE_DELETE'),
+    ('MEMBER', 'posts.submit'),
+    ('MEMBER', 'notifications.read_own'),
+    ('MEMBER', 'notifications.mark_read_own')
+) AS desired(role_code, permission_code)
+JOIN roles r ON r.code = desired.role_code
+JOIN permissions p ON p.code = desired.permission_code
 ON CONFLICT (role_id, permission_id) DO NOTHING;
 
 INSERT INTO tbl_user (user_id, name, email, password, is_active, is_account_verified, reset_otp_expire_at)
@@ -476,26 +696,30 @@ VALUES
   ('ANNOUNCEMENT', 'Announcement')
 ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name;
 
--- The local and deployed SmartLab application role uses explicit table grants.
+-- The runtime role receives data access only to SmartLab-owned objects; it
+-- receives no schema-changing privilege or access to unrelated public objects.
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'smartlab_user') THEN
     GRANT USAGE ON SCHEMA public TO smartlab_user;
-
     GRANT SELECT, INSERT, UPDATE, DELETE ON
-      tasks,
-      task_assignees,
-      task_attachments,
-      evaluations,
-      evaluation_criteria,
-      evaluation_scores
+      tbl_user, roles, permissions, role_permissions, user_roles,
+      user_permission_overrides, user_sessions, account_invitations,
+      research_fields, projects, files, member_profiles, member_research_fields,
+      project_research_fields, project_members, tasks, task_assignees,
+      task_attachments, evaluations, evaluation_criteria, evaluation_scores,
+      content_categories, posts, post_reviews, notifications, documents,
+      document_versions, events, audit_logs
     TO smartlab_user;
-
     GRANT USAGE, SELECT ON SEQUENCE
-      tasks_id_seq,
-      task_attachments_id_seq,
-      evaluations_id_seq,
-      evaluation_criteria_id_seq
+      tbl_user_id_seq, roles_id_seq, permissions_id_seq, role_permissions_id_seq,
+      user_roles_id_seq, user_permission_overrides_id_seq, user_sessions_id_seq,
+      account_invitations_id_seq, research_fields_id_seq, projects_id_seq,
+      files_id_seq, member_profiles_id_seq, project_members_id_seq, tasks_id_seq,
+      task_attachments_id_seq, evaluations_id_seq, evaluation_criteria_id_seq,
+      content_categories_id_seq, posts_id_seq, post_reviews_id_seq,
+      notifications_id_seq, documents_id_seq, document_versions_id_seq,
+      events_id_seq, audit_logs_id_seq
     TO smartlab_user;
   END IF;
 END
