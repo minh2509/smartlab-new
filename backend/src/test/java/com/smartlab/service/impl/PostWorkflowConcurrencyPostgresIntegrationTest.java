@@ -513,7 +513,7 @@ class PostWorkflowConcurrencyPostgresIntegrationTest {
                 insert into tbl_user (
                     user_id, name, email, password, is_active,
                     is_account_verified, reset_otp_expire_at
-                ) values (?, ?, ?, ?, true, true, 0)
+                ) values (?, ?, ?, ?, true, true, NULL)
                 returning id
                 """, Long.class, userId, "T11 " + tag, email, "t11-integration-only");
         assertThat(id).isNotNull();

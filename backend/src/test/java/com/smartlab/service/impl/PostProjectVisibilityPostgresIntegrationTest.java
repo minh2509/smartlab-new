@@ -95,13 +95,13 @@ class PostProjectVisibilityPostgresIntegrationTest {
     }
 
     private UserFixture insertUser(String label) {
-        String userId = "project-visibility-" + UUID.randomUUID();
+        String userId = "pv-" + UUID.randomUUID().toString().replace("-", "");
         String email = userId + "@example.test";
         userIds.add(userId);
         Long databaseId = jdbc.queryForObject(
                 """
                         insert into tbl_user (user_id, name, email, password, is_active, is_account_verified, reset_otp_expire_at)
-                        values (?, ?, ?, '', true, true, 0)
+                        values (?, ?, ?, '', true, true, NULL)
                         returning id
                         """,
                 Long.class,

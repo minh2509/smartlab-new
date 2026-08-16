@@ -215,7 +215,7 @@ class PostReviewPostgresIntegrationTest {
                 new ReviewPostRequest(ReviewDecision.APPROVED, "rollback evidence")
         )).isInstanceOf(DataIntegrityViolationException.class)
                 .satisfies(exception -> assertThat(postgresConstraint(exception))
-                        .isEqualTo("fk_post_reviews_reviewer"));
+                        .isEqualTo("post_reviews_reviewer_user_id_fkey"));
 
         RollbackSnapshot after = inNewTransaction(() -> jdbc.queryForObject("""
                 select p.status, p.updated_at,
@@ -240,7 +240,7 @@ class PostReviewPostgresIntegrationTest {
                 insert into tbl_user (
                     user_id, name, email, password, is_active,
                     is_account_verified, reset_otp_expire_at
-                ) values (?, ?, ?, ?, true, true, 0)
+                ) values (?, ?, ?, ?, true, true, NULL)
                 returning id
                 """, Long.class,
                 "t10" + marker.replace("-", ""),
