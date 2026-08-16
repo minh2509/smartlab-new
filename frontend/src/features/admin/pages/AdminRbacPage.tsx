@@ -3,7 +3,9 @@ import type { FormEvent } from 'react'
 import { useGSAP } from '@gsap/react'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
-import { ChevronRight, Plus, Power, RefreshCw, Save, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, Plus, Power, RefreshCw, Save, X } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { ApiClientError } from '../../../lib/apiClient'
 import { useAuth } from '../../auth/authContext'
 import { createRole, listPermissions, listRoles, replaceRolePermissions, updateRole } from '../api'
 import type { Permission, Role } from '../../../shared/types/api'
@@ -28,7 +30,8 @@ const emptyRoleForm: RoleForm = { code: '', name: '', description: '', isActive:
 gsap.registerPlugin(useGSAP, ScrollTrigger)
 
 export function AdminRbacPage() {
-  const { token } = useAuth()
+  const navigate = useNavigate()
+  const { token, clearAuth } = useAuth()
   const rbacRootRef = useRef<HTMLElement | null>(null)
   const [roles, setRoles] = useState<Role[]>([])
   const [permissions, setPermissions] = useState<Permission[]>([])
@@ -36,6 +39,7 @@ export function AdminRbacPage() {
   const [rolePermissionCode, setRolePermissionCode] = useState('')
   const [selectedPermissionCodes, setSelectedPermissionCodes] = useState<string[]>([])
   const [isRoleDialogOpen, setRoleDialogOpen] = useState(false)
+  const [isRoleMenuOpen, setRoleMenuOpen] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [isLoading, setLoading] = useState(false)
@@ -51,7 +55,7 @@ export function AdminRbacPage() {
       const media = gsap.matchMedia()
       media.add('(prefers-reduced-motion: no-preference)', () => {
         const context = gsap.context(() => {
-          gsap.from('.rbac-panel-head > *, .rbac-matrix-wrap, .rbac-save-row', {
+          gsap.from('.rbac-matrix-wrap, .rbac-save-row', {
             autoAlpha: 0,
             duration: 0.58,
             ease: 'power3.out',
@@ -97,11 +101,16 @@ export function AdminRbacPage() {
         return nextRole?.code ?? ''
       })
     } catch (err) {
+      if (err instanceof ApiClientError && err.status === 401) {
+        clearAuth()
+        navigate('/login', { replace: true })
+        return
+      }
       setError(err instanceof Error ? err.message : 'Không tải được dữ liệu RBAC')
     } finally {
       setLoading(false)
     }
-  }, [token])
+  }, [clearAuth, navigate, token])
 
   useEffect(() => {
     void loadCatalogs()
@@ -305,39 +314,69 @@ export function AdminRbacPage() {
         </div>
         <form className="form-stack" onSubmit={handleRolePermissionsSubmit}>
           <div className="role-permission-head rbac-command-deck rbac-role-toolbar">
-            <label className="field role-select-field rbac-role-select">
+            <div className="field role-select-field rbac-role-select">
               <span>Role</span>
-              <select className="select" value={rolePermissionCode} onChange={(event) => handleRolePermissionChange(event.target.value)} required>
-                {roles.map((role) => (
-                  <option key={role.code} value={role.code}>
-                    {role.code} - {role.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="role-permission-summary rbac-role-state">
-              <span className={selectedRole?.isActive ? 'badge success' : 'badge danger'}>
-                {selectedRole?.isActive ? 'Đang hoạt động' : 'Đã khoá'}
-              </span>
-              <span className="permission-count-pill">
-                <strong>{selectedPermissionCodes.length}</strong>
-                <small>quyền đang chọn</small>
-              </span>
+              <div className={`custom-role-select${isRoleMenuOpen ? ' open' : ''}`}>
+                <button
+                  className="custom-role-select-trigger"
+                  type="button"
+                  onClick={() => setRoleMenuOpen((current) => !current)}
+                  disabled={!roles.length}
+                >
+                  <span>
+                    <strong>{selectedRole ? `${selectedRole.code} - ${selectedRole.name}` : 'Chọn vai trò'}</strong>
+                    <small>{selectedRole ? (selectedRole.isSystem ? 'Vai trò hệ thống' : 'Vai trò tùy chỉnh') : 'Chưa chọn vai trò'}</small>
+                  </span>
+                  <ChevronDown />
+                </button>
+                {isRoleMenuOpen ? (
+                  <div className="custom-role-select-menu">
+                    {roles.map((role) => (
+                      <button
+                        className={role.code === rolePermissionCode ? 'custom-role-option active' : 'custom-role-option'}
+                        key={role.code}
+                        type="button"
+                        onClick={() => {
+                          handleRolePermissionChange(role.code)
+                          setRoleMenuOpen(false)
+                        }}
+                      >
+                        <span>
+                          <strong>{role.code} - {role.name}</strong>
+                          <small>{role.isSystem ? 'Hệ thống' : 'Tùy chỉnh'} · {role.isActive ? 'Đang hoạt động' : 'Đã khoá'}</small>
+                        </span>
+                        {role.code === rolePermissionCode ? <Check /> : null}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
             </div>
-            <div className="rbac-role-actions">
-              <button className="btn table-btn" type="button" onClick={openSelectedRoleEditor} disabled={!selectedRole}>
-                Sửa role
-              </button>
-              <button
-                className="btn table-btn"
-                type="button"
-                onClick={() => void handleToggleSelectedRoleActive()}
-                disabled={!selectedRole || selectedRole.isSystem}
-                title={selectedRole?.isSystem ? 'Role hệ thống không được khoá' : undefined}
-              >
-                <Power />
-                {selectedRole?.isActive ? 'Khoá role' : 'Kích hoạt'}
-              </button>
+            <div className="rbac-role-command">
+              <div className="role-permission-summary rbac-role-state">
+                <span className={selectedRole?.isActive ? 'badge success' : 'badge danger'}>
+                  {selectedRole?.isActive ? 'Đang hoạt động' : 'Đã khoá'}
+                </span>
+                <span className="permission-count-pill">
+                  <strong>{selectedPermissionCodes.length}</strong>
+                  <small>quyền đang chọn</small>
+                </span>
+              </div>
+              <div className="rbac-role-actions">
+                <button className="btn table-btn" type="button" onClick={openSelectedRoleEditor} disabled={!selectedRole}>
+                  Sửa role
+                </button>
+                <button
+                  className="btn table-btn danger-soft"
+                  type="button"
+                  onClick={() => void handleToggleSelectedRoleActive()}
+                  disabled={!selectedRole || selectedRole.isSystem}
+                  title={selectedRole?.isSystem ? 'Role hệ thống không được khoá' : undefined}
+                >
+                  <Power />
+                  {selectedRole?.isActive ? 'Khoá role' : 'Kích hoạt'}
+                </button>
+              </div>
             </div>
           </div>
 

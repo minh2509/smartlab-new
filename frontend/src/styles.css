@@ -1490,13 +1490,17 @@ select {
 
 .rbac-panel-head h2 {
   margin-bottom: 6px;
+  color: var(--text);
   font-size: clamp(22px, 2vw, 30px);
   letter-spacing: 0;
+  opacity: 1;
 }
 
 .rbac-panel-head p {
   max-width: 620px;
+  color: var(--text-2);
   font-size: 15px;
+  opacity: 1;
 }
 
 .role-permission-head,
@@ -1513,7 +1517,7 @@ select {
 }
 
 .rbac-role-toolbar {
-  grid-template-columns: minmax(320px, 1fr) auto auto;
+  grid-template-columns: minmax(360px, 1fr) minmax(360px, auto);
   align-items: center;
   margin: 10px 0 16px;
   padding: 14px;
@@ -1522,6 +1526,7 @@ select {
 
 .role-select-field {
   margin: 0;
+  min-width: 0;
 }
 
 .role-select-field > span {
@@ -1534,10 +1539,129 @@ select {
   text-transform: uppercase;
 }
 
-.rbac-role-select .select {
-  min-height: 54px;
+.custom-role-select {
+  position: relative;
+}
+
+.custom-role-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  min-height: 58px;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--brand-2) 22%, var(--line));
+  border-radius: var(--r-sm);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, .98), rgba(245, 249, 255, .96)),
+    radial-gradient(circle at 8% 20%, rgba(255, 111, 31, .08), transparent 34%);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+}
+
+.custom-role-select-trigger:hover,
+.custom-role-select.open .custom-role-select-trigger {
   border-color: color-mix(in srgb, var(--brand-2) 22%, var(--line));
+  box-shadow: 0 14px 30px rgba(13, 57, 103, .1);
+  transform: translateY(-1px);
+}
+
+.custom-role-select-trigger:disabled {
+  cursor: not-allowed;
+  opacity: .65;
+}
+
+.custom-role-select-trigger > span,
+.custom-role-option > span {
+  display: grid;
+  gap: 2px;
+}
+
+.custom-role-select-trigger strong,
+.custom-role-option strong {
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.custom-role-select-trigger small,
+.custom-role-option small {
+  color: var(--text-3);
+  font-size: 12px;
   font-weight: 800;
+}
+
+.custom-role-select-trigger svg {
+  width: 18px;
+  height: 18px;
+  color: var(--text-3);
+  transition: transform .2s ease;
+}
+
+.custom-role-select.open .custom-role-select-trigger svg {
+  transform: rotate(180deg);
+}
+
+.custom-role-select-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--brand-2) 18%, var(--line));
+  border-radius: var(--r-sm);
+  background: rgba(255, 255, 255, .98);
+  box-shadow: 0 22px 50px rgba(13, 57, 103, .18);
+}
+
+.custom-role-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 52px;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: background .2s ease, border-color .2s ease, transform .2s ease;
+}
+
+.custom-role-option:hover,
+.custom-role-option.active {
+  border-color: color-mix(in srgb, var(--brand-2) 20%, var(--line));
+  background: color-mix(in srgb, var(--brand-2) 8%, #fff);
+  transform: translateX(2px);
+}
+
+.custom-role-option svg {
+  width: 17px;
+  height: 17px;
+  color: var(--brand-2);
+}
+
+.rbac-role-command {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--brand-2) 10%, var(--line));
+  border-radius: var(--r-sm);
+  background:
+    linear-gradient(135deg, rgba(244, 248, 255, .95), rgba(255, 255, 255, .98));
 }
 
 .role-permission-summary,
@@ -1561,6 +1685,15 @@ select {
 
 .rbac-role-actions .btn {
   min-height: 42px;
+  padding-inline: 14px;
+  border-radius: 10px;
+  font-weight: 900;
+}
+
+.rbac-role-actions .danger-soft:not(:disabled) {
+  border-color: color-mix(in srgb, #b42318 16%, var(--line));
+  color: #8f1d14;
+  background: color-mix(in srgb, #fee4e2 70%, #fff);
 }
 
 .permission-count-pill {
@@ -2199,6 +2332,11 @@ select {
   .role-permission-summary,
   .rbac-role-state {
     justify-content: flex-start;
+  }
+
+  .rbac-role-command {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .rbac-role-actions,

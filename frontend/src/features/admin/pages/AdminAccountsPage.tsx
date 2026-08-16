@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { ChevronLeft, ChevronRight, Edit3, KeyRound, RefreshCw, Save, Send, UserPlus, X } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { ApiClientError } from '../../../lib/apiClient'
 import { useAuth } from '../../auth/authContext'
 import {
   listAccounts,
@@ -39,7 +41,8 @@ const emptyPage: PaginatedResponse<AccountResponse> = {
 }
 
 export function AdminAccountsPage() {
-  const { token } = useAuth()
+  const navigate = useNavigate()
+  const { token, clearAuth } = useAuth()
   const [roles, setRoles] = useState<Role[]>([])
   const [permissions, setPermissions] = useState<Permission[]>([])
   const [accountPage, setAccountPage] = useState<PaginatedResponse<AccountResponse>>(emptyPage)
@@ -66,7 +69,7 @@ export function AdminAccountsPage() {
     if (result.totalPages > 0 && targetPage >= result.totalPages) {
       setPage(result.totalPages - 1)
     }
-  }, [page, token])
+  }, [clearAuth, navigate, page, token])
 
   const loadCatalogs = useCallback(async () => {
     if (!token) return
@@ -82,6 +85,11 @@ export function AdminAccountsPage() {
       setPermissions(permissionResult)
       setAccountPage(accountResult)
     } catch (err) {
+      if (err instanceof ApiClientError && err.status === 401) {
+        clearAuth()
+        navigate('/login', { replace: true })
+        return
+      }
       setError(err instanceof Error ? err.message : 'Không tải được dữ liệu quản trị')
     } finally {
       setLoading(false)
