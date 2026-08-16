@@ -224,8 +224,8 @@ class PostSocialPostgresIntegrationTest {
         String email = "social-" + label + "-" + key + "@test";
         Long id = jdbc.queryForObject("""
                 insert into tbl_user(user_id,name,email,password,is_active,is_account_verified,reset_otp_expire_at)
-                values(?,?,?,'',true,true,0) returning id
-                """, Long.class, "social-" + key, "Social " + label, email);
+                values(?,?,?,'',true, true, NULL) returning id
+                """, Long.class, "social-" + key.substring(0, 29), "Social " + label, email);
         return new UserFixture(id, email);
     }
 

@@ -83,7 +83,7 @@ class AuditLogPostgresIntegrationTest {
     private UserFixture insertUser(String tag) {
         String marker = UUID.randomUUID().toString().replace("-", "");
         String userId = "a2" + marker; String email = "a2-" + tag + "-" + marker + "@test";
-        Long id = jdbc.queryForObject("insert into tbl_user(user_id,name,email,password,is_active,is_account_verified,reset_otp_expire_at) values(?,?,?,?,true,true,0) returning id",
+        Long id = jdbc.queryForObject("insert into tbl_user(user_id,name,email,password,is_active,is_account_verified,reset_otp_expire_at) values(?,?,?,?,true, true, NULL) returning id",
                 Long.class, userId, "A2 " + tag, email, "integration-only");
         userIds.add(id); return new UserFixture(id, userId, email);
     }

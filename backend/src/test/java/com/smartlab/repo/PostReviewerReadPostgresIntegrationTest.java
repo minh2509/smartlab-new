@@ -135,7 +135,7 @@ class PostReviewerReadPostgresIntegrationTest {
     private UserEntity insertUser(String tag) {
         String marker = UUID.randomUUID().toString();
         UserEntity user = userRepository.saveAndFlush(UserEntity.builder()
-                .userId("reviewread" + marker.replace("-", ""))
+                .userId("rr-" + marker.replace("-", ""))
                 .name("Reviewer read " + tag)
                 .email("review-read-" + tag + "-" + marker + "@example.test")
                 .password("")
