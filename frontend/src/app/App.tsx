@@ -27,6 +27,8 @@ import { ProjectListPage } from '../features/projects/pages/ProjectListPage'
 import { ProjectDetailPage } from '../features/projects/pages/ProjectDetailPage'
 import { ProjectManagementPage } from '../features/projects/pages/ProjectManagementPage'
 import { EventManagementPage } from '../features/events/pages/EventManagementPage'
+import { MyEvaluationsPage } from '../features/evaluations/pages/MyEvaluationsPage'
+import { TasksPage } from '../features/tasks/pages/TasksPage'
 
 export function App() {
   return (
@@ -147,9 +149,11 @@ export function App() {
 
       <Route element={<AdminLayout />}>
         <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/my-evaluations" element={<MyEvaluationsPage />} />
         <Route path="/files" element={<RequirePermissions allOf={['FILE_UPLOAD']}><FilesPage /></RequirePermissions>} />
         <Route path="/admin/projects" element={<ProjectManagementPage />} />
         <Route path="/admin/events" element={<EventManagementPage />} />
+        <Route path="/admin/tasks" element={<TasksPage />} />
         <Route path="/admin/research-fields" element={<RequirePermissions allOf={['RESEARCH_FIELD_MANAGE']}><ResearchFieldsPage /></RequirePermissions>} />
         <Route path="/admin/members" element={<RequirePermissions allOf={['MEMBER_MANAGE']}><AdminMembersPage /></RequirePermissions>} />
         <Route path="/admin/accounts" element={<RequirePermissions allOf={['USER_MANAGE', 'ROLE_MANAGE', 'PERMISSION_MANAGE']}><AdminAccountsPage /></RequirePermissions>} />

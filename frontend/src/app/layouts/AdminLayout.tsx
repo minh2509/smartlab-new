@@ -1,4 +1,4 @@
-import { CalendarDays, Files, FlaskConical, FolderKanban, LogOut, ShieldCheck, UserCircle, UsersRound } from 'lucide-react'
+import { Award, CalendarDays, CheckSquare, Files, FlaskConical, FolderKanban, LogOut, ShieldCheck, UserCircle, UsersRound } from 'lucide-react'
 import { NavLink, Navigate, Outlet } from 'react-router-dom'
 import { useAuth } from '../../features/auth/authContext'
 import { Logo } from '../../shared/components/Logo'
@@ -39,6 +39,14 @@ export function AdminLayout() {
               <NavLink to="/admin/events">
                 <CalendarDays />
                 Sự kiện
+              </NavLink>
+              <NavLink to="/admin/tasks">
+                <CheckSquare />
+                Nhiệm vụ & Đánh giá
+              </NavLink>
+              <NavLink to="/my-evaluations">
+                <Award />
+                Đánh giá của tôi
               </NavLink>
               {can('USER_MANAGE', 'ROLE_MANAGE', 'PERMISSION_MANAGE') && <NavLink to="/admin/accounts">
                 <UsersRound />
