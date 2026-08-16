@@ -2,12 +2,15 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { LogIn, MessageCircle } from 'lucide-react'
 import { PostReactionPicker } from './PostReactionPicker'
+import { PostContent } from './PostContent'
+import { parsePostContent } from '../postContent'
 import { reactionPresentation } from '../reactions'
 import { exactDateTime, relativeTime } from '../relativeTime'
 import type { PostFeedItem, ReactionState, ReactionType } from '../types'
 
 type Props = {
   post: PostFeedItem
+  token?: string | null
   reactionPending: boolean
   canInteract: boolean
   onReaction: (reaction: ReactionType) => Promise<ReactionState>
@@ -20,6 +23,7 @@ const VISIBILITY = { PUBLIC: 'Công khai', LAB: 'Nội bộ Lab', PROJECT: 'Theo
 
 export function PostFeedCard({
   post,
+  token,
   reactionPending,
   canInteract,
   onReaction,
@@ -27,7 +31,9 @@ export function PostFeedCard({
   onComments,
   onRequireLogin,
 }: Props) {
-  const body = typeof post.contentJson.body === 'string' ? post.contentJson.body : null
+  const content = parsePostContent(post.contentJson)
+  const body = content?.body ?? null
+  const hasRenderableContent = Boolean(content && (content.body || content.files?.length))
   const [expanded, setExpanded] = useState(false)
   const long = Boolean(body && (body.length > 520 || body.split('\n').length > 7))
   const reactionIcons = (Object.entries(post.reactionCounts) as Array<[ReactionType, number]>)
@@ -52,19 +58,20 @@ export function PostFeedCard({
 
       <div className="social-post-copy">
         {post.title ? <h2><Link to={`/posts/${encodeURIComponent(post.slug)}`}>{post.title}</Link></h2> : null}
-        {body ? (
-          <p className={!expanded && long ? 'is-collapsed' : undefined}>{body}</p>
-        ) : post.excerpt ? <p>{post.excerpt}</p> : (
-          <p className="social-content-fallback">Nội dung này hiện chưa hỗ trợ hiển thị đầy đủ.</p>
-        )}
+        {hasRenderableContent ? <PostContent
+          contentJson={post.contentJson}
+          slug={post.slug}
+          token={token}
+          parsedContent={content}
+          bodyClassName={!expanded && long ? 'is-collapsed' : undefined}
+          fallbackClassName="social-content-fallback"
+        /> : post.excerpt ? <p>{post.excerpt}</p> : <PostContent contentJson={post.contentJson} slug={post.slug} token={token} parsedContent={content} fallbackClassName="social-content-fallback" />}
         {long ? (
           <button className="social-more" type="button" onClick={() => setExpanded((value) => !value)}>
             {expanded ? 'Thu gọn' : 'Xem thêm'}
           </button>
         ) : null}
       </div>
-
-      <div className="future-media-slot" aria-hidden="true" />
 
       <div className="social-summary">
         <span aria-label={`${post.reactionCount} cảm xúc`}>

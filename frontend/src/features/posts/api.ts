@@ -61,6 +61,28 @@ export function getPostBySlug(token: string | null | undefined, slug: string) {
   return apiClient<PostDetail>(path, { token: token ?? null })
 }
 
+export async function downloadPostContentFile(token: string | null | undefined, slug: string, fileId: number) {
+  const baseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1.0'
+  const response = await fetch(`${baseUrl}/posts/${encodeURIComponent(slug)}/files/${fileId}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    credentials: 'include',
+  })
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { message?: string } | null
+    throw new Error(payload?.message ?? `Không thể tải tệp đính kèm (HTTP ${response.status}).`)
+  }
+  return {
+    blob: await response.blob(),
+    filename: fileNameFromDisposition(response.headers.get('content-disposition')),
+  }
+}
+
+function fileNameFromDisposition(value: string | null) {
+  const encoded = value?.match(/filename\*=UTF-8''([^;]+)/i)?.[1]
+  if (encoded) return decodeURIComponent(encoded)
+  return value?.match(/filename="?([^";]+)"?/i)?.[1] ?? null
+}
+
 export function listContentCategories(token: string) {
   return apiClient<ContentCategory[]>('/content-categories', { token })
 }

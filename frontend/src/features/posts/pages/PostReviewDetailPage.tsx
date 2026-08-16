@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, CalendarDays, ClipboardCheck, Send } from 'lucide-react'
 import { useAuth } from '../../auth/authContext'
 import { getReviewablePost, reviewPost } from '../api'
+import { PostContent } from '../components/PostContent'
 import type { PostDetail, ReviewDecision } from '../types'
 import { Feedback } from '../../../shared/components/Feedback'
 
@@ -120,7 +121,7 @@ export function PostReviewDetailPage() {
 
               <hr className="post-page-divider" />
 
-              <ReviewPostContent contentJson={post.contentJson} />
+              <PostContent contentJson={post.contentJson} slug={post.slug} token={token} className="post-page-content-body" />
             </article>
 
             <aside className="post-review-sidebar">
@@ -216,13 +217,6 @@ export function PostReviewDetailPage() {
       </div>
     </section>
   )
-}
-
-function ReviewPostContent({ contentJson }: { contentJson: Record<string, unknown> }) {
-  if (typeof contentJson.body !== 'string') {
-    return <div className="post-page-content-state"><p>Nội dung này hiện chưa hỗ trợ hiển thị đầy đủ.</p></div>
-  }
-  return <div className="post-page-content-body"><p>{contentJson.body}</p></div>
 }
 
 function reasonHelp(decision: ReviewDecision | '') {

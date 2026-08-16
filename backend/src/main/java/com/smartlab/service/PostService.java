@@ -5,6 +5,7 @@ import com.smartlab.dto.request.ReviewPostRequest;
 import com.smartlab.dto.request.UpdatePostRequest;
 import com.smartlab.dto.response.PostDetailResponse;
 import com.smartlab.dto.response.PostSummaryResponse;
+import org.springframework.security.core.Authentication;
 
 import java.util.List;
 
@@ -34,4 +35,10 @@ public interface PostService {
 
     /** authenticatedEmail is null only for the dedicated anonymous public permalink. */
     PostDetailResponse getPostBySlug(String authenticatedEmail, String slug);
+
+    /** Resolves private D2 content only after the containing post's read policy succeeds. */
+    PostFileDownload downloadPostFile(Authentication authentication, String slug, Long fileId);
+
+    record PostFileDownload(byte[] content, String mimeType, String originalName) {
+    }
 }

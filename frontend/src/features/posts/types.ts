@@ -28,6 +28,26 @@ export type PostAuthor = {
   name: string
 }
 
+export type PostContentImageReference = {
+  type: 'image'
+  fileId: number
+  alt?: string
+}
+
+export type PostContentFileReference = {
+  type: 'file'
+  fileId: number
+  label?: string
+}
+
+export type PostContentAttachmentReference = PostContentImageReference | PostContentFileReference
+
+export type PostContentDocument = {
+  type: 'doc'
+  body: string
+  files?: PostContentAttachmentReference[]
+}
+
 export type ContentCategory = PostCategory & {
   description: string | null
 }

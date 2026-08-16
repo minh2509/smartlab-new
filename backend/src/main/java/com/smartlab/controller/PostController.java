@@ -16,6 +16,10 @@ import com.smartlab.service.PostSocialService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -32,6 +36,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.Optional;
+import java.nio.charset.StandardCharsets;
 
 @RestController
 @RequestMapping("/posts")
@@ -168,6 +173,27 @@ public class PostController {
     @GetMapping("/public/{slug}")
     public PostDetailResponse getPublicPostBySlug(@PathVariable String slug) {
         return postService.getPostBySlug(null, slug);
+    }
+
+    @GetMapping("/{slug}/files/{fileId}")
+    public ResponseEntity<byte[]> downloadPostFile(
+            Authentication authentication,
+            @PathVariable String slug,
+            @PathVariable Long fileId
+    ) {
+        PostService.PostFileDownload file = postService.downloadPostFile(authentication, slug, fileId);
+        MediaType mediaType;
+        try {
+            mediaType = MediaType.parseMediaType(file.mimeType());
+        } catch (IllegalArgumentException exception) {
+            mediaType = MediaType.APPLICATION_OCTET_STREAM;
+        }
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(mediaType);
+        headers.setContentDisposition(ContentDisposition.inline()
+                .filename(file.originalName(), StandardCharsets.UTF_8)
+                .build());
+        return ResponseEntity.ok().headers(headers).body(file.content());
     }
 
     @GetMapping("/{slug}")

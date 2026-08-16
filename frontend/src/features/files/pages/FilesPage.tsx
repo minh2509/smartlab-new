@@ -2,27 +2,10 @@ import { Check, Download, FileText, FolderOpen, Trash2, Upload, X } from 'lucide
 import { useRef, useState } from 'react'
 import { useAuth } from '../../auth/authContext'
 import type { FileResponse } from '../../../shared/types/api'
-import { deleteFile, downloadFile, uploadFile } from '../api'
+import { D2_UPLOAD_ACCEPT, deleteFile, downloadFile, uploadFile } from '../api'
 import type { FileAccessScope } from '../api'
 
 const MAX_FILE_SIZE = 25 * 1024 * 1024
-const ACCEPTED_TYPES = [
-  'image/jpeg',
-  'image/png',
-  'image/gif',
-  'image/webp',
-  'application/pdf',
-  'text/plain',
-  'text/csv',
-  'application/zip',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.ms-powerpoint',
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-].join(',')
-
 const scopeOptions: Array<{ value: FileAccessScope; label: string; description: string }> = [
   { value: 'PRIVATE', label: 'Riêng tư', description: 'Chỉ bạn và quản trị viên có thể tải xuống.' },
   { value: 'LAB', label: 'Nội bộ Lab', description: 'Mọi thành viên đã đăng nhập có thể tải xuống.' },
@@ -165,7 +148,7 @@ export function FilesPage() {
               <input
                 ref={inputRef}
                 type="file"
-                accept={ACCEPTED_TYPES}
+                accept={D2_UPLOAD_ACCEPT}
                 onChange={(event) => chooseFile(event.target.files?.[0])}
               />
               {selectedFile ? (

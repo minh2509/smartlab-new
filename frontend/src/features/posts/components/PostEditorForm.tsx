@@ -1,6 +1,7 @@
-import { type FormEvent, useEffect, useMemo, useState } from 'react'
-import { Save } from 'lucide-react'
+import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { Paperclip, Save, Trash2, Upload } from 'lucide-react'
 import { Feedback } from '../../../shared/components/Feedback'
+import { D2_UPLOAD_ACCEPT, uploadFile } from '../../files/api'
 import { listProjects } from '../../projects/api'
 import type { Project } from '../../projects/types'
 import { listContentCategories } from '../api'
@@ -8,9 +9,11 @@ import type {
   ContentCategory,
   CreatePostRequest,
   PostDetail,
+  PostContentAttachmentReference,
   PostVisibility,
   UpdatePostRequest,
 } from '../types'
+import { parsePostContent, serializePostContent } from '../postContent'
 
 type EditorProps = {
   token: string
@@ -29,6 +32,12 @@ export function PostEditorForm({ token, initialPost, submitting, serverError, on
   const initialContentBody = getContentBody(initialPost?.contentJson)
   const [contentText, setContentText] = useState(initialContentBody ?? '')
   const [contentEdited, setContentEdited] = useState(false)
+  const [attachments, setAttachments] = useState<PostContentAttachmentReference[]>(
+    () => parsePostContent(initialPost?.contentJson)?.files ?? [],
+  )
+  const [attachmentsEdited, setAttachmentsEdited] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const attachmentInputRef = useRef<HTMLInputElement>(null)
   const [categories, setCategories] = useState<ContentCategory[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [referencesLoading, setReferencesLoading] = useState(true)
@@ -71,7 +80,7 @@ export function PostEditorForm({ token, initialPost, submitting, serverError, on
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (submitting) return
+    if (submitting || uploading) return
 
     if (!title.trim()) {
       setFormError('Tiêu đề không được để trống.')
@@ -99,6 +108,8 @@ export function PostEditorForm({ token, initialPost, submitting, serverError, on
           projectId,
           contentText,
           contentEdited,
+          attachments,
+          attachmentsEdited,
         })
       : buildCreateRequest({
           title,
@@ -108,6 +119,7 @@ export function PostEditorForm({ token, initialPost, submitting, serverError, on
           projectId,
           contentText,
           contentEdited,
+          attachments,
         })
 
     if (initialPost && Object.keys(request).length === 0) {
@@ -118,6 +130,40 @@ export function PostEditorForm({ token, initialPost, submitting, serverError, on
     setFormError(null)
     await onSubmit(request)
   }
+
+  async function uploadAttachment(file?: File) {
+    if (!file || uploading || submitting) return
+    setUploading(true)
+    setFormError(null)
+    try {
+      const uploaded = await uploadFile(token, file, 'PRIVATE', '')
+      const reference: PostContentAttachmentReference = uploaded.mimeType.startsWith('image/')
+        ? { type: 'image', fileId: uploaded.id, alt: uploaded.originalName }
+        : { type: 'file', fileId: uploaded.id, label: uploaded.originalName }
+      setAttachments((current) => [...current, reference])
+      setAttachmentsEdited(true)
+      if (attachmentInputRef.current) attachmentInputRef.current.value = ''
+    } catch (value) {
+      setFormError(value instanceof Error ? value.message : 'Không thể tải tệp đính kèm.')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  function updateAttachment(index: number, value: string) {
+    setAttachments((current) => current.map((reference, currentIndex) => {
+      if (currentIndex !== index) return reference
+      return reference.type === 'image' ? { ...reference, alt: value } : { ...reference, label: value }
+    }))
+    setAttachmentsEdited(true)
+  }
+
+  function removeAttachment(index: number) {
+    setAttachments((current) => current.filter((_, currentIndex) => currentIndex !== index))
+    setAttachmentsEdited(true)
+  }
+
+  const busy = submitting || uploading
 
   return (
     <form className="post-editor-form" onSubmit={(event) => void handleSubmit(event)}>
@@ -130,7 +176,7 @@ export function PostEditorForm({ token, initialPost, submitting, serverError, on
             value={title}
             onChange={(event) => setTitle(event.target.value)}
             maxLength={250}
-            disabled={submitting}
+            disabled={busy}
             required
           />
           <span className="hint">{title.length}/250 ký tự</span>
@@ -144,7 +190,7 @@ export function PostEditorForm({ token, initialPost, submitting, serverError, on
             value={excerpt}
             onChange={(event) => setExcerpt(event.target.value)}
             maxLength={500}
-            disabled={submitting}
+            disabled={busy}
             rows={3}
           />
           <span className="hint">{excerpt.length}/500 ký tự</span>
@@ -160,7 +206,7 @@ export function PostEditorForm({ token, initialPost, submitting, serverError, on
               if (event.target.value !== contentText) setContentEdited(true)
               setContentText(event.target.value)
             }}
-            disabled={submitting}
+            disabled={busy}
             aria-describedby="post-content-help"
             placeholder="Viết nội dung bài viết..."
             rows={12}
@@ -174,6 +220,43 @@ export function PostEditorForm({ token, initialPost, submitting, serverError, on
             </p>
           ) : null}
         </div>
+
+        <section className="post-editor-attachments" aria-labelledby="post-attachments-title">
+          <div className="post-editor-attachments-head">
+            <div>
+              <h2 id="post-attachments-title">Ảnh / tệp đính kèm</h2>
+              <p>Tệp được lưu riêng tư; quyền xem được xác định bởi bài viết sau khi lưu.</p>
+            </div>
+            <input
+              ref={attachmentInputRef}
+              className="post-editor-file-input"
+              type="file"
+              accept={D2_UPLOAD_ACCEPT}
+              disabled={busy}
+              onChange={(event) => void uploadAttachment(event.target.files?.[0])}
+            />
+            <button className="btn" type="button" disabled={busy} onClick={() => attachmentInputRef.current?.click()}>
+              <Upload aria-hidden="true" /> {uploading ? 'Đang tải tệp...' : 'Thêm tệp'}
+            </button>
+          </div>
+          {attachments.length ? <div className="post-editor-attachment-list">
+            {attachments.map((reference, index) => <div className="post-editor-attachment" key={`${reference.type}-${reference.fileId}`}>
+              <Paperclip aria-hidden="true" />
+              <span className="post-editor-attachment-type">{reference.type === 'image' ? 'Ảnh' : 'Tệp'} · #{reference.fileId}</span>
+              <input
+                className="input"
+                aria-label={reference.type === 'image' ? `Mô tả ảnh ${index + 1}` : `Nhãn tệp ${index + 1}`}
+                value={reference.type === 'image' ? reference.alt ?? '' : reference.label ?? ''}
+                placeholder={reference.type === 'image' ? 'Mô tả ảnh' : 'Tên tệp'}
+                onChange={(event) => updateAttachment(index, event.target.value)}
+                disabled={busy}
+              />
+              <button className="btn ghost table-btn" type="button" disabled={busy} onClick={() => removeAttachment(index)} aria-label="Xóa tệp đính kèm">
+                <Trash2 aria-hidden="true" />
+              </button>
+            </div>)}
+          </div> : <p className="post-editor-attachment-empty">Chưa có ảnh hoặc tệp đính kèm.</p>}
+        </section>
       </div>
 
       <aside className="post-editor-settings" aria-label="Thiết lập bài viết">
@@ -193,7 +276,7 @@ export function PostEditorForm({ token, initialPost, submitting, serverError, on
               setVisibility(nextVisibility)
               if (nextVisibility !== 'PROJECT') setProjectId('')
             }}
-            disabled={submitting}
+            disabled={busy}
           >
             <option value="LAB">Nội bộ Lab</option>
             <option value="PUBLIC">Công khai</option>
@@ -209,7 +292,7 @@ export function PostEditorForm({ token, initialPost, submitting, serverError, on
               className="select"
               value={projectId}
               onChange={(event) => setProjectId(event.target.value)}
-              disabled={submitting || referencesLoading}
+              disabled={busy || referencesLoading}
               required
             >
               <option value="">Chọn dự án</option>
@@ -231,7 +314,7 @@ export function PostEditorForm({ token, initialPost, submitting, serverError, on
             className="select"
             value={categoryId}
             onChange={(event) => setCategoryId(event.target.value)}
-            disabled={submitting || referencesLoading}
+            disabled={busy || referencesLoading}
           >
             <option value="">Không có danh mục</option>
             {selectedCategoryMissing ? (
@@ -247,9 +330,9 @@ export function PostEditorForm({ token, initialPost, submitting, serverError, on
         <Feedback error={referenceError ?? undefined} />
         <Feedback error={formError ?? serverError ?? undefined} />
 
-        <button className="btn primary post-editor-submit" type="submit" disabled={submitting || referencesLoading}>
+        <button className="btn primary post-editor-submit" type="submit" disabled={busy || referencesLoading}>
           <Save aria-hidden="true" />
-          {submitting ? 'Đang lưu...' : initialPost ? 'Lưu thay đổi' : 'Tạo bài viết'}
+          {uploading ? 'Đang tải tệp...' : submitting ? 'Đang lưu...' : initialPost ? 'Lưu thay đổi' : 'Tạo bài viết'}
         </button>
       </aside>
     </form>
@@ -264,12 +347,14 @@ type EditorValues = {
   projectId: string
   contentText: string
   contentEdited: boolean
+  attachments: PostContentAttachmentReference[]
+  attachmentsEdited?: boolean
 }
 
 function buildCreateRequest(values: EditorValues): CreatePostRequest {
   const request: CreatePostRequest = {
     title: values.title,
-    contentJson: toContentDocument(values.contentText),
+    contentJson: serializePostContent(values.contentText, values.attachments),
     visibility: values.visibility,
   }
   if (values.excerpt) request.excerpt = values.excerpt
@@ -291,14 +376,10 @@ function buildUpdateRequest(initial: PostDetail, values: EditorValues): UpdatePo
   if (nextProjectId !== initial.projectId) request.projectId = nextProjectId
 
   const initialContentBody = getContentBody(initial.contentJson)
-  if (initialContentBody !== null ? values.contentText !== initialContentBody : values.contentEdited) {
-    request.contentJson = toContentDocument(values.contentText)
+  if (initialContentBody !== null ? values.contentText !== initialContentBody || values.attachmentsEdited : values.contentEdited || values.attachmentsEdited) {
+    request.contentJson = serializePostContent(values.contentText, values.attachments)
   }
   return request
-}
-
-function toContentDocument(body: string): Record<string, unknown> {
-  return { type: 'doc', body }
 }
 
 function getContentBody(contentJson: Record<string, unknown> | undefined): string | null {

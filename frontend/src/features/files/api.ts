@@ -3,6 +3,14 @@ import type { FileResponse } from '../../shared/types/api'
 
 export type FileAccessScope = 'PRIVATE' | 'LAB' | 'PUBLIC'
 
+export const D2_UPLOAD_ACCEPT = [
+  'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf', 'text/plain', 'text/csv',
+  'application/zip', 'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+].join(',')
+
 export function uploadFile(
   token: string,
   file: File,
