@@ -5,7 +5,6 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
-import java.time.LocalDate;
 import java.util.Set;
 
 @Data
@@ -20,9 +19,6 @@ public class UpdateMemberProfileRequest {
 
     @Size(max = 10000)
     private String bio;
-
-    private LocalDate joinedLabAt;
-    private Boolean clearJoinedLabAt;
 
     private Long avatarFileId;
     private Boolean removeAvatar;

@@ -47,7 +47,7 @@ public class MemberProfileServiceImpl implements MemberProfileService {
         UserEntity user = findUserByEmail(email);
         MemberProfileEntity profile = ensureProfile(user);
         applyCommonChanges(profile, request.getPhone(), request.getPublicEmail(), request.getBio(),
-                request.getJoinedLabAt(), request.getClearJoinedLabAt(), request.getAvatarFileId(), request.getRemoveAvatar(),
+                request.getAvatarFileId(), request.getRemoveAvatar(),
                 request.getResearchFieldIds(), user, false);
         return toResponse(memberProfileRepository.save(profile), true);
     }
@@ -87,7 +87,7 @@ public class MemberProfileServiceImpl implements MemberProfileService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Member not found"));
         MemberProfileEntity profile = ensureProfile(user);
         applyCommonChanges(profile, request.getPhone(), request.getPublicEmail(), request.getBio(),
-                request.getJoinedLabAt(), request.getClearJoinedLabAt(), request.getAvatarFileId(), request.getRemoveAvatar(),
+                request.getAvatarFileId(), request.getRemoveAvatar(),
                 request.getResearchFieldIds(), user, true);
         if (request.getActiveStatus() != null) {
             String activeStatus = request.getActiveStatus().trim().toUpperCase(Locale.ROOT);
@@ -114,8 +114,6 @@ public class MemberProfileServiceImpl implements MemberProfileService {
             String phone,
             String publicEmail,
             String bio,
-            java.time.LocalDate joinedLabAt,
-            Boolean clearJoinedLabAt,
             Long avatarFileId,
             Boolean removeAvatar,
             Set<Long> researchFieldIds,
@@ -125,8 +123,6 @@ public class MemberProfileServiceImpl implements MemberProfileService {
         if (phone != null) profile.setPhone(phone.trim());
         if (publicEmail != null) profile.setPublicEmail(publicEmail.trim());
         if (bio != null) profile.setBio(bio.trim());
-        if (Boolean.TRUE.equals(clearJoinedLabAt)) profile.setJoinedLabAt(null);
-        else if (joinedLabAt != null) profile.setJoinedLabAt(joinedLabAt);
         if (Boolean.TRUE.equals(removeAvatar)) {
             profile.setAvatarFile(null);
         } else if (avatarFileId != null) {

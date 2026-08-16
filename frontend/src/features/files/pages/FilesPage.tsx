@@ -110,7 +110,7 @@ export function FilesPage() {
     <div className="files-page">
       <div className="page-title">
         <div>
-          <span className="eyebrow">D2 · Google Drive storage</span>
+          <span className="eyebrow">Google Drive storage</span>
           <h1>Tệp của tôi</h1>
           <p>Tải tài liệu lên kho lưu trữ của Smart Lab và kiểm soát phạm vi truy cập.</p>
         </div>
