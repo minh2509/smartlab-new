@@ -3,7 +3,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { EmptyState } from '../../../shared/components/EmptyState'
 import { Feedback } from '../../../shared/components/Feedback'
+import type { ResearchField } from '../../../shared/types/api'
 import { useAuth } from '../../auth/authContext'
+import { getResearchFields } from '../../profile/api'
 import { PublicPageHead } from '../../public/components/PublicPageHead'
 import { listProjects } from '../api'
 import {
@@ -17,15 +19,20 @@ import type { Project, ProjectStatus, ProjectType } from '../types'
 
 type TypeFilter = ProjectType | 'ALL'
 type StatusFilter = ProjectStatus | 'ALL'
+type ResearchFieldFilter = number | 'ALL'
 
 export function ProjectListPage() {
   const { token } = useAuth()
   const [projects, setProjects] = useState<Project[]>([])
+  const [researchFields, setResearchFields] = useState<ResearchField[]>([])
   const [query, setQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('ALL')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL')
+  const [researchFieldFilter, setResearchFieldFilter] = useState<ResearchFieldFilter>('ALL')
   const [loading, setLoading] = useState(true)
+  const [fieldsLoading, setFieldsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [fieldsError, setFieldsError] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
@@ -33,7 +40,9 @@ export function ProjectListPage() {
     setLoading(true)
     setError(null)
 
-    listProjects(token)
+    listProjects(token, {
+      researchFieldId: researchFieldFilter === 'ALL' ? undefined : researchFieldFilter,
+    })
       .then((result) => {
         if (active) setProjects(result)
       })
@@ -49,7 +58,28 @@ export function ProjectListPage() {
     return () => {
       active = false
     }
-  }, [reloadKey, token])
+  }, [reloadKey, researchFieldFilter, token])
+
+  useEffect(() => {
+    let active = true
+    setFieldsLoading(true)
+    setFieldsError(null)
+    void getResearchFields()
+      .then((result) => {
+        if (active) setResearchFields(result)
+      })
+      .catch((reason: unknown) => {
+        if (active) {
+          setFieldsError(reason instanceof Error ? reason.message : 'Không tải được bộ lọc lĩnh vực.')
+        }
+      })
+      .finally(() => {
+        if (active) setFieldsLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [])
 
   const visibleProjects = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase('vi')
@@ -73,7 +103,10 @@ export function ProjectListPage() {
     })
   }, [projects, query, statusFilter, typeFilter])
 
-  const hasActiveFilters = Boolean(query.trim()) || typeFilter !== 'ALL' || statusFilter !== 'ALL'
+  const hasActiveFilters = Boolean(query.trim())
+    || typeFilter !== 'ALL'
+    || statusFilter !== 'ALL'
+    || researchFieldFilter !== 'ALL'
 
   return (
     <>
@@ -111,6 +144,21 @@ export function ProjectListPage() {
 
             <select
               className="select"
+              value={researchFieldFilter}
+              disabled={fieldsLoading || Boolean(fieldsError)}
+              onChange={(event) => setResearchFieldFilter(
+                event.target.value === 'ALL' ? 'ALL' : Number(event.target.value),
+              )}
+              aria-label="Lọc theo lĩnh vực nghiên cứu"
+            >
+              <option value="ALL">
+                {fieldsLoading ? 'Đang tải lĩnh vực...' : fieldsError ? 'Không tải được lĩnh vực' : 'Tất cả lĩnh vực'}
+              </option>
+              {researchFields.map((field) => <option value={field.id} key={field.id}>{field.name}</option>)}
+            </select>
+
+            <select
+              className="select"
               value={statusFilter}
               onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
               aria-label="Lọc theo trạng thái dự án"
@@ -129,6 +177,7 @@ export function ProjectListPage() {
                   setQuery('')
                   setTypeFilter('ALL')
                   setStatusFilter('ALL')
+                  setResearchFieldFilter('ALL')
                 }}
               >
                 Xóa bộ lọc

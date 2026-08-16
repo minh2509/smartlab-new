@@ -13,6 +13,7 @@ type ProjectLeadershipEditorProps = {
   onError: (message: string) => void
   onSaved: (project: Project) => void
   onSavingChange: (saving: boolean) => void
+  onDirtyChange?: (dirty: boolean) => void
 }
 
 export function ProjectLeadershipEditor({
@@ -23,6 +24,7 @@ export function ProjectLeadershipEditor({
   onError,
   onSaved,
   onSavingChange,
+  onDirtyChange,
 }: ProjectLeadershipEditorProps) {
   const [leaders, setLeaders] = useState<ProjectLeaderCandidate[]>(() => toDraftLeaders(project))
   const [primaryLeaderUserId, setPrimaryLeaderUserId] = useState<string | null>(
@@ -30,15 +32,16 @@ export function ProjectLeadershipEditor({
   )
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    setLeaders(toDraftLeaders(project))
-    setPrimaryLeaderUserId(project.primaryLeader?.userId ?? null)
-  }, [project])
-
   const dirty = useMemo(
     () => !sameLeadership(project, leaders, primaryLeaderUserId),
     [leaders, primaryLeaderUserId, project],
   )
+
+  useEffect(() => {
+    onDirtyChange?.(dirty)
+  }, [dirty, onDirtyChange])
+
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange])
 
   function resetDraft() {
     setLeaders(toDraftLeaders(project))

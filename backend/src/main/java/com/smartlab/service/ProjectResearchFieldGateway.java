@@ -12,6 +12,6 @@ public interface ProjectResearchFieldGateway {
 
     void replaceProjectFields(Long projectId, Set<Long> fieldIds);
 
-    record ResearchFieldReference(Long id, String code, String name) {
+    record ResearchFieldReference(Long id, String code, String name, Boolean isActive) {
     }
 }
