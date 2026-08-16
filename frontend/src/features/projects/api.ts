@@ -3,12 +3,16 @@ import type {
   CreateProjectPayload,
   Project,
   ProjectLeaderCandidate,
+  ProjectMember,
+  ProjectMemberCandidate,
+  ProjectMemberStatus,
+  ProjectResearchField,
   UpdateProjectLeadershipPayload,
   UpdateProjectPayload,
 } from './types'
 
-export function listProjects(token?: string | null) {
-  return apiClient<Project[]>('/projects', { token: token ?? null })
+export function listProjects(token?: string | null, filters: { researchFieldId?: number } = {}) {
+  return apiClient<Project[]>(`/projects${toQuery(filters)}`, { token: token ?? null })
 }
 
 export function getProject(id: number, token?: string | null) {
@@ -70,5 +74,48 @@ export function deleteProject(token: string, id: number) {
   return apiClient<void>(`/projects/${id}`, {
     method: 'DELETE',
     token,
+  })
+}
+
+export function listProjectMembers(token: string, projectId: number, status: ProjectMemberStatus = 'ACTIVE') {
+  return apiClient<ProjectMember[]>(`/projects/${projectId}/members${toQuery({ status })}`, { token })
+}
+
+export function listProjectMemberCandidates(
+  token: string,
+  projectId: number,
+  query: string,
+  signal?: AbortSignal,
+) {
+  return apiClient<ProjectMemberCandidate[]>(
+    `/projects/${projectId}/member-candidates${toQuery({ query: query.trim() })}`,
+    { token, signal },
+  )
+}
+
+export function addProjectMember(token: string, projectId: number, userId: string) {
+  return apiClient<ProjectMember>(`/projects/${projectId}/members`, {
+    method: 'POST',
+    token,
+    body: JSON.stringify({ userId }),
+  })
+}
+
+export function removeProjectMember(token: string, projectId: number, userId: string) {
+  return apiClient<void>(`/projects/${projectId}/members/${encodeURIComponent(userId)}`, {
+    method: 'DELETE',
+    token,
+  })
+}
+
+export function listProjectResearchFields(token: string, projectId: number) {
+  return apiClient<ProjectResearchField[]>(`/projects/${projectId}/research-fields`, { token })
+}
+
+export function replaceProjectResearchFields(token: string, projectId: number, fieldIds: number[]) {
+  return apiClient<ProjectResearchField[]>(`/projects/${projectId}/research-fields`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify({ fieldIds }),
   })
 }

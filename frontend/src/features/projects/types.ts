@@ -78,6 +78,39 @@ export type UpdateProjectLeadershipPayload = {
   leaderUserIds: string[]
 }
 
+export const PROJECT_MEMBER_ROLES = ['LEADER', 'MEMBER'] as const
+
+export type ProjectMemberRole = (typeof PROJECT_MEMBER_ROLES)[number]
+
+export const PROJECT_MEMBER_STATUSES = ['ACTIVE', 'REMOVED'] as const
+
+export type ProjectMemberStatus = (typeof PROJECT_MEMBER_STATUSES)[number]
+
+export type ProjectMember = {
+  userId: string
+  name: string
+  email: string
+  projectRole: ProjectMemberRole
+  status: ProjectMemberStatus
+  joinedAt: string
+  removedAt: string | null
+}
+
+export type ProjectMemberCandidate = {
+  userId: string
+  name: string
+  email: string
+}
+
+export type ProjectResearchField = {
+  id: number
+  code: string
+  name: string
+  isActive: boolean
+}
+
+export type ProjectMemberFilter = ProjectMemberStatus | 'ALL'
+
 export const PROJECT_TYPE_LABELS: Record<ProjectType, string> = {
   RESEARCH: 'Nghiên cứu',
   PRODUCTION: 'Sản phẩm',
@@ -99,4 +132,14 @@ export const PROJECT_STATUS_BADGES: Record<ProjectStatus, string> = {
   PAUSED: 'warn',
   COMPLETED: 'ok',
   CLOSED: 'mute',
+}
+
+export const PROJECT_MEMBER_ROLE_LABELS: Record<ProjectMemberRole, string> = {
+  LEADER: 'Leader',
+  MEMBER: 'Thành viên',
+}
+
+export const PROJECT_MEMBER_STATUS_LABELS: Record<ProjectMemberStatus, string> = {
+  ACTIVE: 'Đang tham gia',
+  REMOVED: 'Đã rời dự án',
 }

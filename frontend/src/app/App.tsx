@@ -26,6 +26,7 @@ import { FilesPage } from '../features/files/pages/FilesPage'
 import { ProjectListPage } from '../features/projects/pages/ProjectListPage'
 import { ProjectDetailPage } from '../features/projects/pages/ProjectDetailPage'
 import { ProjectManagementPage } from '../features/projects/pages/ProjectManagementPage'
+import { EventManagementPage } from '../features/events/pages/EventManagementPage'
 
 export function App() {
   return (
@@ -148,6 +149,7 @@ export function App() {
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/files" element={<RequirePermissions allOf={['FILE_UPLOAD']}><FilesPage /></RequirePermissions>} />
         <Route path="/admin/projects" element={<ProjectManagementPage />} />
+        <Route path="/admin/events" element={<EventManagementPage />} />
         <Route path="/admin/research-fields" element={<RequirePermissions allOf={['RESEARCH_FIELD_MANAGE']}><ResearchFieldsPage /></RequirePermissions>} />
         <Route path="/admin/members" element={<RequirePermissions allOf={['MEMBER_MANAGE']}><AdminMembersPage /></RequirePermissions>} />
         <Route path="/admin/accounts" element={<RequirePermissions allOf={['USER_MANAGE', 'ROLE_MANAGE', 'PERMISSION_MANAGE']}><AdminAccountsPage /></RequirePermissions>} />
