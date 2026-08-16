@@ -2,6 +2,8 @@ import {
   CalendarRange,
   ChevronLeft,
   ChevronRight,
+  Eye,
+  FileText,
   FlaskConical,
   FolderKanban,
   LayoutDashboard,
@@ -19,6 +21,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../auth/authContext'
+import { ProjectDocumentsPanel } from '../../documents/components/ProjectDocumentsPanel'
 import { EmptyState } from '../../../shared/components/EmptyState'
 import { Feedback } from '../../../shared/components/Feedback'
 import {
@@ -63,7 +66,7 @@ type ProjectCoreForm = {
 type CreateProjectForm = ProjectCoreForm
 
 type BusyAction = 'create' | 'update' | 'leadership' | 'delete' | null
-type ProjectTab = 'overview' | 'leaders' | 'members' | 'research-fields'
+type ProjectTab = 'overview' | 'leaders' | 'members' | 'research-fields' | 'documents'
 type ProjectTypeFilter = ProjectType | 'ALL'
 type ProjectStatusFilter = ProjectStatus | 'ALL'
 type ProjectSort = 'NEWEST' | 'NAME_ASC' | 'CODE_ASC'
@@ -82,7 +85,7 @@ const emptyCreateForm: CreateProjectForm = {
   isFeatured: false,
 }
 
-const PROJECT_TABS: ProjectTab[] = ['overview', 'leaders', 'members', 'research-fields']
+const PROJECT_TABS: ProjectTab[] = ['overview', 'leaders', 'members', 'research-fields', 'documents']
 const PROJECT_PAGE_SIZE = 10
 
 export function ProjectManagementPage() {
@@ -101,13 +104,16 @@ export function ProjectManagementPage() {
   const [isEditingCore, setIsEditingCore] = useState(false)
   const [leadershipDirty, setLeadershipDirty] = useState(false)
   const [researchFieldsDirty, setResearchFieldsDirty] = useState(false)
+  const [documentsDirty, setDocumentsDirty] = useState(false)
+  const [documentsBusy, setDocumentsBusy] = useState(false)
   const [loading, setLoading] = useState(true)
   const [busyAction, setBusyAction] = useState<BusyAction>(null)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const createDialogRef = useRef<HTMLDialogElement>(null)
   const createTriggerRef = useRef<HTMLButtonElement>(null)
-  const projectsInitializedRef = useRef(false)
+  const projectDialogRef = useRef<HTMLDialogElement>(null)
+  const projectDialogTriggerRef = useRef<HTMLButtonElement | null>(null)
 
   const isAdmin = Boolean(profile?.roles.includes('ADMIN'))
   const canManageProject = isAdmin && Boolean(profile?.permissions.includes('PROJECT_MANAGE'))
@@ -151,16 +157,11 @@ export function ProjectManagementPage() {
       || projectStatusFilter !== 'ALL'
       || projectSort !== 'NEWEST',
   )
-  const selectedProjectInFilter = Boolean(
-    selectedProject && filteredProjects.some((project) => project.id === selectedProject.id),
-  )
-  const selectedProjectOnCurrentPage = Boolean(
-    selectedProject && pagedProjects.some((project) => project.id === selectedProject.id),
+  const canEditProject = (project: Project) => Boolean(
+    profile && (isAdmin || project.leaders.some((leader) => leader.userId === profile.userId)),
   )
   const canEditSelected = Boolean(
-    selectedProject
-      && profile
-      && (isAdmin || selectedProject.leaders.some((leader) => leader.userId === profile.userId)),
+    selectedProject && canEditProject(selectedProject),
   )
   const createDirty = useMemo(
     () => !sameCoreForm(createForm, emptyCreateForm),
@@ -170,20 +171,16 @@ export function ProjectManagementPage() {
     () => Boolean(selectedProject && editForm && !sameCoreForm(editForm, toCoreForm(selectedProject))),
     [editForm, selectedProject],
   )
-  const selectedProjectDirty = editDirty || leadershipDirty || researchFieldsDirty
-  const isBusy = busyAction !== null
+  const selectedProjectDirty = editDirty || leadershipDirty || researchFieldsDirty || documentsDirty
+  const isBusy = busyAction !== null || documentsBusy
 
   const loadProjects = useCallback(async () => {
     if (!token) return
     const result = await listProjects(token)
     setProjects(result)
-    setSelectedId((current) => {
-      const isFirstLoad = !projectsInitializedRef.current
-      projectsInitializedRef.current = true
-      if (isFirstLoad) return result[0]?.id ?? null
-      if (current === null) return null
-      return result.some((project) => project.id === current) ? current : result[0]?.id ?? null
-    })
+    setSelectedId((current) => (
+      current !== null && result.some((project) => project.id === current) ? current : null
+    ))
   }, [token])
 
   useEffect(() => {
@@ -208,6 +205,13 @@ export function ProjectManagementPage() {
   }, [isCreating])
 
   useEffect(() => {
+    const dialog = projectDialogRef.current
+    if (!selectedProject || !dialog || dialog.open) return
+    dialog.showModal()
+    window.requestAnimationFrame(() => document.getElementById('project-tab-overview')?.focus())
+  }, [selectedProject])
+
+  useEffect(() => {
     setProjectPage(0)
   }, [projectQuery, projectSort, projectStatusFilter, projectTypeFilter])
 
@@ -215,28 +219,49 @@ export function ProjectManagementPage() {
     setProjectPage((current) => Math.min(current, projectPageCount - 1))
   }, [projectPageCount])
 
-  function selectProject(projectId: number) {
-    const isClosing = projectId === selectedId
-    if (selectedProjectDirty) {
-      const confirmation = isClosing
-        ? 'Đóng chi tiết dự án và bỏ các thay đổi chưa lưu?'
-        : 'Bạn có thay đổi chưa lưu. Chuyển dự án và bỏ các thay đổi này?'
-      if (!window.confirm(confirmation)) return
-    }
-    if (isClosing) {
-      setSelectedId(null)
-      setActiveTab('overview')
-      setIsEditingCore(false)
-      setLeadershipDirty(false)
-      setResearchFieldsDirty(false)
-      clearFeedback()
-      return
-    }
-    setSelectedId(projectId)
+  function resetProjectDialogState() {
     setActiveTab('overview')
     setIsEditingCore(false)
     setLeadershipDirty(false)
     setResearchFieldsDirty(false)
+    setDocumentsDirty(false)
+    setDocumentsBusy(false)
+  }
+
+  function restoreProjectDialogFocus() {
+    const trigger = projectDialogTriggerRef.current
+    projectDialogTriggerRef.current = null
+    window.requestAnimationFrame(() => {
+      if (trigger?.isConnected) trigger.focus()
+      else createTriggerRef.current?.focus()
+    })
+  }
+
+  function finishClosingProjectDialog() {
+    if (projectDialogRef.current?.open) projectDialogRef.current.close()
+    setSelectedId(null)
+    resetProjectDialogState()
+    restoreProjectDialogFocus()
+  }
+
+  function requestCloseProjectDialog() {
+    if (isBusy) return
+    if (selectedProjectDirty && !window.confirm('Đóng cửa sổ dự án và bỏ các thay đổi chưa lưu?')) return
+    finishClosingProjectDialog()
+    clearFeedback()
+  }
+
+  function openProjectDialog(project: Project, trigger: HTMLButtonElement) {
+    if (isBusy) return
+    projectDialogTriggerRef.current = trigger
+    setSelectedId(project.id)
+    setEditForm(toCoreForm(project))
+    setActiveTab('overview')
+    setIsEditingCore(canEditProject(project))
+    setLeadershipDirty(false)
+    setResearchFieldsDirty(false)
+    setDocumentsDirty(false)
+    setDocumentsBusy(false)
     clearFeedback()
   }
 
@@ -246,6 +271,7 @@ export function ProjectManagementPage() {
       setIsEditingCore(false)
       setLeadershipDirty(false)
       setResearchFieldsDirty(false)
+      setDocumentsDirty(false)
     }
     setIsCreating(true)
     clearFeedback()
@@ -322,12 +348,14 @@ export function ProjectManagementPage() {
     clearFeedback()
     try {
       const created = await createProject(token, payload)
+      projectDialogTriggerRef.current = createTriggerRef.current
       mergeProject(created, true)
+      setEditForm(toCoreForm(created))
       setCreateForm(emptyCreateForm)
       setIsCreating(false)
       resetProjectFilters()
       setActiveTab('overview')
-      setIsEditingCore(false)
+      setIsEditingCore(true)
       setMessage(`Đã tạo dự án ${created.code}.`)
       window.requestAnimationFrame(() => document.getElementById('project-tab-overview')?.focus())
     } catch (reason: unknown) {
@@ -373,8 +401,7 @@ export function ProjectManagementPage() {
       const deletedCode = selectedProject.code
       await deleteProject(token, selectedProject.id)
       await loadProjects()
-      setActiveTab('overview')
-      setIsEditingCore(false)
+      finishClosingProjectDialog()
       setMessage(`Đã xóa mềm dự án ${deletedCode}.`)
     } catch (reason: unknown) {
       setError(errorMessage(reason, 'Không thể xóa dự án.'))
@@ -403,7 +430,7 @@ export function ProjectManagementPage() {
         <div>
           <span className="eyebrow">Không gian quản trị</span>
           <h1>Quản lý dự án</h1>
-          <p>Chọn một dự án, sau đó xử lý từng nhóm công việc trong tab tương ứng.</p>
+          <p>Tìm dự án và mở cửa sổ quản lý để xem hoặc cập nhật từng nhóm thông tin.</p>
         </div>
         <div className="project-page-actions">
           {canManageProject && token ? (
@@ -434,7 +461,7 @@ export function ProjectManagementPage() {
           <div className="panel-head">
             <div>
               <h2>Danh sách dự án</h2>
-              <p>{projects.length} dự án bạn có quyền xem. Chọn một dự án để mở khu vực quản lý.</p>
+              <p>{projects.length} dự án bạn có quyền xem. Mỗi dự án được quản lý trong một cửa sổ riêng.</p>
             </div>
             <FolderKanban size={20} aria-hidden="true" />
           </div>
@@ -498,36 +525,37 @@ export function ProjectManagementPage() {
                     : 'Không có dự án phù hợp'}
                   {filteredProjects.length !== projects.length ? ` · ${projects.length} dự án tổng cộng` : ''}
                 </span>
-                {selectedProject && !selectedProjectOnCurrentPage ? (
-                  <span className="project-filter-note">
-                    {selectedProjectInFilter
-                      ? 'Dự án đang mở nằm ở trang khác; phần chi tiết vẫn được giữ bên dưới.'
-                      : 'Dự án đang mở không nằm trong bộ lọc, nhưng vẫn được giữ để tránh mất thao tác.'}
-                  </span>
-                ) : null}
               </div>
 
               {pagedProjects.length ? (
                 <div className="field-admin-list project-management-list">
-                  {pagedProjects.map((project) => (
-                    <button
-                      className={`member-select-row ${selectedId === project.id ? 'selected' : ''}`}
-                      type="button"
-                      key={project.id}
-                      aria-pressed={selectedId === project.id}
-                      disabled={isBusy}
-                      onClick={() => selectProject(project.id)}
-                    >
+                  {pagedProjects.map((project) => {
+                    const canEdit = canEditProject(project)
+                    return (
+                    <article className="member-select-row project-management-row" key={project.id}>
                       <span className="member-avatar">{project.code.slice(0, 2).toUpperCase()}</span>
-                      <span>
+                      <span className="project-management-row-main">
                         <strong>{project.name}</strong>
                         <small>{project.code} · {PROJECT_TYPE_LABELS[project.projectType]}</small>
                       </span>
-                      <span className={`badge ${PROJECT_STATUS_BADGES[project.status]}`}>
-                        {PROJECT_STATUS_LABELS[project.status]}
+                      <span className="project-management-row-actions">
+                        <span className={`badge ${PROJECT_STATUS_BADGES[project.status]}`}>
+                          {PROJECT_STATUS_LABELS[project.status]}
+                        </span>
+                        <button
+                          className="btn ghost table-btn"
+                          type="button"
+                          disabled={isBusy}
+                          aria-label={`${canEdit ? 'Chỉnh sửa' : 'Xem'} dự án ${project.name}`}
+                          onClick={(event) => openProjectDialog(project, event.currentTarget)}
+                        >
+                          {canEdit ? <Pencil aria-hidden="true" /> : <Eye aria-hidden="true" />}
+                          {canEdit ? 'Chỉnh sửa' : 'Xem'}
+                        </button>
                       </span>
-                    </button>
-                  ))}
+                    </article>
+                    )
+                  })}
                 </div>
               ) : (
                 <div className="project-filter-empty">
@@ -668,28 +696,67 @@ export function ProjectManagementPage() {
       ) : null}
 
       {!loading && selectedProject ? (
-        <>
-          <section className="panel page-section project-workspace-header">
-            <div className="panel-head project-selected-head">
-              <div>
-                <span className="eyebrow">Đang quản lý</span>
-                <h2>{selectedProject.name}</h2>
-                <p>
-                  {selectedProject.code} · {PROJECT_TYPE_LABELS[selectedProject.projectType]} ·{' '}
-                  {PROJECT_STATUS_LABELS[selectedProject.status]}
-                </p>
+        <dialog
+          ref={projectDialogRef}
+          className="project-editor-dialog"
+          aria-labelledby="project-editor-title"
+          aria-describedby="project-editor-description"
+          onCancel={(event) => {
+            event.preventDefault()
+            requestCloseProjectDialog()
+          }}
+          onClick={(event) => {
+            if (event.target === event.currentTarget) requestCloseProjectDialog()
+          }}
+        >
+          <div className="project-editor-dialog-shell">
+            <header className="project-editor-dialog-head">
+              <div className="project-editor-dialog-heading">
+                <span className="project-create-dialog-icon" aria-hidden="true">
+                  <FolderKanban />
+                </span>
+                <div>
+                  <span className="eyebrow">{canEditSelected ? 'Chỉnh sửa dự án' : 'Chi tiết dự án'}</span>
+                  <h2 id="project-editor-title">{selectedProject.name}</h2>
+                  <p id="project-editor-description">
+                    {selectedProject.code} · {PROJECT_TYPE_LABELS[selectedProject.projectType]} ·{' '}
+                    {PROJECT_STATUS_LABELS[selectedProject.status]}
+                  </p>
+                </div>
               </div>
-              <div className="project-workspace-actions">
+              <div className="project-editor-dialog-actions">
                 <span className={`badge ${selectedProject.isPublic ? 'success' : 'info'}`}>
                   {selectedProject.isPublic ? 'Công khai' : 'Nội bộ'}
                 </span>
-                <Link className="btn ghost table-btn" to={`/admin/events?projectId=${selectedProject.id}`}>
-                  <CalendarRange aria-hidden="true" /> Mở Sự kiện
+                <Link
+                  className="btn ghost table-btn"
+                  to={`/admin/events?projectId=${selectedProject.id}`}
+                  aria-disabled={isBusy}
+                  onClick={(event) => {
+                    if (isBusy) {
+                      event.preventDefault()
+                      return
+                    }
+                    if (selectedProjectDirty && !window.confirm('Mở trang Sự kiện và bỏ các thay đổi dự án chưa lưu?')) {
+                      event.preventDefault()
+                    }
+                  }}
+                >
+                  <CalendarRange aria-hidden="true" /> Sự kiện
                 </Link>
+                <button
+                  className="project-close-button"
+                  type="button"
+                  aria-label="Đóng cửa sổ dự án"
+                  onClick={requestCloseProjectDialog}
+                  disabled={isBusy}
+                >
+                  <X aria-hidden="true" />
+                </button>
               </div>
-            </div>
+            </header>
 
-            <div className="project-tabs" role="tablist" aria-label={`Quản lý dự án ${selectedProject.name}`} onKeyDown={handleTabKeyDown}>
+            <div className="project-tabs project-editor-dialog-tabs" role="tablist" aria-label={`Quản lý dự án ${selectedProject.name}`} onKeyDown={handleTabKeyDown}>
               <button
                 id="project-tab-overview"
                 className="project-tab"
@@ -738,17 +805,33 @@ export function ProjectManagementPage() {
               >
                 <FlaskConical aria-hidden="true" /> Lĩnh vực nghiên cứu
               </button>
+              <button
+                id="project-tab-documents"
+                className="project-tab"
+                type="button"
+                role="tab"
+                aria-selected={activeTab === 'documents'}
+                aria-controls="project-panel-documents"
+                tabIndex={activeTab === 'documents' ? 0 : -1}
+                onClick={() => setActiveTab('documents')}
+              >
+                <FileText aria-hidden="true" /> Tài liệu
+              </button>
             </div>
-          </section>
 
-          <section
-            id="project-panel-overview"
-            className="panel page-section project-tab-panel"
-            role="tabpanel"
-            aria-labelledby="project-tab-overview"
-            tabIndex={0}
-            hidden={activeTab !== 'overview'}
-          >
+            <div className="project-editor-dialog-body">
+              <div className="project-editor-dialog-feedback" role="status" aria-live="polite">
+                <Feedback message={message} error={error} />
+              </div>
+
+              <section
+                id="project-panel-overview"
+                className="panel project-tab-panel"
+                role="tabpanel"
+                aria-labelledby="project-tab-overview"
+                tabIndex={0}
+                hidden={activeTab !== 'overview'}
+              >
               <div className="panel-head">
                 <div>
                   <h2>{isEditingCore ? 'Chỉnh sửa thông tin dự án' : 'Tổng quan dự án'}</h2>
@@ -818,15 +901,15 @@ export function ProjectManagementPage() {
                   </button>
                 </div>
               ) : null}
-          </section>
+              </section>
 
-          <div
-            id="project-panel-leaders"
-            role="tabpanel"
-            aria-labelledby="project-tab-leaders"
-            tabIndex={0}
-            hidden={activeTab !== 'leaders'}
-          >
+              <div
+                id="project-panel-leaders"
+                role="tabpanel"
+                aria-labelledby="project-tab-leaders"
+                tabIndex={0}
+                hidden={activeTab !== 'leaders'}
+              >
               {canManageProject && token ? (
                 <ProjectLeadershipEditor
                   key={selectedProject.id}
@@ -861,31 +944,56 @@ export function ProjectManagementPage() {
                   </div>
                 </section>
               )}
-          </div>
+              </div>
 
-          <div
-            id="project-panel-members"
-            role="tabpanel"
-            aria-labelledby="project-tab-members"
-            tabIndex={0}
-            hidden={activeTab !== 'members'}
-          >
-            <ProjectMembersPanel project={selectedProject} />
-          </div>
+              <div
+                id="project-panel-members"
+                role="tabpanel"
+                aria-labelledby="project-tab-members"
+                tabIndex={0}
+                hidden={activeTab !== 'members'}
+              >
+                <ProjectMembersPanel project={selectedProject} />
+              </div>
 
-          <div
-            id="project-panel-research-fields"
-            role="tabpanel"
-            aria-labelledby="project-tab-research-fields"
-            tabIndex={0}
-            hidden={activeTab !== 'research-fields'}
-          >
-            <ProjectResearchFieldsPanel
-              project={selectedProject}
-              onDirtyChange={setResearchFieldsDirty}
-            />
+              <div
+                id="project-panel-research-fields"
+                role="tabpanel"
+                aria-labelledby="project-tab-research-fields"
+                tabIndex={0}
+                hidden={activeTab !== 'research-fields'}
+              >
+                <ProjectResearchFieldsPanel
+                  project={selectedProject}
+                  onDirtyChange={setResearchFieldsDirty}
+                />
+              </div>
+
+              <div
+                id="project-panel-documents"
+                role="tabpanel"
+                aria-labelledby="project-tab-documents"
+                tabIndex={0}
+                hidden={activeTab !== 'documents'}
+              >
+                <ProjectDocumentsPanel
+                  project={selectedProject}
+                  onDirtyChange={setDocumentsDirty}
+                  onBusyChange={setDocumentsBusy}
+                />
+              </div>
+            </div>
+
+            <footer className="project-editor-dialog-footer">
+              <span className="muted small" aria-live="polite">
+                {selectedProjectDirty ? 'Có thay đổi chưa lưu trong cửa sổ này.' : 'Mọi thay đổi đã được đồng bộ.'}
+              </span>
+              <button className="btn ghost" type="button" disabled={isBusy} onClick={requestCloseProjectDialog}>
+                Đóng
+              </button>
+            </footer>
           </div>
-        </>
+        </dialog>
       ) : null}
     </div>
   )
