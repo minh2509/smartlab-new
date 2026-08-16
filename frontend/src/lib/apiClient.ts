@@ -6,6 +6,16 @@ type ApiOptions = RequestInit & {
   token?: string | null
 }
 
+export class ApiClientError extends Error {
+  readonly status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.status = status
+    this.name = 'ApiClientError'
+  }
+}
+
 export async function apiClient<T>(path: string, options: ApiOptions = {}): Promise<T> {
   const headers = new Headers(options.headers)
   const hasBody = options.body !== undefined && options.body !== null
@@ -29,7 +39,7 @@ export async function apiClient<T>(path: string, options: ApiOptions = {}): Prom
 
   if (!response.ok) {
     const payload = data as ApiErrorPayload | null
-    throw new Error(payload?.message ?? `Request failed with status ${response.status}`)
+    throw new ApiClientError(payload?.message ?? `Request failed with status ${response.status}`, response.status)
   }
 
   return data as T
