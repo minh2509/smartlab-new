@@ -17,4 +17,6 @@ public class AuthResponse {
     @Schema(description = "Server-side session id embedded in the JWT", example = "8f239d28-d16e-4715-9061-0ef24cf50686")
     private String sessionId;
 
+    @Schema(description = "Opaque refresh token. The server stores only its SHA-256 hash.")
+    private String refreshToken;
 }
