@@ -63,12 +63,12 @@ class PostDirectPublishControllerTest {
     }
 
     @Test
-    void directPublishMethodUsesOnlyPostMappingPathVariableAndExactCapabilityAuthority() throws Exception {
+    void directPublishMethodUsesOnlyPostMappingPathVariableAndApprovedEntryAuthorities() throws Exception {
         Method directPublish = PostController.class.getMethod("directPublish", Authentication.class, Long.class);
 
         assertThat(directPublish.getAnnotation(PostMapping.class).value()).containsExactly("/{id}/direct-publish");
         assertThat(directPublish.getAnnotation(PreAuthorize.class).value())
-                .isEqualTo("hasAuthority('posts.publish.direct')");
+                .isEqualTo("hasAuthority('posts.publish.direct') or hasAuthority('PROJECT_MANAGE')");
         assertThat(hasAnnotation(directPublish.getParameterAnnotations()[1], PathVariable.class)).isTrue();
         assertThat(hasAnnotation(directPublish.getParameterAnnotations()[1], RequestBody.class)).isFalse();
         assertThat(Arrays.stream(directPublish.getAnnotations())

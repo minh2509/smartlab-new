@@ -10,10 +10,12 @@ import com.smartlab.dto.response.PostSummaryResponse;
 import com.smartlab.entity.ContentCategoryEntity;
 import com.smartlab.entity.PostEntity;
 import com.smartlab.entity.PostReviewEntity;
+import com.smartlab.entity.ProjectMemberEntity;
 import com.smartlab.entity.UserEntity;
 import com.smartlab.enums.PostVisibility;
 import com.smartlab.enums.PostStatus;
 import com.smartlab.enums.ProjectMemberStatus;
+import com.smartlab.enums.ProjectRole;
 import com.smartlab.enums.ReviewDecision;
 import com.smartlab.repo.ContentCategoryRepository;
 import com.smartlab.repo.PostRepository;
@@ -30,6 +32,7 @@ import com.smartlab.service.PostContentFileReferences;
 import com.smartlab.service.PostContentFileService;
 import com.smartlab.service.PostMediaCache;
 import com.smartlab.service.PostSlugGenerator;
+import com.smartlab.service.PermissionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -54,6 +57,9 @@ import static com.smartlab.service.AuditVocabulary.POST_REVIEWED;
 @Service
 @RequiredArgsConstructor
 public class PostServiceImpl implements PostService {
+    private static final String DIRECT_PUBLISH_PERMISSION = "posts.publish.direct";
+    private static final String PROJECT_MANAGE_PERMISSION = "PROJECT_MANAGE";
+    private static final String PROJECT_ANNOUNCEMENT_PUBLISHED = "PROJECT_ANNOUNCEMENT_PUBLISHED";
     private final UserRepository userRepository;
     private final ContentCategoryRepository contentCategoryRepository;
     private final PostRepository postRepository;
@@ -70,6 +76,8 @@ public class PostServiceImpl implements PostService {
     private PostContentFileService postContentFileService;
     @Autowired
     private PostMediaCache postMediaCache;
+    @Autowired
+    private PermissionService permissionService;
 
     @Override
     public PostDetailResponse createPost(String authenticatedEmail, CreatePostRequest request) {
@@ -255,8 +263,45 @@ public class PostServiceImpl implements PostService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Only draft posts can be directly published");
         }
 
-        post.publishDirect(Instant.now());
+        Set<String> permissions = permissionService.getEffectivePermissionCodes(author);
+        if (!permissions.contains(DIRECT_PUBLISH_PERMISSION)) {
+            requireProjectLeaderDirectPublish(post, author, permissions);
+        }
+
+        Instant publicationInstant = Instant.now();
+        post.publishDirect(publicationInstant);
+        if (post.getVisibility() == PostVisibility.PROJECT) {
+            notifyActiveProjectMembers(post, author, publicationInstant);
+        }
         return toDetailResponse(post, findCategoryResponse(post.getCategoryId()), toAuthorResponse(author));
+    }
+
+    private void requireProjectLeaderDirectPublish(PostEntity post, UserEntity author, Set<String> permissions) {
+        if (post.getVisibility() != PostVisibility.PROJECT
+                || post.getProjectId() == null
+                || !permissions.contains(PROJECT_MANAGE_PERMISSION)
+                || !projectMemberRepository.existsByProject_IdAndUser_IdAndProjectRoleAndStatus(
+                        post.getProjectId(),
+                        author.getId(),
+                        ProjectRole.LEADER,
+                        ProjectMemberStatus.ACTIVE
+                )) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Direct publishing requires global permission or active leadership of this project");
+        }
+    }
+
+    private void notifyActiveProjectMembers(PostEntity post, UserEntity author, Instant publicationInstant) {
+        projectMemberRepository.findMembersForDisplay(post.getProjectId(), ProjectMemberStatus.ACTIVE).stream()
+                .map(ProjectMemberEntity::getUser)
+                .filter(member -> !member.getId().equals(author.getId()))
+                .forEach(member -> notificationService.notify(
+                        member.getId(),
+                        PROJECT_ANNOUNCEMENT_PUBLISHED,
+                        "A project announcement was published",
+                        new NotificationRelated(author.getId(), "POST", post.getId(), "/posts/" + post.getSlug()),
+                        publicationInstant
+                ));
     }
 
     @Override

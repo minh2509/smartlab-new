@@ -135,6 +135,21 @@ class PostWorkflowSecurityIntegrationTest {
         verifySuccessfulServiceDelegation(endpoint);
     }
 
+    @ParameterizedTest(name = "direct publish PROJECT_MANAGE entry authority reaches service")
+    @MethodSource("projectManageDirectPublishAuthority")
+    void directPublishAllowsProjectManageToReachService(String authority) throws Exception {
+        String token = tokenWithAuthorities(authority);
+        WorkflowEndpoint endpoint = directPublishEndpoint();
+        stubSuccessfulService(endpoint);
+
+        mockMvc.perform(request(endpoint, token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value(PostStatus.PUBLISHED.name()));
+
+        verifyAuthenticatedFilterPath();
+        verifySuccessfulServiceDelegation(endpoint);
+    }
+
     @ParameterizedTest(name = "direct publish rejects additional wrong authority {0}")
     @MethodSource("additionalDirectPublishWrongAuthorities")
     void directPublishRejectsAdditionalWrongWorkflowAuthorities(String authority) throws Exception {
@@ -347,6 +362,10 @@ class PostWorkflowSecurityIntegrationTest {
 
     private static Stream<String> directPublishOnlyAuthority() {
         return Stream.of("posts.publish.direct");
+    }
+
+    private static Stream<String> projectManageDirectPublishAuthority() {
+        return Stream.of("PROJECT_MANAGE");
     }
 
     private enum Operation {

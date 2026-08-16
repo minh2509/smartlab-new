@@ -82,7 +82,7 @@ public class PostController {
     }
 
     @PostMapping("/{id}/direct-publish")
-    @PreAuthorize("hasAuthority('posts.publish.direct')")
+    @PreAuthorize("hasAuthority('posts.publish.direct') or hasAuthority('PROJECT_MANAGE')")
     public PostDetailResponse directPublish(Authentication authentication, @PathVariable Long id) {
         return postService.directPublishPost(authentication.getName(), id);
     }

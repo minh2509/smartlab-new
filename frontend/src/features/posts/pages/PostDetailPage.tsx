@@ -6,6 +6,8 @@ import { useAuth } from '../../auth/authContext'
 import { deletePost, directPublishPost, getPostBySlug, publishPost, submitPost } from '../api'
 import { PostContent } from '../components/PostContent'
 import type { PostDetail, PostStatus } from '../types'
+import { getProject } from '../../projects/api'
+import type { Project } from '../../projects/types'
 
 const STATUS_LABELS: Record<PostStatus, string> = {
   DRAFT: 'Bản nháp',
@@ -32,6 +34,7 @@ export function PostDetailPage() {
   })
   const [pending, setPending] = useState<MutationKind | null>(null)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [postProject, setPostProject] = useState<Project | null>(null)
 
   useEffect(() => {
     if (!slug) {
@@ -52,7 +55,37 @@ export function PostDetailPage() {
   const permissions = profile?.permissions ?? []
   const canSubmit = permissions.includes('posts.submit')
   const canPublish = permissions.includes('posts.publish')
-  const canDirectPublish = permissions.includes('posts.publish.direct')
+  const canProjectManage = permissions.includes('PROJECT_MANAGE')
+  const canDirectPublishGlobally = permissions.includes('posts.publish.direct')
+
+  useEffect(() => {
+    const projectId = post?.visibility === 'PROJECT' ? post.projectId : null
+    setPostProject(null)
+    if (!token || !canProjectManage || !projectId) return
+
+    let active = true
+    void getProject(projectId, token)
+      .then((project) => {
+        if (active) setPostProject(project)
+      })
+      .catch(() => {
+        if (active) setPostProject(null)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [post?.projectId, post?.visibility, token, canProjectManage])
+
+  const canDirectPublishAsProjectLeader = Boolean(
+    post?.visibility === 'PROJECT'
+      && post.projectId
+      && canProjectManage
+      && profile
+      && postProject?.id === post.projectId
+      && postProject.leaders.some((leader) => leader.userId === profile.userId),
+  )
+  const canDirectPublish = canDirectPublishGlobally || canDirectPublishAsProjectLeader
 
   async function mutate(kind: Exclude<MutationKind, 'delete'>) {
     if (!token || !post || pending) return
