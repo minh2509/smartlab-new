@@ -332,7 +332,7 @@ class ProjectLeadershipD3PostgresIntegrationTest {
                             is_active,
                             is_account_verified,
                             reset_otp_expire_at
-                        ) values (?, ?, ?, ?, true, true, 0)
+                        ) values (?, ?, ?, ?, true, true, NULL)
                         returning id
                         """,
                 Long.class,

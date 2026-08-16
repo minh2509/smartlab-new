@@ -7,6 +7,18 @@ import org.springframework.web.multipart.MultipartFile;
 public interface FileService {
     FileResponse upload(MultipartFile file, String accessScope, String description, String email);
 
+    FileResponse uploadForProject(
+            MultipartFile file,
+            String accessScope,
+            String description,
+            String email,
+            Long projectId
+    );
+
+    FileResponse describe(Long id, Authentication authentication);
+
+    boolean canRead(Long id, Authentication authentication);
+
     DownloadedFile download(Long id, Authentication authentication);
 
     void delete(Long id, String email, Authentication authentication);

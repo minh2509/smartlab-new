@@ -14,7 +14,8 @@ export function EventManagementPage() {
   const [loadingProjects, setLoadingProjects] = useState(true)
   const [projectsError, setProjectsError] = useState('')
 
-  const requestedProjectId = parseProjectId(searchParams.get('projectId'))
+  const rawProjectId = searchParams.get('projectId')
+  const requestedProjectId = parseProjectId(rawProjectId)
   const selectedProject = useMemo(
     () => projects.find((project) => project.id === requestedProjectId) ?? null,
     [projects, requestedProjectId],
@@ -48,15 +49,17 @@ export function EventManagementPage() {
     setSearchParams(next, { replace: true })
   }
 
-  const missingRequestedProject = !loadingProjects
-    && requestedProjectId !== null
-    && selectedProject === null
+  const invalidRequestedProject = rawProjectId !== null && requestedProjectId === null
+  const missingRequestedProject = !loadingProjects && (
+    invalidRequestedProject
+    || (requestedProjectId !== null && selectedProject === null)
+  )
 
   return (
     <>
       <div className="page-title">
         <div>
-          <span className="eyebrow">D3 · Events</span>
+          <span className="eyebrow">Lịch hoạt động</span>
           <h1>Quản lý sự kiện</h1>
           <p>Quản lý tập trung sự kiện toàn Lab và sự kiện thuộc từng dự án.</p>
         </div>
@@ -73,7 +76,7 @@ export function EventManagementPage() {
 
         <Feedback
           error={projectsError || (missingRequestedProject
-            ? 'Dự án được yêu cầu không tồn tại hoặc bạn không có quyền xem.'
+            ? 'Dự án được yêu cầu không hợp lệ, không tồn tại hoặc bạn không có quyền xem.'
             : '')}
         />
 
@@ -81,10 +84,11 @@ export function EventManagementPage() {
           <span>Phạm vi sự kiện</span>
           <select
             className="select"
-            value={selectedProject ? String(selectedProject.id) : 'LAB'}
+            value={missingRequestedProject ? '' : selectedProject ? String(selectedProject.id) : 'LAB'}
             disabled={loadingProjects}
             onChange={(event) => selectScope(event.target.value)}
           >
+            {missingRequestedProject ? <option value="" disabled>Chọn lại phạm vi</option> : null}
             <option value="LAB">Sự kiện cấp Lab</option>
             {projects.map((project) => (
               <option value={project.id} key={project.id}>
@@ -95,12 +99,14 @@ export function EventManagementPage() {
           <small>
             {loadingProjects
               ? 'Đang tải dự án...'
-              : `${projects.length} dự án khả dụng. Quyền tạo, sửa và xóa vẫn được backend kiểm tra.`}
+              : `${projects.length} dự án bạn có thể truy cập.`}
           </small>
         </label>
       </section>
 
-      {!loadingProjects ? <EventManagementPanel project={selectedProject} /> : null}
+      {!loadingProjects && !missingRequestedProject
+        ? <EventManagementPanel project={selectedProject} />
+        : null}
     </>
   )
 }

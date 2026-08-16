@@ -3,10 +3,15 @@ package com.smartlab.service.impl;
 import com.smartlab.dto.response.FileResponse;
 import com.smartlab.entity.StoredFileEntity;
 import com.smartlab.entity.UserEntity;
+import com.smartlab.enums.FileAccessScope;
+import com.smartlab.repo.DocumentRepository;
+import com.smartlab.repo.DocumentVersionRepository;
+import com.smartlab.repo.ProjectRepository;
 import com.smartlab.repo.StoredFileRepository;
 import com.smartlab.repo.MemberProfileRepository;
 import com.smartlab.repo.UserRepository;
 import com.smartlab.service.FileService;
+import com.smartlab.service.ProjectAccessService;
 import com.smartlab.storage.FileStorage;
 import com.smartlab.storage.StorageException;
 import lombok.RequiredArgsConstructor;
@@ -16,6 +21,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -36,8 +43,6 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class FileServiceImpl implements FileService {
     private static final String PROVIDER = "GOOGLE_DRIVE";
-    // PROJECT is intentionally disabled until project membership checks are implemented in D3.
-    private static final Set<String> ACCESS_SCOPES = Set.of("PUBLIC", "PRIVATE", "LAB");
     private static final Map<String, Set<String>> ALLOWED_FILE_TYPES = Map.ofEntries(
             Map.entry("image/jpeg", Set.of("jpg", "jpeg")),
             Map.entry("image/png", Set.of("png")),
@@ -61,6 +66,10 @@ public class FileServiceImpl implements FileService {
     private final UserRepository userRepository;
     private final FileStorage fileStorage;
     private final MemberProfileRepository memberProfileRepository;
+    private final ProjectRepository projectRepository;
+    private final ProjectAccessService projectAccessService;
+    private final DocumentRepository documentRepository;
+    private final DocumentVersionRepository documentVersionRepository;
 
     @Value("${smartlab.file.max-size-bytes:26214400}")
     private long maxFileSizeBytes;
@@ -71,13 +80,38 @@ public class FileServiceImpl implements FileService {
     @Override
     @Transactional
     public FileResponse upload(MultipartFile file, String accessScope, String description, String email) {
+        return uploadInternal(file, accessScope, description, email, null);
+    }
+
+    @Override
+    @Transactional
+    public FileResponse uploadForProject(
+            MultipartFile file,
+            String accessScope,
+            String description,
+            String email,
+            Long projectId
+    ) {
+        if (projectId == null || projectId <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A valid project id is required");
+        }
+        return uploadInternal(file, accessScope, description, email, projectId);
+    }
+
+    private FileResponse uploadInternal(
+            MultipartFile file,
+            String accessScope,
+            String description,
+            String email,
+            Long projectId
+    ) {
         if (file == null || file.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "File must not be empty");
         }
         if (file.getSize() > maxFileSizeBytes) {
             throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "File exceeds the configured size limit");
         }
-        String normalizedScope = normalizeScope(accessScope);
+        String normalizedScope = normalizeScope(accessScope, projectId);
         UserEntity owner = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found"));
         String originalName = safeFileName(file.getOriginalFilename());
@@ -103,6 +137,7 @@ public class FileServiceImpl implements FileService {
         try {
             StoredFileEntity entity = StoredFileEntity.builder()
                     .ownerUser(owner)
+                    .projectId(projectId)
                     .storageProvider(PROVIDER)
                     .storageKey(stored.storageKey())
                     .publicUrl(stored.publicUrl())
@@ -112,7 +147,9 @@ public class FileServiceImpl implements FileService {
                     .accessScope(normalizedScope)
                     .description(description)
                     .build();
-            return toResponse(storedFileRepository.save(entity));
+            StoredFileEntity saved = storedFileRepository.saveAndFlush(entity);
+            registerRollbackCleanup(stored.storageKey());
+            return toResponse(saved);
         } catch (RuntimeException exception) {
             try {
                 fileStorage.trash(stored.storageKey());
@@ -125,11 +162,25 @@ public class FileServiceImpl implements FileService {
 
     @Override
     @Transactional(readOnly = true)
+    public FileResponse describe(Long id, Authentication authentication) {
+        StoredFileEntity entity = findActive(id);
+        requireCanRead(entity, authentication);
+        return toResponse(entity);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean canRead(Long id, Authentication authentication) {
+        return storedFileRepository.findByIdAndDeletedAtIsNull(id)
+                .map(entity -> canRead(entity, authentication))
+                .orElse(false);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public DownloadedFile download(Long id, Authentication authentication) {
         StoredFileEntity entity = findActive(id);
-        if (!canRead(entity, authentication)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not have access to this file");
-        }
+        requireCanRead(entity, authentication);
         try {
             FileStorage.StoredFileContent content = fileStorage.download(entity.getStorageKey());
             return new DownloadedFile(content.content(), entity.getMimeType(), entity.getOriginalName());
@@ -149,6 +200,10 @@ public class FileServiceImpl implements FileService {
         if (memberProfileRepository.existsByAvatarFileId(id)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "File is currently used as a member avatar");
         }
+        if (documentRepository.existsByCurrentFile_IdAndDeletedAtIsNull(id)
+                || documentVersionRepository.existsByFile_Id(id)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "File is retained by a document version");
+        }
         try {
             fileStorage.trash(entity.getStorageKey());
         } catch (StorageException exception) {
@@ -164,20 +219,55 @@ public class FileServiceImpl implements FileService {
     }
 
     private boolean canRead(StoredFileEntity entity, Authentication authentication) {
-        if ("PUBLIC".equals(entity.getAccessScope())) {
-            return true;
-        }
-        if (!isAuthenticated(authentication)) {
+        FileAccessScope scope;
+        try {
+            scope = FileAccessScope.valueOf(entity.getAccessScope());
+        } catch (IllegalArgumentException | NullPointerException exception) {
             return false;
         }
-        if (isAdmin(authentication)) {
-            return true;
+        if (scope == FileAccessScope.PUBLIC) return true;
+        if (!isAuthenticated(authentication)) return false;
+        if (scope == FileAccessScope.LAB) return true;
+        if (scope == FileAccessScope.PROJECT) {
+            if (entity.getProjectId() == null) return false;
+            return projectRepository.findByIdAndDeletedAtIsNull(entity.getProjectId())
+                    .map(project -> {
+                        try {
+                            projectAccessService.requireRead(project, authentication.getName());
+                            return true;
+                        } catch (ResponseStatusException exception) {
+                            return false;
+                        }
+                    })
+                    .orElse(false);
         }
-        if ("LAB".equals(entity.getAccessScope())) {
-            return true;
+        if (isAdmin(authentication)) return true;
+        if (scope == FileAccessScope.PRIVATE) {
+            return entity.getOwnerUser() != null
+                    && entity.getOwnerUser().getEmail().equalsIgnoreCase(authentication.getName());
         }
-        return entity.getOwnerUser() != null
-                && entity.getOwnerUser().getEmail().equalsIgnoreCase(authentication.getName());
+        return false;
+    }
+
+    private void requireCanRead(StoredFileEntity entity, Authentication authentication) {
+        if (!canRead(entity, authentication)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not have access to this file");
+        }
+    }
+
+    private void registerRollbackCleanup(String storageKey) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) return;
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status == TransactionSynchronization.STATUS_COMMITTED) return;
+                try {
+                    fileStorage.trash(storageKey);
+                } catch (RuntimeException ignored) {
+                    // The database rollback must remain the primary outcome; cloud cleanup is best-effort.
+                }
+            }
+        });
     }
 
     private boolean isAdmin(Authentication authentication) {
@@ -192,13 +282,12 @@ public class FileServiceImpl implements FileService {
                 && !"anonymousUser".equals(authentication.getName());
     }
 
-    private String normalizeScope(String accessScope) {
-        String normalized = accessScope == null ? "PRIVATE" : accessScope.trim().toUpperCase(Locale.ROOT);
-        if (!ACCESS_SCOPES.contains(normalized)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Invalid access scope; PROJECT files are unavailable until project membership is implemented");
+    private String normalizeScope(String accessScope, Long projectId) {
+        FileAccessScope normalized = FileAccessScope.from(accessScope, FileAccessScope.PRIVATE);
+        if (normalized == FileAccessScope.PROJECT && projectId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "PROJECT files require a project id");
         }
-        return normalized;
+        return normalized.name();
     }
 
     private String normalizeMimeType(String contentType) {
