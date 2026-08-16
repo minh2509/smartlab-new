@@ -1,4 +1,4 @@
-import { CalendarDays, FileClock, FlaskConical, LockKeyhole, UsersRound } from 'lucide-react'
+import { CalendarDays, FolderKanban, UsersRound } from 'lucide-react'
 import { Fragment, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Feedback } from '../../../shared/components/Feedback'
@@ -157,52 +157,27 @@ export function ProjectDetailPage() {
         </div>
       </section>
 
-      <FutureProjectSections />
+      {token ? <ProjectWorkspaceSection project={project} /> : null}
     </>
   )
 }
 
-function FutureProjectSections() {
-  const sections = [
-    {
-      title: 'Lĩnh vực & thành viên',
-      description: 'Khu vực này sẽ hiển thị lĩnh vực nghiên cứu và đội ngũ dự án khi API Đợt 2 hoàn thiện.',
-      batch: 'Đợt 2 · Chưa kích hoạt',
-      Icon: FlaskConical,
-    },
-    {
-      title: 'Sự kiện dự án',
-      description: 'Lịch workshop, seminar và các mốc sự kiện sẽ được nối ở đợt nghiệp vụ tiếp theo.',
-      batch: 'Đợt 2 · Chưa kích hoạt',
-      Icon: CalendarDays,
-    },
-    {
-      title: 'Tài liệu & phiên bản',
-      description: 'Danh sách tài liệu và lịch sử phiên bản sẽ được nối với dịch vụ file ở Đợt 3.',
-      batch: 'Đợt 3 · Chưa kích hoạt',
-      Icon: FileClock,
-    },
-  ]
-
+function ProjectWorkspaceSection({ project }: { project: Project }) {
   return (
-    <section className="section alt" aria-label="Các chức năng dự án sẽ triển khai sau">
+    <section className="section alt" aria-label="Công cụ nội bộ của dự án">
       <div className="wrap">
         <div className="sec-head">
-          <div className="kicker">Mở rộng dự án</div>
-          <h2>Các phần sẽ hoàn thiện ở đợt sau</h2>
-          <p>Cấu trúc giao diện đã chừa sẵn; chưa có dữ liệu giả hoặc lời gọi API chưa tồn tại.</p>
+          <div className="kicker">Không gian nội bộ</div>
+          <h2>Tiếp tục làm việc với dự án</h2>
+          <p>Thành viên, lĩnh vực nghiên cứu, tài liệu, phiên bản và sự kiện đã được quản lý trong khu vực đăng nhập.</p>
         </div>
-        <div className="grid c3">
-          {sections.map(({ title, description, batch, Icon }) => (
-            <article className="card pad" aria-disabled="true" style={{ opacity: 0.72 }} key={title}>
-              <div className="row gap-6 wrapf">
-                <span className="ico"><Icon aria-hidden="true" /></span>
-                <span className="badge mute"><LockKeyhole size={13} /> {batch}</span>
-              </div>
-              <h3>{title}</h3>
-              <p className="muted">{description}</p>
-            </article>
-          ))}
+        <div className="row gap-6 wrapf">
+          <Link className="btn primary" to="/admin/projects">
+            <FolderKanban aria-hidden="true" /> Mở quản lý dự án
+          </Link>
+          <Link className="btn" to={`/admin/events?projectId=${project.id}`}>
+            <CalendarDays aria-hidden="true" /> Xem sự kiện dự án
+          </Link>
         </div>
       </div>
     </section>
