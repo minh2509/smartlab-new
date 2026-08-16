@@ -475,3 +475,28 @@ VALUES
   ('EVENT', 'Event'),
   ('ANNOUNCEMENT', 'Announcement')
 ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name;
+
+-- The local and deployed SmartLab application role uses explicit table grants.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'smartlab_user') THEN
+    GRANT USAGE ON SCHEMA public TO smartlab_user;
+
+    GRANT SELECT, INSERT, UPDATE, DELETE ON
+      tasks,
+      task_assignees,
+      task_attachments,
+      evaluations,
+      evaluation_criteria,
+      evaluation_scores
+    TO smartlab_user;
+
+    GRANT USAGE, SELECT ON SEQUENCE
+      tasks_id_seq,
+      task_attachments_id_seq,
+      evaluations_id_seq,
+      evaluation_criteria_id_seq
+    TO smartlab_user;
+  END IF;
+END
+$$;
