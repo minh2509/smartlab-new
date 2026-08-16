@@ -7,6 +7,7 @@ import com.smartlab.repo.StoredFileRepository;
 import com.smartlab.repo.MemberProfileRepository;
 import com.smartlab.repo.UserRepository;
 import com.smartlab.service.FileService;
+import com.smartlab.service.PostContentFileService;
 import com.smartlab.storage.FileStorage;
 import com.smartlab.storage.StorageException;
 import lombok.RequiredArgsConstructor;
@@ -34,7 +35,7 @@ import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
-public class FileServiceImpl implements FileService {
+public class FileServiceImpl implements FileService, PostContentFileService {
     private static final String PROVIDER = "GOOGLE_DRIVE";
     // PROJECT is intentionally disabled until project membership checks are implemented in D3.
     private static final Set<String> ACCESS_SCOPES = Set.of("PUBLIC", "PRIVATE", "LAB");
@@ -139,6 +140,31 @@ public class FileServiceImpl implements FileService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public java.util.Optional<FileMetadata> findActiveMetadata(Long fileId) {
+        return storedFileRepository.findByIdAndDeletedAtIsNull(fileId)
+                .map(file -> new FileMetadata(
+                        file.getId(),
+                        file.getOwnerUser() == null ? null : file.getOwnerUser().getId(),
+                        file.getMimeType(),
+                        file.getOriginalName(),
+                        isAllowedImageMimeType(file.getMimeType())
+                ));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public DownloadedContent downloadActiveContent(Long fileId) {
+        StoredFileEntity entity = findActive(fileId);
+        try {
+            FileStorage.StoredFileContent content = fileStorage.download(entity.getStorageKey());
+            return new DownloadedContent(content.content(), entity.getMimeType(), entity.getOriginalName());
+        } catch (StorageException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, exception.getMessage(), exception);
+        }
+    }
+
+    @Override
     @Transactional
     public void delete(Long id, String email, Authentication authentication) {
         StoredFileEntity entity = findActive(id);
@@ -213,6 +239,10 @@ public class FileServiceImpl implements FileService {
             throw new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE,
                     "File extension, declared type, and content do not match an allowed file type");
         }
+    }
+
+    private boolean isAllowedImageMimeType(String mimeType) {
+        return mimeType != null && mimeType.startsWith("image/") && ALLOWED_FILE_TYPES.containsKey(mimeType);
     }
 
     private boolean matchesSignature(String mimeType, byte[] content) {

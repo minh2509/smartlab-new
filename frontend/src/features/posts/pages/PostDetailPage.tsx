@@ -4,6 +4,7 @@ import { Edit3, Send, ShieldCheck, Trash2, Upload } from 'lucide-react'
 import { Feedback } from '../../../shared/components/Feedback'
 import { useAuth } from '../../auth/authContext'
 import { deletePost, directPublishPost, getPostBySlug, publishPost, submitPost } from '../api'
+import { PostContent } from '../components/PostContent'
 import type { PostDetail, PostStatus } from '../types'
 
 const STATUS_LABELS: Record<PostStatus, string> = {
@@ -139,19 +140,12 @@ export function PostDetailPage() {
             </div>
 
             <hr className="post-page-divider" />
-            <PostContent contentJson={post.contentJson} />
+            <PostContent contentJson={post.contentJson} slug={post.slug} token={token} className="post-page-content-body" />
           </article>
         ) : null}
       </div>
     </section>
   )
-}
-
-function PostContent({ contentJson }: { contentJson: Record<string, unknown> }) {
-  if (typeof contentJson.body !== 'string') {
-    return <div className="post-page-content-state"><p>Nội dung này hiện chưa hỗ trợ hiển thị đầy đủ.</p></div>
-  }
-  return <div className="post-page-content-body"><p>{contentJson.body}</p></div>
 }
 
 type PostActionsProps = {

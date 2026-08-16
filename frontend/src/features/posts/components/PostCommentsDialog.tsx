@@ -9,6 +9,8 @@ import {
 } from '../api'
 import { exactDateTime, relativeTime } from '../relativeTime'
 import { PostReactionPicker } from './PostReactionPicker'
+import { PostContent } from './PostContent'
+import { parsePostContent } from '../postContent'
 import { reactionPresentation } from '../reactions'
 import type { PostComment, PostFeedItem, ReactionState, ReactionType } from '../types'
 
@@ -39,7 +41,7 @@ export function PostCommentsDialog({
   const [content, setContent] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const body = typeof post.contentJson.body === 'string' ? post.contentJson.body : post.excerpt
+  const postContent = parsePostContent(post.contentJson)
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow
@@ -141,7 +143,9 @@ export function PostCommentsDialog({
         <div className="comments-dialog-scroll">
           <section className="comments-post-content" aria-label="Nội dung bài viết">
             {post.title ? <h2>{post.title}</h2> : null}
-            <p>{body ?? 'Nội dung này hiện chưa hỗ trợ hiển thị đầy đủ.'}</p>
+            {postContent ? <PostContent contentJson={post.contentJson} slug={post.slug} token={token} parsedContent={postContent} /> : (
+              <p>{post.excerpt ?? 'Nội dung này hiện chưa hỗ trợ hiển thị đầy đủ.'}</p>
+            )}
           </section>
           <div className="comments-social-strip">
             <span>

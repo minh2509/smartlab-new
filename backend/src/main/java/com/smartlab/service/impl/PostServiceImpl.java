@@ -26,10 +26,16 @@ import com.smartlab.service.AuditService;
 import com.smartlab.service.NotificationRelated;
 import com.smartlab.service.PostService;
 import com.smartlab.service.PostContentRenderer;
+import com.smartlab.service.PostContentFileReferences;
+import com.smartlab.service.PostContentFileService;
+import com.smartlab.service.PostMediaCache;
 import com.smartlab.service.PostSlugGenerator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -60,6 +66,11 @@ public class PostServiceImpl implements PostService {
     private final ProjectRepository projectRepository;
     private final ProjectMemberRepository projectMemberRepository;
 
+    @Autowired
+    private PostContentFileService postContentFileService;
+    @Autowired
+    private PostMediaCache postMediaCache;
+
     @Override
     public PostDetailResponse createPost(String authenticatedEmail, CreatePostRequest request) {
         UserEntity author = resolveActiveAuthor(authenticatedEmail);
@@ -69,6 +80,7 @@ public class PostServiceImpl implements PostService {
         Map<String, Object> contentJson = request.getContentJson() == null
                 ? new LinkedHashMap<>()
                 : request.getContentJson();
+        validateContentFileReferences(contentJson, author.getId());
         String contentHtml = postContentRenderer.renderAndSanitize(contentJson).orElse(null);
         Instant creationTime = Instant.now();
         for (int candidateNumber = 1; candidateNumber <= postSlugGenerator.maxCandidates(); candidateNumber++) {
@@ -125,6 +137,9 @@ public class PostServiceImpl implements PostService {
         Map<String, Object> resolvedContentJson = request.hasContentJson()
                 ? request.getContentJson() == null ? new LinkedHashMap<>() : request.getContentJson()
                 : post.getContentJson();
+        if (request.hasContentJson()) {
+            validateContentFileReferences(resolvedContentJson, post.getAuthorUserId());
+        }
         String resolvedContentHtml = request.hasContentJson()
                 ? postContentRenderer.renderAndSanitize(resolvedContentJson)
                         .orElse(post.getContentHtml())
@@ -347,6 +362,73 @@ public class PostServiceImpl implements PostService {
 
         return toDetailResponse(post, findCategoryResponse(post.getCategoryId()),
                 findAuthorResponse(post.getAuthorUserId()));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PostFileDownload downloadPostFile(Authentication authentication, String slug, Long fileId) {
+        PostEntity post = resolveReadablePostForFile(authentication, slug);
+        PostContentFileReferences.Reference reference = PostContentFileReferences.parse(post.getContentJson()).stream()
+                .filter(candidate -> candidate.fileId().equals(fileId))
+                .findFirst()
+                .orElseThrow(this::postNotFound);
+        PostContentFileService.FileMetadata metadata = postContentFileService.findActiveMetadata(fileId)
+                .filter(candidate -> Objects.equals(candidate.ownerUserId(), post.getAuthorUserId()))
+                .orElseThrow(this::postNotFound);
+        if ("image".equals(reference.type()) && !metadata.image()) {
+            throw postNotFound();
+        }
+        if ("image".equals(reference.type())) {
+            byte[] bytes = postMediaCache.getOrLoad(fileId,
+                    () -> postContentFileService.downloadActiveContent(fileId).content());
+            return new PostFileDownload(bytes, metadata.mimeType(), metadata.originalName());
+        }
+        PostContentFileService.DownloadedContent content = postContentFileService.downloadActiveContent(fileId);
+        return new PostFileDownload(content.content(), content.mimeType(), content.originalName());
+    }
+
+    private PostEntity resolveReadablePostForFile(Authentication authentication, String slug) {
+        if (!isAuthenticated(authentication)) {
+            return postRepository.findActivePublishedPublicBySlug(slug).orElseThrow(this::postNotFound);
+        }
+        UserEntity viewer = resolveActiveAuthor(authentication.getName());
+        PostEntity post = postRepository.findActiveBySlug(slug).orElseThrow(this::postNotFound);
+        if (Objects.equals(post.getAuthorUserId(), viewer.getId())) {
+            return post;
+        }
+        if (post.getStatus() == PostStatus.PENDING_REVIEW && isAuthorizedReviewer(authentication)
+                && postRepository.findActivePendingReviewableByIdAndReviewerUserId(post.getId(), viewer.getId()).isPresent()) {
+            return post;
+        }
+        if (!isReadableBy(post, activeProjectIdsOrNoMatch(viewer.getId()))) {
+            throw postNotFound();
+        }
+        return post;
+    }
+
+    private void validateContentFileReferences(Map<String, Object> contentJson, Long authorUserId) {
+        List<PostContentFileReferences.Reference> references = PostContentFileReferences.parse(contentJson);
+        for (PostContentFileReferences.Reference reference : references) {
+            PostContentFileService.FileMetadata file = postContentFileService.findActiveMetadata(reference.fileId())
+                    .filter(candidate -> Objects.equals(candidate.ownerUserId(), authorUserId))
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "Post content file reference is unavailable"));
+            if ("image".equals(reference.type()) && !file.image()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Image reference must use a supported image file");
+            }
+        }
+    }
+
+    private boolean isAuthenticated(Authentication authentication) {
+        return authentication != null && authentication.isAuthenticated()
+                && !"anonymousUser".equals(authentication.getName());
+    }
+
+    private boolean isAuthorizedReviewer(Authentication authentication) {
+        return authentication.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch("posts.review"::equals);
     }
 
     private UserEntity resolveActiveAuthor(String authenticatedEmail) {

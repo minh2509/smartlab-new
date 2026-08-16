@@ -118,6 +118,7 @@ export function PostFeedPage() {
               {posts.map((post) => <PostFeedCard
                 key={post.id}
                 post={post}
+                token={token}
                 reactionPending={reactionPending === post.id}
                 canInteract={Boolean(token)}
                 onReaction={(reaction) => react(post.id, reaction)}
