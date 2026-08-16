@@ -34,10 +34,19 @@ export function ResearchFieldsPage() {
     setMessage(null)
     setError(null)
     try {
+      const normalizedCode = code
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '')
+      if (!/^[A-Z][A-Z0-9_]{0,79}$/.test(normalizedCode)) {
+        setError('Code phải bắt đầu bằng chữ cái và chỉ gồm chữ, số hoặc dấu gạch dưới.')
+        return
+      }
       await apiClient<ResearchField>('/admin/research-fields', {
         method: 'POST',
         token,
-        body: JSON.stringify({ code, name, description }),
+        body: JSON.stringify({ code: normalizedCode, name: name.trim(), description: description.trim() }),
       })
       setCode('')
       setName('')
@@ -88,7 +97,7 @@ export function ResearchFieldsPage() {
   return (
     <div>
       <div className="page-title">
-        <div><span className="eyebrow">D2 · Research fields</span><h1>Lĩnh vực nghiên cứu</h1><p>Quản lý các lĩnh vực để thành viên và dự án có thể gắn nhãn.</p></div>
+        <div><span className="eyebrow">Research fields</span><h1>Lĩnh vực nghiên cứu</h1><p>Quản lý các lĩnh vực để thành viên và dự án có thể gắn nhãn.</p></div>
       </div>
       {error && <div className="alert error">{error}</div>}
       {message && <div className="alert"><Check />{message}</div>}
@@ -96,7 +105,7 @@ export function ResearchFieldsPage() {
         <form className="panel" onSubmit={createField}>
           <div className="panel-head"><div><h2>Thêm lĩnh vực</h2><p>Code sẽ được chuẩn hóa thành chữ hoa.</p></div><Plus size={20} /></div>
           <div className="form-stack">
-            <label className="field"><span>Code</span><input className="input" required value={code} onChange={(event) => setCode(event.target.value)} placeholder="AI" /></label>
+            <label className="field"><span>Code</span><input className="input" required maxLength={80} value={code} onChange={(event) => setCode(event.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '_'))} placeholder="AI" pattern="[A-Z][A-Z0-9_]*" title="Bắt đầu bằng chữ cái; chỉ dùng chữ, số hoặc dấu gạch dưới" /></label>
             <label className="field"><span>Tên lĩnh vực</span><input className="input" required value={name} onChange={(event) => setName(event.target.value)} placeholder="Artificial Intelligence" /></label>
             <label className="field"><span>Mô tả</span><textarea className="textarea" rows={5} value={description} onChange={(event) => setDescription(event.target.value)} /></label>
             <button className="btn primary" type="submit" disabled={saving}><Save size={16} />{saving ? 'Đang tạo...' : 'Tạo lĩnh vực'}</button>

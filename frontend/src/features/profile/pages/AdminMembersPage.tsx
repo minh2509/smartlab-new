@@ -109,7 +109,7 @@ export function AdminMembersPage() {
 
   return (
     <div>
-      <div className="page-title"><div><span className="eyebrow">D2 · Member profiles</span><h1>Hồ sơ thành viên</h1><p>Quản trị trạng thái, thông tin công khai và lĩnh vực của từng thành viên.</p></div></div>
+      <div className="page-title"><div><span className="eyebrow">Member profiles</span><h1>Hồ sơ thành viên</h1><p>Quản trị trạng thái, thông tin công khai và lĩnh vực của từng thành viên.</p></div></div>
       {error && <div className="alert error">{error}</div>}
       {message && <div className="alert"><Check />{message}</div>}
       {loading ? <div className="empty">Đang tải thành viên...</div> : <div className="panel-grid">

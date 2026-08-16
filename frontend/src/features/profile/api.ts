@@ -15,7 +15,6 @@ export function updateMyMemberProfile(
     phone: string
     publicEmail: string
     bio: string
-    joinedLabAt: string
     avatarFileId?: number
     removeAvatar?: boolean
     researchFieldIds: number[]
@@ -24,11 +23,7 @@ export function updateMyMemberProfile(
   return apiClient<MemberProfile>('/me/profile', {
     method: 'PATCH',
     token,
-    body: JSON.stringify({
-      ...payload,
-      joinedLabAt: payload.joinedLabAt || null,
-      clearJoinedLabAt: !payload.joinedLabAt,
-    }),
+    body: JSON.stringify(payload),
   })
 }
 

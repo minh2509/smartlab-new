@@ -8,7 +8,6 @@ type FormState = {
   phone: string
   publicEmail: string
   bio: string
-  joinedLabAt: string
   researchFieldIds: number[]
   avatarFileId?: number
 }
@@ -17,13 +16,7 @@ export function ProfilePage() {
   const { token, profile: account } = useAuth()
   const [member, setMember] = useState<MemberProfile | null>(null)
   const [fields, setFields] = useState<ResearchField[]>([])
-  const [form, setForm] = useState<FormState>({
-    phone: '',
-    publicEmail: '',
-    bio: '',
-    joinedLabAt: '',
-    researchFieldIds: [],
-  })
+  const [form, setForm] = useState<FormState>({ phone: '', publicEmail: '', bio: '', researchFieldIds: [] })
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -45,7 +38,6 @@ export function ProfilePage() {
           phone: profileData.phone ?? '',
           publicEmail: profileData.publicEmail ?? '',
           bio: profileData.bio ?? '',
-          joinedLabAt: profileData.joinedLabAt ?? '',
           researchFieldIds: profileData.researchFields.map((field) => field.id),
           avatarFileId: profileData.avatar?.id,
         })
@@ -56,9 +48,7 @@ export function ProfilePage() {
       .finally(() => {
         if (active) setLoading(false)
       })
-    return () => {
-      active = false
-    }
+    return () => { active = false }
   }, [token])
 
   useEffect(() => {
@@ -74,9 +64,7 @@ export function ProfilePage() {
         objectUrl = URL.createObjectURL(blob)
         setAvatarUrl(objectUrl)
       })
-      .catch(() => {
-        if (active) setAvatarUrl(null)
-      })
+      .catch(() => { if (active) setAvatarUrl(null) })
     return () => {
       active = false
       if (objectUrl) URL.revokeObjectURL(objectUrl)
@@ -85,14 +73,15 @@ export function ProfilePage() {
 
   const initials = useMemo(() => {
     const name = member?.name ?? account?.name ?? 'Smart Lab'
-    return name
-      .split(' ')
-      .filter(Boolean)
-      .slice(-2)
-      .map((part) => part[0])
-      .join('')
-      .toUpperCase()
+    return name.split(' ').filter(Boolean).slice(-2).map((part) => part[0]).join('').toUpperCase()
   }, [account?.name, member?.name])
+
+  const joinedLabDate = useMemo(() => {
+    if (!member?.joinedLabAt) return 'Chưa có thông tin'
+    const [year, month, day] = member.joinedLabAt.split('-').map(Number)
+    if (!year || !month || !day) return member.joinedLabAt
+    return new Intl.DateTimeFormat('vi-VN').format(new Date(year, month - 1, day))
+  }, [member?.joinedLabAt])
 
   const toggleField = (fieldId: number) => {
     setForm((current) => ({
@@ -208,7 +197,7 @@ export function ProfilePage() {
           <div className="form-stack">
             <label className="field"><span>Số điện thoại</span><input className="input" type="tel" inputMode="tel" placeholder="0901234567" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /><small className="muted">Để trống nếu không muốn khai báo. Ví dụ: 0901234567 hoặc +84901234567.</small></label>
             <label className="field"><span>Email công khai</span><input className="input" type="email" value={form.publicEmail} onChange={(event) => setForm({ ...form, publicEmail: event.target.value })} /></label>
-            <label className="field"><span>Ngày tham gia Lab</span><input className="input" type="date" value={form.joinedLabAt} onChange={(event) => setForm({ ...form, joinedLabAt: event.target.value })} /></label>
+            <div className="field"><span>Ngày tham gia Lab</span><strong className="input">{joinedLabDate}</strong><small className="muted">Ngày tham gia do hệ thống ghi nhận và không thể chỉnh sửa.</small></div>
             <label className="field"><span>Giới thiệu</span><textarea className="textarea" rows={6} value={form.bio} onChange={(event) => setForm({ ...form, bio: event.target.value })} /></label>
           </div>
         </section>
