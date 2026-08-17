@@ -61,6 +61,8 @@ class NotificationEntityMappingTest {
         assertThatThrownBy(() -> NotificationEntity.create(0L, null, "TYPE", "m", null, null, null, TIME)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> NotificationEntity.create(1L, 0L, "TYPE", "m", null, null, null, TIME)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> NotificationEntity.create(1L, null, " ", "m", null, null, null, TIME)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> NotificationEntity.create(1L, null, "TYPE", "", null, null, null, TIME)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> NotificationEntity.create(1L, null, "TYPE", "   ", null, null, null, TIME)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> NotificationEntity.create(1L, null, "t".repeat(101), "m", null, null, null, TIME)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> NotificationEntity.create(1L, null, "TYPE", "m".repeat(1001), null, null, null, TIME)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> NotificationEntity.create(1L, null, "TYPE", "m", "r".repeat(81), null, null, TIME)).isInstanceOf(IllegalArgumentException.class);

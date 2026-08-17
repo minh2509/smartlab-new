@@ -68,6 +68,7 @@ public class NotificationEntity {
         Objects.requireNonNull(message, "Notification message is required");
         Objects.requireNonNull(createdAt, "Notification creation instant is required");
         requireNonBlank(type, "Notification type must not be blank");
+        requireNonBlank(message, "Notification message must not be blank");
         validateLength(type, 100, "Notification type must be at most 100 characters");
         validateLength(message, 1000, "Notification message must be at most 1000 characters");
         validateOptionalLength(relatedType, 80, "Notification related type must be at most 80 characters");

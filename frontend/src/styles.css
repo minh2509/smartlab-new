@@ -3520,25 +3520,64 @@ select {
 
 .notification-popover-row {
   display: grid;
-  grid-template-columns: 7px minmax(0, 1fr);
-  align-items: start;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
   width: 100%;
-  gap: 11px;
-  padding: 13px 16px;
-  border: 0;
+  gap: 0;
   border-bottom: 1px solid var(--line);
   background: var(--surface);
   color: inherit;
   text-align: left;
 }
 
-button.notification-popover-row {
+
+.notification-popover-main {
+  display: grid;
+  grid-template-columns: 7px minmax(0, 1fr);
+  align-items: start;
+  width: 100%;
+  gap: 11px;
+  padding: 13px 8px 13px 16px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+
+button.notification-popover-main {
   cursor: pointer;
 }
 
-button.notification-popover-row:hover {
+
+button.notification-popover-main:hover {
   background: var(--surface-2);
 }
+
+
+.notification-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  border: 0;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+
+.notification-delete:hover {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+
+.notification-delete svg {
+  width: 15px;
+  height: 15px;
+}
+
 
 .notification-popover-row:last-child {
   border-bottom: 0;
@@ -3548,7 +3587,8 @@ button.notification-popover-row:hover {
   background: color-mix(in srgb, var(--brand-1) 4%, var(--surface));
 }
 
-.notification-popover-row:disabled {
+.notification-popover-main:disabled,
+.notification-delete:disabled {
   cursor: wait;
   opacity: .7;
 }
