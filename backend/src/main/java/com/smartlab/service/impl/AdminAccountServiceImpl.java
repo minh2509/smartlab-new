@@ -135,7 +135,7 @@ public class AdminAccountServiceImpl implements AdminAccountService {
                 .build();
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = ResponseStatusException.class)
     @Override
     public AccountResponse acceptInvite(InvitationAcceptRequest request) {
         AccountInvitationEntity invitation = accountInvitationRepository.findByTokenHash(tokenHashService.sha256(request.getToken()))
