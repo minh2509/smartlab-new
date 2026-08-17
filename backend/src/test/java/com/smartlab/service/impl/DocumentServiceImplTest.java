@@ -8,16 +8,20 @@ import com.smartlab.dto.response.FileResponse;
 import com.smartlab.entity.DocumentEntity;
 import com.smartlab.entity.DocumentVersionEntity;
 import com.smartlab.entity.ProjectEntity;
+import com.smartlab.entity.ProjectMemberEntity;
 import com.smartlab.entity.StoredFileEntity;
 import com.smartlab.entity.UserEntity;
 import com.smartlab.enums.ProjectStatus;
 import com.smartlab.enums.ProjectType;
 import com.smartlab.repo.DocumentRepository;
 import com.smartlab.repo.DocumentVersionRepository;
+import com.smartlab.repo.ProjectMemberRepository;
 import com.smartlab.repo.ProjectRepository;
 import com.smartlab.repo.StoredFileRepository;
 import com.smartlab.service.AuditService;
 import com.smartlab.service.FileService;
+import com.smartlab.service.NotificationRelated;
+import com.smartlab.service.NotificationService;
 import com.smartlab.service.ProjectAccessService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -41,9 +45,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -54,9 +61,11 @@ class DocumentServiceImplTest {
     @Mock private DocumentVersionRepository documentVersionRepository;
     @Mock private ProjectRepository projectRepository;
     @Mock private StoredFileRepository storedFileRepository;
+    @Mock private ProjectMemberRepository projectMemberRepository;
     @Mock private ProjectAccessService projectAccessService;
     @Mock private FileService fileService;
     @Mock(answer = Answers.RETURNS_DEFAULTS) private AuditService auditService;
+    @Mock private NotificationService notificationService;
     @InjectMocks private DocumentServiceImpl service;
 
     private Authentication authentication;
@@ -129,6 +138,75 @@ class DocumentServiceImplTest {
         assertThat(response.getCurrentVersionNo()).isEqualTo(1);
         assertThat(response.getCurrentFile().getId()).isEqualTo(101L);
         verify(documentVersionRepository).saveAndFlush(any(DocumentVersionEntity.class));
+        verify(auditService).log(eq("DOCUMENT_CREATED"), eq("DOCUMENT"), eq("31"), eq(null), any());
+    }
+
+    @Test
+    void projectDocumentCreateNotifiesReadableActiveMembersOnceWithDocumentMetadata() {
+        UserEntity recipient = user(12L, "member@smartlab.test");
+        createDocumentWithScope("PROJECT");
+        when(projectMemberRepository.findMembersForDisplay(7L, com.smartlab.enums.ProjectMemberStatus.ACTIVE))
+                .thenReturn(List.of(ProjectMemberEntity.createMember(project, actor), ProjectMemberEntity.createMember(project, recipient),
+                        ProjectMemberEntity.createMember(project, recipient)));
+
+        service.create(7L, createRequest("PROJECT"), authentication);
+
+        verify(projectAccessService).requireRead(project, recipient.getEmail());
+        verify(notificationService).notify(
+                eq(12L), eq("PROJECT_DOCUMENT_CREATED"), eq("A project document was added"),
+                eq(new NotificationRelated(11L, "DOCUMENT", 31L, "/admin/projects?projectId=7")), isA(java.time.Instant.class)
+        );
+        verify(notificationService, never()).notify(eq(11L), any(), any(), any(), any());
+    }
+
+    @Test
+    void labVersionNotifiesOnlyReadableActiveProjectMembersWithDocumentId() {
+        UserEntity readable = user(12L, "readable@smartlab.test");
+        UserEntity rejected = user(13L, "rejected@smartlab.test");
+        StoredFileEntity oldFile = storedFile(101L, "LAB", actor);
+        DocumentEntity document = document(31L, oldFile);
+        configureVersionCreation(document, "LAB");
+        when(projectMemberRepository.findMembersForDisplay(7L, com.smartlab.enums.ProjectMemberStatus.ACTIVE))
+                .thenReturn(List.of(ProjectMemberEntity.createMember(project, readable), ProjectMemberEntity.createMember(project, rejected)));
+        when(projectAccessService.requireRead(project, readable.getEmail())).thenReturn(readable);
+        doThrow(new ResponseStatusException(HttpStatus.FORBIDDEN, "not readable"))
+                .when(projectAccessService).requireRead(project, rejected.getEmail());
+
+        service.addVersion(31L, versionRequest("LAB"), authentication);
+
+        verify(notificationService).notify(
+                eq(12L), eq("PROJECT_DOCUMENT_VERSION_CREATED"), eq("A new project document version was added"),
+                eq(new NotificationRelated(11L, "DOCUMENT", 31L, "/admin/projects?projectId=7")), isA(java.time.Instant.class)
+        );
+        verify(notificationService, never()).notify(eq(13L), any(), any(), any(), any());
+    }
+
+    @Test
+    void privateDocumentAndVersionDoNotBroadcast() {
+        createDocumentWithScope("PRIVATE");
+        service.create(7L, createRequest("PRIVATE"), authentication);
+
+        StoredFileEntity oldFile = storedFile(101L, "PRIVATE", actor);
+        DocumentEntity document = document(31L, oldFile);
+        configureVersionCreation(document, "PRIVATE");
+        service.addVersion(31L, versionRequest("PRIVATE"), authentication);
+
+        verifyNoInteractions(projectMemberRepository, notificationService);
+    }
+
+    @Test
+    void notificationFailurePropagatesAfterSuccessfulDocumentMutation() {
+        UserEntity recipient = user(12L, "member@smartlab.test");
+        createDocumentWithScope("PUBLIC");
+        when(projectMemberRepository.findMembersForDisplay(7L, com.smartlab.enums.ProjectMemberStatus.ACTIVE))
+                .thenReturn(List.of(ProjectMemberEntity.createMember(project, recipient)));
+        doThrow(new IllegalStateException("notification unavailable")).when(notificationService).notify(
+                any(), any(), any(), any(), any());
+
+        assertThatThrownBy(() -> service.create(7L, createRequest("PUBLIC"), authentication))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("notification unavailable");
+
         verify(auditService).log(eq("DOCUMENT_CREATED"), eq("DOCUMENT"), eq("31"), eq(null), any());
     }
 
@@ -337,6 +415,70 @@ class DocumentServiceImplTest {
 
     private static MockMultipartFile textFile(String name, String content) {
         return new MockMultipartFile("file", name, "text/plain", content.getBytes());
+    }
+
+    private CreateDocumentRequest createRequest(String scope) {
+        CreateDocumentRequest request = new CreateDocumentRequest();
+        request.setFile(textFile("proposal.txt", "proposal"));
+        request.setTitle("Proposal");
+        request.setAccessScope(scope);
+        return request;
+    }
+
+    private CreateDocumentVersionRequest versionRequest(String scope) {
+        CreateDocumentVersionRequest request = new CreateDocumentVersionRequest();
+        request.setFile(textFile("proposal-v2.txt", "version two"));
+        request.setAccessScope(scope);
+        return request;
+    }
+
+    private void createDocumentWithScope(String scope) {
+        StoredFileEntity storedFile = storedFile(101L, scope, actor);
+        FileResponse fileResponse = fileResponse(101L, scope);
+        when(projectRepository.findActiveByIdForUpdate(7L)).thenReturn(Optional.of(project));
+        when(projectAccessService.requireManage(project, EMAIL)).thenReturn(actor);
+        when(fileService.uploadForProject(any(), eq(scope), any(), eq(EMAIL), eq(7L))).thenReturn(fileResponse);
+        when(storedFileRepository.findByIdAndDeletedAtIsNull(101L)).thenReturn(Optional.of(storedFile));
+        when(documentRepository.saveAndFlush(any(DocumentEntity.class))).thenAnswer(invocation -> {
+            DocumentEntity document = invocation.getArgument(0);
+            setField(document, "id", 31L);
+            return document;
+        });
+        when(documentVersionRepository.saveAndFlush(any(DocumentVersionEntity.class))).thenAnswer(invocation -> {
+            DocumentVersionEntity version = invocation.getArgument(0);
+            setField(version, "id", 41L);
+            return version;
+        });
+        lenient().when(fileService.describe(101L, authentication)).thenReturn(fileResponse);
+    }
+
+    private void configureVersionCreation(DocumentEntity document, String scope) {
+        StoredFileEntity newFile = storedFile(102L, scope, actor);
+        FileResponse responseFile = fileResponse(102L, scope);
+        when(documentRepository.findActiveByIdForUpdate(31L)).thenReturn(Optional.of(document));
+        when(fileService.describe(101L, authentication)).thenReturn(fileResponse(101L, document.getCurrentFile().getAccessScope()));
+        when(projectAccessService.requireManage(project, EMAIL)).thenReturn(actor);
+        when(fileService.uploadForProject(any(), eq(scope), any(), eq(EMAIL), eq(7L))).thenReturn(responseFile);
+        when(storedFileRepository.findByIdAndDeletedAtIsNull(102L)).thenReturn(Optional.of(newFile));
+        when(documentVersionRepository.findMaxVersionNo(31L)).thenReturn(1);
+        when(documentVersionRepository.saveAndFlush(any(DocumentVersionEntity.class))).thenAnswer(invocation -> {
+            DocumentVersionEntity version = invocation.getArgument(0);
+            setField(version, "id", 43L);
+            return version;
+        });
+        when(documentRepository.saveAndFlush(document)).thenReturn(document);
+        when(fileService.describe(102L, authentication)).thenReturn(responseFile);
+    }
+
+    private static UserEntity user(Long id, String email) {
+        return UserEntity.builder()
+                .id(id)
+                .userId("user-" + id)
+                .name("User " + id)
+                .email(email)
+                .isActive(true)
+                .isAccountVerified(true)
+                .build();
     }
 
     private static void setField(Object target, String name, Object value) {

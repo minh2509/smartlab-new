@@ -9,16 +9,21 @@ import com.smartlab.dto.response.FileResponse;
 import com.smartlab.entity.DocumentEntity;
 import com.smartlab.entity.DocumentVersionEntity;
 import com.smartlab.entity.ProjectEntity;
+import com.smartlab.entity.ProjectMemberEntity;
 import com.smartlab.entity.StoredFileEntity;
 import com.smartlab.entity.UserEntity;
 import com.smartlab.enums.FileAccessScope;
+import com.smartlab.enums.ProjectMemberStatus;
 import com.smartlab.repo.DocumentRepository;
 import com.smartlab.repo.DocumentVersionRepository;
+import com.smartlab.repo.ProjectMemberRepository;
 import com.smartlab.repo.ProjectRepository;
 import com.smartlab.repo.StoredFileRepository;
 import com.smartlab.service.AuditService;
 import com.smartlab.service.DocumentService;
 import com.smartlab.service.FileService;
+import com.smartlab.service.NotificationRelated;
+import com.smartlab.service.NotificationService;
 import com.smartlab.service.ProjectAccessService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -27,9 +32,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Instant;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -39,6 +47,8 @@ public class DocumentServiceImpl implements DocumentService {
     private static final String DOCUMENT_CREATED = "DOCUMENT_CREATED";
     private static final String DOCUMENT_VERSION_CREATED = "DOCUMENT_VERSION_CREATED";
     private static final String DOCUMENT_DELETED = "DOCUMENT_DELETED";
+    private static final String PROJECT_DOCUMENT_CREATED = "PROJECT_DOCUMENT_CREATED";
+    private static final String PROJECT_DOCUMENT_VERSION_CREATED = "PROJECT_DOCUMENT_VERSION_CREATED";
     private static final int TITLE_MAX_LENGTH = 255;
     private static final int DESCRIPTION_MAX_LENGTH = 20_000;
     private static final int NOTE_MAX_LENGTH = 5_000;
@@ -47,9 +57,11 @@ public class DocumentServiceImpl implements DocumentService {
     private final DocumentVersionRepository documentVersionRepository;
     private final ProjectRepository projectRepository;
     private final StoredFileRepository storedFileRepository;
+    private final ProjectMemberRepository projectMemberRepository;
     private final ProjectAccessService projectAccessService;
     private final FileService fileService;
     private final AuditService auditService;
+    private final NotificationService notificationService;
 
     @Override
     @Transactional(readOnly = true)
@@ -107,6 +119,14 @@ public class DocumentServiceImpl implements DocumentService {
                 version.getId().toString(),
                 null,
                 versionSnapshot(version)
+        );
+        notifyActiveReadableProjectMembers(
+                project,
+                file,
+                actor,
+                PROJECT_DOCUMENT_CREATED,
+                "A project document was added",
+                document.getId()
         );
         return toDocumentResponse(document, 1, authentication);
     }
@@ -166,6 +186,14 @@ public class DocumentServiceImpl implements DocumentService {
         auditService.log(DOCUMENT_VERSION_CREATED, DOCUMENT_VERSION, version.getId().toString(), null,
                 versionSnapshot(version));
         auditService.log("DOCUMENT_CURRENT_VERSION_UPDATED", DOCUMENT, document.getId().toString(), before, after);
+        notifyActiveReadableProjectMembers(
+                document.getProject(),
+                file,
+                actor,
+                PROJECT_DOCUMENT_VERSION_CREATED,
+                "A new project document version was added",
+                document.getId()
+        );
         return toVersionResponse(version, authentication);
     }
 
@@ -295,6 +323,53 @@ public class DocumentServiceImpl implements DocumentService {
         if (value == null || value <= 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, label + " must be positive");
         }
+    }
+
+    private void notifyActiveReadableProjectMembers(
+            ProjectEntity project,
+            StoredFileEntity file,
+            UserEntity actor,
+            String type,
+            String message,
+            Long documentId
+    ) {
+        if (FileAccessScope.PRIVATE.name().equals(file.getAccessScope())) {
+            return;
+        }
+
+        Set<Long> notifiedUserIds = new LinkedHashSet<>();
+        projectMemberRepository.findMembersForDisplay(project.getId(), ProjectMemberStatus.ACTIVE).stream()
+                .map(ProjectMemberEntity::getUser)
+                .filter(member -> member != null && !member.getId().equals(actor.getId()))
+                .filter(member -> notifiedUserIds.add(member.getId()))
+                .forEach(member -> notifyIfReadable(project, actor, member, type, message, documentId));
+    }
+
+    private void notifyIfReadable(
+            ProjectEntity project,
+            UserEntity actor,
+            UserEntity member,
+            String type,
+            String message,
+            Long documentId
+    ) {
+        try {
+            projectAccessService.requireRead(project, member.getEmail());
+        } catch (ResponseStatusException exception) {
+            return;
+        }
+        notificationService.notify(
+                member.getId(),
+                type,
+                message,
+                new NotificationRelated(
+                        actor.getId(),
+                        DOCUMENT,
+                        documentId,
+                        "/admin/projects?projectId=" + project.getId()
+                ),
+                Instant.now()
+        );
     }
 
     private Map<String, Object> documentSnapshot(DocumentEntity document) {
