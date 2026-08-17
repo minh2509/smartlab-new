@@ -5,6 +5,7 @@ import { Feedback } from '../../../shared/components/Feedback'
 import { useAuth } from '../../auth/authContext'
 import { PublicPageHead } from '../../public/components/PublicPageHead'
 import { getProject } from '../api'
+import { ProjectJoinRequestCard } from '../components/ProjectJoinRequestCard'
 import {
   PROJECT_STATUS_BADGES,
   PROJECT_STATUS_LABELS,
@@ -179,6 +180,7 @@ function ProjectWorkspaceSection({ project }: { project: Project }) {
             <CalendarDays aria-hidden="true" /> Xem sự kiện dự án
           </Link>
         </div>
+        <ProjectJoinRequestCard project={project} />
       </div>
     </section>
   )

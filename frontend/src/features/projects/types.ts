@@ -102,6 +102,45 @@ export type ProjectMemberCandidate = {
   email: string
 }
 
+export type ProjectMembershipHistory = {
+  projectId: number
+  projectCode: string
+  projectName: string
+  projectStatus: ProjectStatus
+  projectRole: ProjectMemberRole
+  status: ProjectMemberStatus
+  joinedAt: string
+  removedAt: string | null
+}
+
+export const PROJECT_JOIN_REQUEST_STATUSES = [
+  'PENDING',
+  'APPROVED',
+  'REJECTED',
+  'CANCELLED',
+] as const
+
+export type ProjectJoinRequestStatus = (typeof PROJECT_JOIN_REQUEST_STATUSES)[number]
+
+export type ProjectJoinRequestDecision = 'APPROVE' | 'REJECT'
+
+export type ProjectJoinRequest = {
+  id: number
+  projectId: number
+  projectCode: string
+  projectName: string
+  requesterUserId: string
+  requesterName: string
+  requesterEmail: string
+  message: string | null
+  status: ProjectJoinRequestStatus
+  reviewedByUserId: string | null
+  reviewedByName: string | null
+  reviewedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
 export type ProjectResearchField = {
   id: number
   code: string
@@ -142,4 +181,11 @@ export const PROJECT_MEMBER_ROLE_LABELS: Record<ProjectMemberRole, string> = {
 export const PROJECT_MEMBER_STATUS_LABELS: Record<ProjectMemberStatus, string> = {
   ACTIVE: 'Đang tham gia',
   REMOVED: 'Đã rời dự án',
+}
+
+export const PROJECT_JOIN_REQUEST_STATUS_LABELS: Record<ProjectJoinRequestStatus, string> = {
+  PENDING: 'Chờ duyệt',
+  APPROVED: 'Đã chấp nhận',
+  REJECTED: 'Đã từ chối',
+  CANCELLED: 'Đã hủy',
 }

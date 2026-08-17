@@ -124,6 +124,22 @@ class ProjectControllerSecurityTest {
     }
 
     @Test
+    void leaderWithProjectManageCanCreateProject() throws Exception {
+        String leaderEmail = "leader@smartlab.test";
+        when(projectService.create(any(CreateProjectRequest.class), eq(leaderEmail)))
+                .thenReturn(projectResponse());
+
+        mockMvc.perform(createProjectRequest()
+                        .with(user(leaderEmail).authorities(
+                                () -> "ROLE_LEADER",
+                                () -> "PROJECT_MANAGE"
+                        )))
+                .andExpect(status().isCreated());
+
+        verify(projectService).create(any(CreateProjectRequest.class), eq(leaderEmail));
+    }
+
+    @Test
     void anonymousCannotSearchLeaderCandidates() throws Exception {
         mockMvc.perform(get("/projects/leader-candidates"))
                 .andExpect(status().isUnauthorized());

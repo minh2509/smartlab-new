@@ -53,6 +53,7 @@ public class ProjectServiceImpl implements ProjectService {
     private static final int PROJECT_LEADER_LIMIT = 100;
     private static final int PUBLIC_USER_ID_MAX_LENGTH = 36;
     private static final String ADMIN = "ADMIN";
+    private static final String LEADER = "LEADER";
     private static final String PROJECT_READ = "PROJECT_READ";
     private static final String PROJECT_MANAGE = "PROJECT_MANAGE";
 
@@ -101,20 +102,29 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Override
     @Transactional
-    public ProjectResponse create(CreateProjectRequest request, String adminEmail) {
-        UserEntity admin = requireAdmin(adminEmail);
+    public ProjectResponse create(CreateProjectRequest request, String currentEmail) {
+        UserEntity creator = requireProjectCreator(currentEmail);
+        boolean adminCreator = permissionService.getRoleCodes(creator).contains(ADMIN);
         String code = normalizeCode(request.getCode());
         if (projectRepository.existsByCodeIgnoreCase(code)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Project code already exists");
         }
 
-        String primaryLeaderUserId = normalizeOptionalLeaderUserId(request.getLeaderUserId());
-        LinkedHashSet<String> leaderUserIds = normalizeLeaderUserIds(
-                primaryLeaderUserId,
-                request.getAdditionalLeaderUserIds()
-        );
-        Map<String, UserEntity> leadersByUserId = lockUsers(leaderUserIds);
-        leadersByUserId.values().forEach(this::validateAssignableUser);
+        String primaryLeaderUserId;
+        Map<String, UserEntity> leadersByUserId;
+        if (adminCreator) {
+            primaryLeaderUserId = normalizeOptionalLeaderUserId(request.getLeaderUserId());
+            LinkedHashSet<String> leaderUserIds = normalizeLeaderUserIds(
+                    primaryLeaderUserId,
+                    request.getAdditionalLeaderUserIds()
+            );
+            leadersByUserId = lockUsers(leaderUserIds);
+            leadersByUserId.values().forEach(this::validateAssignableUser);
+        } else {
+            validateLeaderSelfAssignmentOnly(request, creator);
+            primaryLeaderUserId = creator.getUserId();
+            leadersByUserId = Map.of(creator.getUserId(), creator);
+        }
 
         LocalDate startDate = request.getStartDate();
         LocalDate expectedEndDate = request.getExpectedEndDate();
@@ -137,7 +147,7 @@ public class ProjectServiceImpl implements ProjectService {
                 actualEndDate,
                 Boolean.TRUE.equals(request.getIsPublic()),
                 Boolean.TRUE.equals(request.getIsFeatured()),
-                admin
+                creator
         );
 
         try {
@@ -429,6 +439,34 @@ public class ProjectServiceImpl implements ProjectService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Project management permission is required");
         }
         return user;
+    }
+
+    private UserEntity requireProjectCreator(String email) {
+        UserEntity user = requireCurrentUser(email);
+        Set<String> roles = permissionService.getRoleCodes(user);
+        if (!roles.contains(ADMIN) && !roles.contains(LEADER)) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Admin or leader role is required to create a project"
+            );
+        }
+        if (!permissionService.getEffectivePermissionCodes(user).contains(PROJECT_MANAGE)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Project management permission is required");
+        }
+        return user;
+    }
+
+    private void validateLeaderSelfAssignmentOnly(CreateProjectRequest request, UserEntity creator) {
+        LinkedHashSet<String> requestedLeaderIds = normalizeLeaderUserIds(
+                normalizeOptionalLeaderUserId(request.getLeaderUserId()),
+                request.getAdditionalLeaderUserIds()
+        );
+        if (requestedLeaderIds.stream().anyMatch(userId -> !userId.equals(creator.getUserId()))) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "A leader creating a project may only assign themselves as leader"
+            );
+        }
     }
 
     private void requireCanUpdate(ProjectEntity project, UserEntity currentUser) {

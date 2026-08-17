@@ -3,6 +3,7 @@ package com.smartlab.service.impl;
 import com.smartlab.dto.request.AddProjectMemberRequest;
 import com.smartlab.dto.response.ProjectMemberCandidateResponse;
 import com.smartlab.dto.response.ProjectMemberResponse;
+import com.smartlab.dto.response.ProjectMembershipHistoryResponse;
 import com.smartlab.entity.ProjectEntity;
 import com.smartlab.entity.ProjectMemberEntity;
 import com.smartlab.entity.UserEntity;
@@ -172,6 +173,15 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
                 .toList();
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<ProjectMembershipHistoryResponse> listMine(String currentEmail) {
+        UserEntity currentUser = projectAccessService.requireAuthenticatedUser(currentEmail);
+        return projectMemberRepository.findMembershipHistoryByUserId(currentUser.getId()).stream()
+                .map(this::toHistoryResponse)
+                .toList();
+    }
+
     private ProjectEntity requireProject(Long projectId) {
         return projectRepository.findByIdAndDeletedAtIsNull(projectId)
                 .orElseThrow(() -> new ResponseStatusException(
@@ -247,6 +257,20 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
                 .userId(user.getUserId())
                 .name(user.getName())
                 .email(user.getEmail())
+                .build();
+    }
+
+    private ProjectMembershipHistoryResponse toHistoryResponse(ProjectMemberEntity membership) {
+        ProjectEntity project = membership.getProject();
+        return ProjectMembershipHistoryResponse.builder()
+                .projectId(project.getId())
+                .projectCode(project.getCode())
+                .projectName(project.getName())
+                .projectStatus(project.getStatus())
+                .projectRole(membership.getProjectRole())
+                .status(membership.getStatus())
+                .joinedAt(membership.getJoinedAt() == null ? null : membership.getJoinedAt().toInstant())
+                .removedAt(membership.getRemovedAt() == null ? null : membership.getRemovedAt().toInstant())
                 .build();
     }
 }

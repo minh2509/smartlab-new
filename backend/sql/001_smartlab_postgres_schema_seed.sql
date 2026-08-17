@@ -217,6 +217,25 @@ CREATE TABLE IF NOT EXISTS project_members (
   CONSTRAINT chk_project_members_status CHECK (status IN ('ACTIVE', 'REMOVED'))
 );
 
+CREATE TABLE IF NOT EXISTS project_join_requests (
+  id BIGSERIAL PRIMARY KEY,
+  project_id BIGINT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  requester_user_id BIGINT NOT NULL REFERENCES tbl_user(id) ON DELETE CASCADE,
+  message VARCHAR(500),
+  status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+  reviewed_by_user_id BIGINT REFERENCES tbl_user(id) ON DELETE SET NULL,
+  reviewed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT chk_project_join_requests_status CHECK (
+    status IN ('PENDING', 'APPROVED', 'REJECTED', 'CANCELLED')
+  )
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_project_join_requests_pending_project_requester
+  ON project_join_requests(project_id, requester_user_id)
+  WHERE status = 'PENDING';
+
 CREATE TABLE IF NOT EXISTS tasks (
   id BIGSERIAL PRIMARY KEY,
   project_id BIGINT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -706,8 +725,9 @@ BEGIN
       tbl_user, roles, permissions, role_permissions, user_roles,
       user_permission_overrides, user_sessions, account_invitations,
       research_fields, projects, files, member_profiles, member_research_fields,
-      project_research_fields, project_members, tasks, task_assignees,
-      task_attachments, evaluations, evaluation_criteria, evaluation_scores,
+      project_research_fields, project_members, project_join_requests,
+      tasks, task_assignees, task_attachments, evaluations,
+      evaluation_criteria, evaluation_scores,
       content_categories, posts, post_reviews, notifications, documents,
       document_versions, events, audit_logs
     TO smartlab_user;
@@ -715,8 +735,9 @@ BEGIN
       tbl_user_id_seq, roles_id_seq, permissions_id_seq, role_permissions_id_seq,
       user_roles_id_seq, user_permission_overrides_id_seq, user_sessions_id_seq,
       account_invitations_id_seq, research_fields_id_seq, projects_id_seq,
-      files_id_seq, member_profiles_id_seq, project_members_id_seq, tasks_id_seq,
-      task_attachments_id_seq, evaluations_id_seq, evaluation_criteria_id_seq,
+      files_id_seq, member_profiles_id_seq, project_members_id_seq,
+      project_join_requests_id_seq, tasks_id_seq, task_attachments_id_seq,
+      evaluations_id_seq, evaluation_criteria_id_seq,
       content_categories_id_seq, posts_id_seq, post_reviews_id_seq,
       notifications_id_seq, documents_id_seq, document_versions_id_seq,
       events_id_seq, audit_logs_id_seq
