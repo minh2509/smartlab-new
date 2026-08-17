@@ -21,6 +21,7 @@ public class PostDetailResponse {
     PostStatus status;
     PostCategoryResponse category;
     PostAuthorResponse author;
+    PostReviewFeedbackResponse reviewFeedback;
     Instant publishedAt;
     Instant createdAt;
     Instant updatedAt;

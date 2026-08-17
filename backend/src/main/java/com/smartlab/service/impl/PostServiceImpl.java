@@ -6,6 +6,7 @@ import com.smartlab.dto.request.UpdatePostRequest;
 import com.smartlab.dto.response.PostCategoryResponse;
 import com.smartlab.dto.response.PostAuthorResponse;
 import com.smartlab.dto.response.PostDetailResponse;
+import com.smartlab.dto.response.PostReviewFeedbackResponse;
 import com.smartlab.dto.response.PostSummaryResponse;
 import com.smartlab.entity.ContentCategoryEntity;
 import com.smartlab.entity.PostEntity;
@@ -129,8 +130,8 @@ public class PostServiceImpl implements PostService {
         if (post.getAuthorUserId() == null || !post.getAuthorUserId().equals(viewer.getId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Post is not owned by authenticated user");
         }
-        if (post.getStatus() != PostStatus.DRAFT) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only draft posts can be updated");
+        if (post.getStatus() != PostStatus.DRAFT && post.getStatus() != PostStatus.REVISION_REQUIRED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only draft or revision-required posts can be updated");
         }
 
         ContentCategoryEntity suppliedCategory = null;
@@ -184,8 +185,8 @@ public class PostServiceImpl implements PostService {
         if (post.getAuthorUserId() == null || !post.getAuthorUserId().equals(author.getId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Post is not owned by authenticated user");
         }
-        if (post.getStatus() != PostStatus.DRAFT) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only draft posts can be submitted for review");
+        if (post.getStatus() != PostStatus.DRAFT && post.getStatus() != PostStatus.REVISION_REQUIRED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only draft or revision-required posts can be submitted for review");
         }
 
         post.submitForReview(Instant.now());
@@ -399,7 +400,7 @@ public class PostServiceImpl implements PostService {
 
         if (post.getAuthorUserId() != null && post.getAuthorUserId().equals(viewer.getId())) {
             return toDetailResponse(post, findCategoryResponse(post.getCategoryId()),
-                    findAuthorResponse(post.getAuthorUserId()));
+                    findAuthorResponse(post.getAuthorUserId()), findReviewFeedbackForAuthor(post));
         }
         if (!isReadableBy(post, activeProjectIdsOrNoMatch(viewer.getId()))) {
             throw postNotFound();
@@ -538,6 +539,15 @@ public class PostServiceImpl implements PostService {
             PostCategoryResponse category,
             PostAuthorResponse author
     ) {
+        return toDetailResponse(post, category, author, null);
+    }
+
+    private PostDetailResponse toDetailResponse(
+            PostEntity post,
+            PostCategoryResponse category,
+            PostAuthorResponse author,
+            PostReviewFeedbackResponse reviewFeedback
+    ) {
         return PostDetailResponse.builder()
                 .id(post.getId())
                 .title(post.getTitle())
@@ -549,10 +559,26 @@ public class PostServiceImpl implements PostService {
                 .status(post.getStatus())
                 .category(category)
                 .author(author)
+                .reviewFeedback(reviewFeedback)
                 .publishedAt(post.getPublishedAt())
                 .createdAt(post.getCreatedAt())
                 .updatedAt(post.getUpdatedAt())
                 .build();
+    }
+
+    private PostReviewFeedbackResponse findReviewFeedbackForAuthor(PostEntity post) {
+        ReviewDecision decision = switch (post.getStatus()) {
+            case REVISION_REQUIRED -> ReviewDecision.REVISION_REQUIRED;
+            case REJECTED -> ReviewDecision.REJECTED;
+            default -> null;
+        };
+        if (decision == null || post.getId() == null) {
+            return null;
+        }
+        return postReviewRepository.findFirstByPostIdAndDecisionOrderByCreatedAtDescIdDesc(post.getId(), decision)
+                .map(review -> new PostReviewFeedbackResponse(
+                        review.getDecision(), review.getReason(), review.getCreatedAt()))
+                .orElse(null);
     }
 
     private PostSummaryResponse toSummaryResponse(

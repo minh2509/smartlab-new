@@ -28,6 +28,12 @@ export type PostAuthor = {
   name: string
 }
 
+export type PostReviewFeedback = {
+  decision: ReviewDecision
+  reason: string
+  createdAt: string
+}
+
 export type PostContentImageReference = {
   type: 'image'
   fileId: number
@@ -87,6 +93,7 @@ export type PostSummary = {
 
 export type PostDetail = PostSummary & {
   contentJson: Record<string, unknown>
+  reviewFeedback: PostReviewFeedback | null
 }
 
 export type CursorPage<T> = {

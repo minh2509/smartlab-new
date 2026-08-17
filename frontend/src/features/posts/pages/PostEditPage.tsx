@@ -15,6 +15,7 @@ export function PostEditPage() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const isAuthorEditable = post?.status === 'DRAFT' || post?.status === 'REVISION_REQUIRED'
 
   useEffect(() => {
     if (!token || !slug) {
@@ -56,15 +57,15 @@ export function PostEditPage() {
         </Link>
         <header className="post-editor-head">
           <h1>Chỉnh sửa bài viết</h1>
-          <p>Cập nhật nội dung và thiết lập của bản nháp.</p>
+          <p>Cập nhật nội dung và thiết lập của bài viết cần hoàn thiện.</p>
         </header>
 
         {loading ? <div className="empty tight">Đang tải dữ liệu bài viết...</div> : null}
         {!loading && !post ? <Feedback error={error ?? 'Không tìm thấy bài viết.'} /> : null}
-        {!loading && post && post.status !== 'DRAFT' ? (
-          <Feedback error="Backend hiện chỉ cho phép chỉnh sửa bài viết ở trạng thái bản nháp." />
+        {!loading && post && !isAuthorEditable ? (
+          <Feedback error="Backend hiện chỉ cho phép chỉnh sửa bản nháp hoặc bài viết cần chỉnh sửa." />
         ) : null}
-        {!loading && post?.status === 'DRAFT' ? (
+        {!loading && post && isAuthorEditable ? (
           <PostEditorForm
             token={token}
             initialPost={post}

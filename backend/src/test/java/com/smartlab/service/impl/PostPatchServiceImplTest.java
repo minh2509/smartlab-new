@@ -119,6 +119,21 @@ class PostPatchServiceImplTest {
     }
 
     @Test
+    void trustedActiveOwnerUpdatesRevisionRequiredPostWithoutChangingItsStatus() throws ReflectiveOperationException {
+        PostEntity post = draft();
+        set(post, "status", PostStatus.REVISION_REQUIRED);
+        UpdatePostRequest request = titleRequest("Updated after review");
+        activeOwner();
+        when(postRepository.findActiveByIdForUpdate(POST_ID)).thenReturn(Optional.of(post));
+
+        PostDetailResponse response = postService.updatePost(OWNER_EMAIL, POST_ID, request);
+
+        assertThat(post.getTitle()).isEqualTo("Updated after review");
+        assertThat(post.getStatus()).isEqualTo(PostStatus.REVISION_REQUIRED);
+        assertThat(response.getStatus()).isEqualTo(PostStatus.REVISION_REQUIRED);
+    }
+
+    @Test
     void missingTrustedUserReturnsUnauthorizedBeforePostLookup() {
         when(userRepository.findByEmail(OWNER_EMAIL)).thenReturn(Optional.empty());
 
@@ -166,7 +181,7 @@ class PostPatchServiceImplTest {
     }
 
     @ParameterizedTest
-    @EnumSource(value = PostStatus.class, names = "DRAFT", mode = EnumSource.Mode.EXCLUDE)
+    @EnumSource(value = PostStatus.class, names = {"DRAFT", "REVISION_REQUIRED"}, mode = EnumSource.Mode.EXCLUDE)
     void ownedActiveNonDraftReturnsConflictWithoutMutation(PostStatus status) throws ReflectiveOperationException {
         PostEntity post = draft();
         set(post, "status", status);

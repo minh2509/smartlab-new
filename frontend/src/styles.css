@@ -3403,6 +3403,23 @@ select {
   margin: 16px 0 0;
 }
 
+.post-review-feedback {
+  margin: 16px 0 0;
+  padding: 14px 16px;
+  border-left: 3px solid var(--accent);
+  background: var(--surface-2);
+}
+
+.post-review-feedback strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.post-review-feedback p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
 .notification-popover {
   position: relative;
   flex: none;
