@@ -86,4 +86,11 @@ public class EventController {
     ) {
         eventService.delete(id, currentEmail);
     }
+
+    @GetMapping("/public")
+    @PreAuthorize("permitAll()")
+    @Operation(summary = "List upcoming PUBLIC events (no authentication required)")
+    public List<EventResponse> listPublic() {
+        return eventService.listPublicEvents();
+    }
 }

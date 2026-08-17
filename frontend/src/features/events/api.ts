@@ -31,3 +31,7 @@ export function deleteEvent(token: string, eventId: number) {
     token,
   })
 }
+
+export function listPublicEvents(signal?: AbortSignal) {
+  return apiClient<LabEvent[]>('/events/public', { signal })
+}

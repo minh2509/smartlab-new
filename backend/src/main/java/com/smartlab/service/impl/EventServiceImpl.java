@@ -254,6 +254,26 @@ public class EventServiceImpl implements EventService {
         auditService.log(EVENT_DELETED, EVENT, saved.getId().toString(), before, snapshot(saved));
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<EventResponse> listPublicEvents() {
+        // Lấy tất cả event PUBLIC không phân biệt thời gian, loại bỏ CANCELLED
+        List<EventEntity> publicEvents = eventRepository.findActiveEvents(
+                null,
+                null,
+                null,
+                Instant.now()
+        ).stream()
+                .filter(event -> event.getVisibility() == EventVisibility.PUBLIC)
+                .filter(event -> event.getStatus() != EventStatus.CANCELLED)
+                .toList();
+        Map<Long, EventCreatorResponse> creators = findCreators(publicEvents);
+        return publicEvents.stream()
+                .map(event -> toResponse(event, creators.get(event.getCreatedByUserId())))
+                .toList();
+    }
+
+
     private void requireCanManage(Long projectId, EventVisibility visibility, UserEntity actor) {
         if (isAdmin(actor)
                 && permissionService.getEffectivePermissionCodes(actor).contains(PROJECT_MANAGE)) {

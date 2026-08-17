@@ -1,4 +1,4 @@
-import { BadgeCheck, CalendarDays, Clock3, FileText, FlaskConical, GraduationCap, MapPin, Search } from 'lucide-react'
+import { BadgeCheck, CalendarDays, Clock3, FileText, FlaskConical, GraduationCap, MapPin, Search, Video } from 'lucide-react'
 import type { CSSProperties } from 'react'
 import { Fragment, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -6,6 +6,10 @@ import { getMembers } from '../../profile/api'
 import type { MemberProfile } from '../../../shared/types/api'
 import { aboutQuickFacts, coreValues, documents, events, fields, gallery, members, operatingSteps, posts, projects, stats } from '../publicData'
 import { PublicPageHead } from '../components/PublicPageHead'
+import { listPublicEvents, listEvents } from '../../events/api'
+import type { LabEvent } from '../../events/types'
+import { EVENT_MODE_LABELS, EVENT_STATUS_LABELS, EVENT_STATUS_BADGES } from '../../events/types'
+import { useAuth } from '../../auth/authContext'
 
 type StaticPublicPageProps = {
   title: string
@@ -439,40 +443,95 @@ function DocumentsContent() {
 }
 
 function EventsContent() {
+  const { token, isAuthenticated } = useAuth()
+  const [apiEvents, setApiEvents] = useState<LabEvent[] | null>(null)
+  const [loadError, setLoadError] = useState(false)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const fetch = isAuthenticated && token
+      // Đã đăng nhập → backend tự lọc đúng theo quyền:
+      //   PUBLIC → mọi người login thấy
+      //   LAB    → mọi người login thấy
+      //   PROJECT → chỉ active member của project đó thấy
+      ? listEvents(token, {}, controller.signal).then((result) =>
+          result.filter((e) => e.status !== 'CANCELLED')
+        )
+      // Guest → chỉ thấy PUBLIC (endpoint không cần token)
+      : listPublicEvents(controller.signal)
+    fetch
+      .then((result) => { if (!controller.signal.aborted) setApiEvents(result) })
+      .catch(() => { if (!controller.signal.aborted) setLoadError(true) })
+    return () => controller.abort()
+  }, [isAuthenticated, token])
+
+  const isLoading = apiEvents === null && !loadError
+
   return (
     <section className="section">
       <div className="wrap">
-        <div className="event-list">
-          {events.map((event) => (
-            <Link className="eventrow" to="/su-kien" key={event.title}>
-              <div className="datebox">
-                <b>{event.day}</b>
-                <span>{event.month}</span>
+        {isLoading ? (
+          <div className="event-list">
+            {[1, 2, 3].map((i) => (
+              <div className="eventrow" key={i} style={{ opacity: 0.4, pointerEvents: 'none' }}>
+                <div className="datebox"><b>--</b><span>---</span></div>
+                <div className="info"><h3 style={{ background: 'var(--border)', borderRadius: 4, color: 'transparent' }}>Đang tải...</h3></div>
               </div>
-              <div className="info">
-                <h3>{event.title}</h3>
-                <div className="emeta">
-                  <span>
-                    <CalendarDays />
-                    2026
-                  </span>
-                  <span>
-                    <MapPin />
-                    {event.meta}
-                  </span>
-                  <span>
-                    <Clock3 />
-                    Sắp diễn ra
-                  </span>
+            ))}
+          </div>
+        ) : loadError ? (
+          <div className="public-empty empty tight">Không tải được danh sách sự kiện. Vui lòng thử lại sau.</div>
+        ) : apiEvents && apiEvents.length > 0 ? (
+          <div className="event-list">
+            {apiEvents.map((event) => {
+              const start = new Date(event.startAt)
+              const day = Number.isNaN(start.getTime()) ? '--' : new Intl.DateTimeFormat('vi-VN', { day: '2-digit' }).format(start)
+              const month = Number.isNaN(start.getTime()) ? '---' : new Intl.DateTimeFormat('vi-VN', { month: 'short' }).format(start)
+              const timeStr = new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit' }).format(start)
+              const location = event.mode === 'ONLINE'
+                ? (event.meetingUrl || 'Link họp chưa cập nhật')
+                : (event.location || 'Địa điểm chưa cập nhật')
+              return (
+                <div className="eventrow" key={event.id}>
+                  <div className="datebox">
+                    <b>{day}</b>
+                    <span>{month}</span>
+                  </div>
+                  <div className="info">
+                    <h3>{event.title}</h3>
+                    <div className="emeta">
+                      <span>
+                        <CalendarDays />
+                        {timeStr}
+                      </span>
+                      <span>
+                        {event.mode === 'ONLINE' ? <Video /> : <MapPin />}
+                        {EVENT_MODE_LABELS[event.mode]} · {location}
+                      </span>
+                      <span>
+                        <Clock3 />
+                        <span className={`badge ${EVENT_STATUS_BADGES[event.status]}`}>
+                          {EVENT_STATUS_LABELS[event.status]}
+                        </span>
+                      </span>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </Link>
-          ))}
-        </div>
+              )
+            })}
+          </div>
+        ) : (
+          <div className="public-empty empty tight">
+            {isAuthenticated
+              ? 'Hiện chưa có sự kiện nào để hiển thị.'
+              : 'Hiện chưa có sự kiện công khai nào. Đăng nhập để xem thêm.'}
+          </div>
+        )}
       </div>
     </section>
   )
 }
+
 
 function GalleryContent() {
   return (

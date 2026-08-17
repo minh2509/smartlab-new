@@ -22,4 +22,6 @@ public interface EventService {
     EventResponse update(Long eventId, UpdateEventRequest request, String authenticatedEmail);
 
     void delete(Long eventId, String authenticatedEmail);
+
+    List<EventResponse> listPublicEvents();
 }
