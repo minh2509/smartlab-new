@@ -1,10 +1,8 @@
-import { BadgeCheck, CalendarDays, Clock3, FileText, FlaskConical, GraduationCap, MapPin, Search } from 'lucide-react'
+import { BadgeCheck, CalendarDays, Clock3, FileText, FlaskConical, GraduationCap, MapPin, Search, Video } from 'lucide-react'
 import type { CSSProperties, ReactNode } from 'react'
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { MemberProfile, ResearchField } from '../../../shared/types/api'
-import { listPublicEvents } from '../../events/api'
-import { EVENT_MODE_LABELS, EVENT_STATUS_LABELS, type LabEvent } from '../../events/types'
 import { listPosts } from '../../posts/api'
 import type { PostFeedItem } from '../../posts/types'
 import { getMembers, getResearchFields } from '../../profile/api'
@@ -13,6 +11,9 @@ import type { Project } from '../../projects/types'
 import { aboutQuickFacts, coreValues, documents, gallery, operatingSteps, posts } from '../publicData'
 import { PublicMemberCard, PublicPostCard, PublicProjectCard, ResearchFieldCard } from '../components/PublicDataCards'
 import { PublicPageHead } from '../components/PublicPageHead'
+import { listEvents, listPublicEvents } from '../../events/api'
+import { EVENT_MODE_LABELS, EVENT_STATUS_BADGES, EVENT_STATUS_LABELS, type LabEvent } from '../../events/types'
+import { useAuth } from '../../auth/authContext'
 
 type StaticPublicPageProps = {
   title: string
@@ -375,57 +376,95 @@ function DocumentsContent() {
 }
 
 function EventsContent() {
-  const [events, setEvents] = useState<LabEvent[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [reloadKey, setReloadKey] = useState(0)
+  const { token, isAuthenticated } = useAuth()
+  const [apiEvents, setApiEvents] = useState<LabEvent[] | null>(null)
+  const [loadError, setLoadError] = useState(false)
 
   useEffect(() => {
     const controller = new AbortController()
-    setLoading(true)
-    setError(null)
-    void listPublicEvents({ upcoming: true }, controller.signal)
-      .then(setEvents)
-      .catch((reason: unknown) => {
-        if (!controller.signal.aborted) setError(messageOf(reason, 'Không tải được danh sách sự kiện.'))
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false)
-      })
+    const fetch = isAuthenticated && token
+      // Đã đăng nhập → backend tự lọc đúng theo quyền:
+      //   PUBLIC → mọi người login thấy
+      //   LAB    → mọi người login thấy
+      //   PROJECT → chỉ active member của project đó thấy
+      ? listEvents(token, {}, controller.signal).then((result) =>
+          result.filter((e) => e.status !== 'CANCELLED')
+        )
+      // Guest → chỉ thấy PUBLIC (endpoint không cần token)
+      : listPublicEvents({}, controller.signal)
+    fetch
+      .then((result) => { if (!controller.signal.aborted) setApiEvents(result) })
+      .catch(() => { if (!controller.signal.aborted) setLoadError(true) })
     return () => controller.abort()
-  }, [reloadKey])
+  }, [isAuthenticated, token])
+
+  const isLoading = apiEvents === null && !loadError
 
   return (
     <section className="section">
       <div className="wrap">
-        {loading ? <div className="public-empty empty tight">Đang tải sự kiện...</div> : null}
-        {error ? <LoadError message={error} onRetry={() => setReloadKey((value) => value + 1)} /> : null}
-        {!loading && !error && events.length === 0 ? <div className="public-empty empty tight">Chưa có sự kiện công khai sắp diễn ra.</div> : null}
-        {!loading && !error && events.length > 0 ? (
+        {isLoading ? (
           <div className="event-list">
-            {events.map((event) => {
-              const date = eventDate(event.startAt)
+            {[1, 2, 3].map((i) => (
+              <div className="eventrow" key={i} style={{ opacity: 0.4, pointerEvents: 'none' }}>
+                <div className="datebox"><b>--</b><span>---</span></div>
+                <div className="info"><h3 style={{ background: 'var(--border)', borderRadius: 4, color: 'transparent' }}>Đang tải...</h3></div>
+              </div>
+            ))}
+          </div>
+        ) : loadError ? (
+          <div className="public-empty empty tight">Không tải được danh sách sự kiện. Vui lòng thử lại sau.</div>
+        ) : apiEvents && apiEvents.length > 0 ? (
+          <div className="event-list">
+            {apiEvents.map((event) => {
+              const start = new Date(event.startAt)
+              const day = Number.isNaN(start.getTime()) ? '--' : new Intl.DateTimeFormat('vi-VN', { day: '2-digit' }).format(start)
+              const month = Number.isNaN(start.getTime()) ? '---' : new Intl.DateTimeFormat('vi-VN', { month: 'short' }).format(start)
+              const timeStr = new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit' }).format(start)
+              const location = event.mode === 'ONLINE'
+                ? (event.meetingUrl || 'Link họp chưa cập nhật')
+                : (event.location || 'Địa điểm chưa cập nhật')
               return (
-                <article className="eventrow" key={event.id}>
-                  <div className="datebox"><b>{date.day}</b><span>{date.month}</span></div>
+                <div className="eventrow" key={event.id}>
+                  <div className="datebox">
+                    <b>{day}</b>
+                    <span>{month}</span>
+                  </div>
                   <div className="info">
                     <h3>{event.title}</h3>
-                    {event.content ? <p>{shorten(event.content, 240)}</p> : null}
                     <div className="emeta">
-                      <span><CalendarDays /> <time dateTime={event.startAt}>{date.full}</time></span>
-                      <span><MapPin /> {event.mode === 'ONLINE' ? EVENT_MODE_LABELS.ONLINE : event.location || EVENT_MODE_LABELS.IN_PERSON}</span>
-                      <span><Clock3 /> {EVENT_STATUS_LABELS[event.status]}</span>
+                      <span>
+                        <CalendarDays />
+                        {timeStr}
+                      </span>
+                      <span>
+                        {event.mode === 'ONLINE' ? <Video /> : <MapPin />}
+                        {EVENT_MODE_LABELS[event.mode]} · {location}
+                      </span>
+                      <span>
+                        <Clock3 />
+                        <span className={`badge ${EVENT_STATUS_BADGES[event.status]}`}>
+                          {EVENT_STATUS_LABELS[event.status]}
+                        </span>
+                      </span>
                     </div>
                   </div>
-                </article>
+                </div>
               )
             })}
           </div>
-        ) : null}
+        ) : (
+          <div className="public-empty empty tight">
+            {isAuthenticated
+              ? 'Hiện chưa có sự kiện nào để hiển thị.'
+              : 'Hiện chưa có sự kiện công khai nào. Đăng nhập để xem thêm.'}
+          </div>
+        )}
       </div>
     </section>
   )
 }
+
 
 function GalleryContent() {
   return (
@@ -601,24 +640,10 @@ function includesQuery(values: Array<string | null | undefined>, normalizedQuery
   return values.some((value) => value?.toLocaleLowerCase('vi').includes(normalizedQuery))
 }
 
-function eventDate(value: string) {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return { day: '--', month: '--', full: value }
-  return {
-    day: new Intl.DateTimeFormat('vi-VN', { day: '2-digit' }).format(date),
-    month: new Intl.DateTimeFormat('vi-VN', { month: '2-digit' }).format(date),
-    full: new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium', timeStyle: 'short' }).format(date),
-  }
-}
-
 function messageOf(reason: unknown, fallback: string) {
   return reason instanceof Error ? reason.message : fallback
 }
 
 function countLabel(value: number | null) {
   return value === null ? '—' : String(value)
-}
-
-function shorten(value: string, maximum: number) {
-  return value.length > maximum ? `${value.slice(0, maximum).trimEnd()}…` : value
 }

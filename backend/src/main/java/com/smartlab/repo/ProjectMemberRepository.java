@@ -70,6 +70,17 @@ public interface ProjectMemberRepository extends JpaRepository<ProjectMemberEnti
     @Query("""
             select pm
             from ProjectMemberEntity pm
+            join fetch pm.project project
+            where pm.user.id = :userId
+            order by case when pm.status = com.smartlab.enums.ProjectMemberStatus.ACTIVE then 0 else 1 end,
+                     project.name,
+                     pm.id
+            """)
+    List<ProjectMemberEntity> findMembershipHistoryByUserId(@Param("userId") Long userId);
+
+    @Query("""
+            select pm
+            from ProjectMemberEntity pm
             join fetch pm.user u
             where pm.project.id = :projectId
               and pm.status = :status

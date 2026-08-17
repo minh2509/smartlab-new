@@ -164,6 +164,65 @@ class ProjectServiceImplTest {
     }
 
     @Test
+    void globalLeaderWithProjectManageCreatesProjectAndBecomesPrimaryLeader() {
+        UserEntity leader = user(2L, "leader-user", "leader@smartlab.test", true);
+        when(userRepository.findByEmail(leader.getEmail())).thenReturn(Optional.of(leader));
+        when(permissionService.getRoleCodes(leader)).thenReturn(Set.of("LEADER"));
+        when(permissionService.getEffectivePermissionCodes(leader)).thenReturn(Set.of("PROJECT_MANAGE"));
+        when(projectRepository.existsByCodeIgnoreCase("SL-LED")).thenReturn(false);
+        when(projectRepository.saveAndFlush(any(ProjectEntity.class))).thenAnswer(invocation -> {
+            ProjectEntity saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", 7L);
+            return saved;
+        });
+
+        ProjectResponse response = projectService.create(
+                minimalCreateRequest("SL-LED", "Leader project", null),
+                leader.getEmail()
+        );
+
+        assertThat(response.getPrimaryLeader().getUserId()).isEqualTo("leader-user");
+        assertThat(response.getLeaders()).extracting(ProjectLeaderResponse::getUserId)
+                .containsExactly("leader-user");
+        ArgumentCaptor<ProjectEntity> projectCaptor = ArgumentCaptor.forClass(ProjectEntity.class);
+        verify(projectRepository).saveAndFlush(projectCaptor.capture());
+        assertThat(projectCaptor.getValue().getCreatedBy()).isSameAs(leader);
+        verify(userRepository, never()).findAllByUserIdInForUpdate(any());
+    }
+
+    @Test
+    void globalLeaderCannotAssignAnotherLeaderWhileCreatingProject() {
+        UserEntity leader = user(2L, "leader-user", "leader@smartlab.test", true);
+        when(userRepository.findByEmail(leader.getEmail())).thenReturn(Optional.of(leader));
+        when(permissionService.getRoleCodes(leader)).thenReturn(Set.of("LEADER"));
+        when(permissionService.getEffectivePermissionCodes(leader)).thenReturn(Set.of("PROJECT_MANAGE"));
+        when(projectRepository.existsByCodeIgnoreCase("SL-LED")).thenReturn(false);
+        CreateProjectRequest request = minimalCreateRequest("SL-LED", "Leader project", "other-user");
+
+        assertStatus(() -> projectService.create(request, leader.getEmail()), HttpStatus.BAD_REQUEST);
+
+        verify(projectRepository, never()).saveAndFlush(any(ProjectEntity.class));
+        verify(projectMemberRepository, never()).saveAllAndFlush(any());
+    }
+
+    @Test
+    void memberCannotCreateProjectEvenWithProjectManage() {
+        UserEntity member = user(2L, "member-user", "member@smartlab.test", true);
+        when(userRepository.findByEmail(member.getEmail())).thenReturn(Optional.of(member));
+        when(permissionService.getRoleCodes(member)).thenReturn(Set.of("MEMBER"));
+
+        assertStatus(
+                () -> projectService.create(
+                        minimalCreateRequest("SL-MEM", "Member project", null),
+                        member.getEmail()
+                ),
+                HttpStatus.FORBIDDEN
+        );
+
+        verify(projectRepository, never()).saveAndFlush(any(ProjectEntity.class));
+    }
+
+    @Test
     void auditsEachCreatedProjectMembershipAfterItHasAnId() {
         UserEntity admin = user(1L, "admin-user", "admin@smartlab.test", true);
         UserEntity leader = user(2L, "leader-user", "leader@smartlab.test", true);

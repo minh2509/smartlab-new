@@ -113,7 +113,9 @@ export function EventManagementPanel({ project }: { project: Project | null }) {
   const hasFilters = Boolean(query.trim() || statusFilter !== 'ALL' || timeFilter !== 'ALL')
   const dialogDirty = useMemo(() => {
     if (dialogMode === 'create') return !sameEventForm(form, emptyEventForm(scope))
-    if (dialogMode === 'edit' && dialogEvent) return !sameEventForm(form, toEventForm(dialogEvent))
+    if (dialogMode === 'edit' && dialogEvent) {
+      return Object.keys(toUpdatePayload(form, dialogEvent)).length > 0
+    }
     return false
   }, [dialogEvent, dialogMode, form, scope])
   const isBusy = saving || deletingId !== null
