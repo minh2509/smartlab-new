@@ -4,6 +4,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../../features/auth/authContext'
 import { NotificationPopover } from '../../features/notifications/components/NotificationPopover'
 import { Logo } from './Logo'
+import { accessPolicies, hasAllPermissions } from '../../app/accessPolicy'
 
 const publicLinks = [
   { to: '/du-an', label: 'Dự án' },
@@ -24,6 +25,7 @@ export function AppHeader() {
   const role = resolveHeaderRole(profile?.roles)
   const canReviewPosts = profile?.permissions.includes('posts.review') ?? false
   const canReadNotifications = profile?.permissions.includes('notifications.read_own') ?? false
+  const canAccessAccounts = hasAllPermissions(profile?.permissions, accessPolicies.accounts)
 
   return (
     <header className="site-nav">
@@ -51,7 +53,7 @@ export function AppHeader() {
               </li>
               {role ? (
                 <li>
-                  {role === 'Admin' ? (
+                  {role === 'Admin' && canAccessAccounts ? (
                     <NavLink to="/admin/accounts">Admin</NavLink>
                   ) : (
                     <span className="nav-role-label">{role}</span>
