@@ -6,6 +6,7 @@ import {
   FileText,
   FlaskConical,
   FolderKanban,
+  History,
   LayoutDashboard,
   Pencil,
   Plus,
@@ -19,7 +20,7 @@ import {
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../auth/authContext'
 import { ProjectDocumentsPanel } from '../../documents/components/ProjectDocumentsPanel'
 import { EmptyState } from '../../../shared/components/EmptyState'
@@ -27,6 +28,7 @@ import { Feedback } from '../../../shared/components/Feedback'
 import {
   createProject,
   deleteProject,
+  listMyProjectMemberships,
   listProjects,
   updateProject,
 } from '../api'
@@ -44,6 +46,7 @@ import {
 import type {
   CreateProjectPayload,
   Project,
+  ProjectMembershipHistory,
   ProjectStatus,
   ProjectType,
   UpdateProjectPayload,
@@ -90,7 +93,9 @@ const PROJECT_PAGE_SIZE = 10
 
 export function ProjectManagementPage() {
   const { token, profile } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [projects, setProjects] = useState<Project[]>([])
+  const [membershipHistory, setMembershipHistory] = useState<ProjectMembershipHistory[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [projectQuery, setProjectQuery] = useState('')
   const [projectTypeFilter, setProjectTypeFilter] = useState<ProjectTypeFilter>('ALL')
@@ -116,7 +121,12 @@ export function ProjectManagementPage() {
   const projectDialogTriggerRef = useRef<HTMLButtonElement | null>(null)
 
   const isAdmin = Boolean(profile?.roles.includes('ADMIN'))
-  const canManageProject = isAdmin && Boolean(profile?.permissions.includes('PROJECT_MANAGE'))
+  const hasProjectManage = Boolean(profile?.permissions.includes('PROJECT_MANAGE'))
+  const canAdminManageProject = isAdmin && hasProjectManage
+  const canCreateProject = hasProjectManage && Boolean(
+    isAdmin || profile?.roles.includes('LEADER'),
+  )
+  const requestedProjectId = positiveInteger(searchParams.get('projectId'))
   const selectedProject = useMemo(
     () => projects.find((project) => project.id === selectedId) ?? null,
     [projects, selectedId],
@@ -160,6 +170,20 @@ export function ProjectManagementPage() {
   const canEditProject = (project: Project) => Boolean(
     profile && (isAdmin || project.leaders.some((leader) => leader.userId === profile.userId)),
   )
+  const membershipByProjectId = useMemo(
+    () => new Map(
+      membershipHistory
+        .filter((membership) => membership.status === 'ACTIVE')
+        .map((membership) => [membership.projectId, membership]),
+    ),
+    [membershipHistory],
+  )
+  const removedMemberships = useMemo(
+    () => membershipHistory
+      .filter((membership) => membership.status === 'REMOVED')
+      .sort((left, right) => membershipTimestamp(right) - membershipTimestamp(left)),
+    [membershipHistory],
+  )
   const canEditSelected = Boolean(
     selectedProject && canEditProject(selectedProject),
   )
@@ -176,12 +200,21 @@ export function ProjectManagementPage() {
 
   const loadProjects = useCallback(async () => {
     if (!token) return
-    const result = await listProjects(token)
+    const [visibleProjects, ownMemberships] = await Promise.all([
+      listProjects(token),
+      isAdmin ? Promise.resolve<ProjectMembershipHistory[]>([]) : listMyProjectMemberships(token),
+    ])
+    const result = isAdmin
+      ? visibleProjects
+      : visibleProjects.filter((project) => ownMemberships.some(
+        (membership) => membership.projectId === project.id && membership.status === 'ACTIVE',
+      ))
     setProjects(result)
+    setMembershipHistory(ownMemberships)
     setSelectedId((current) => (
       current !== null && result.some((project) => project.id === current) ? current : null
     ))
-  }, [token])
+  }, [isAdmin, token])
 
   useEffect(() => {
     setLoading(true)
@@ -208,8 +241,23 @@ export function ProjectManagementPage() {
     const dialog = projectDialogRef.current
     if (!selectedProject || !dialog || dialog.open) return
     dialog.showModal()
-    window.requestAnimationFrame(() => document.getElementById('project-tab-overview')?.focus())
-  }, [selectedProject])
+    window.requestAnimationFrame(() => document.getElementById(`project-tab-${activeTab}`)?.focus())
+  }, [activeTab, selectedProject])
+
+  useEffect(() => {
+    if (loading || selectedId !== null || requestedProjectId === null) return
+    const requestedProject = projects.find((project) => project.id === requestedProjectId)
+    if (!requestedProject) return
+    projectDialogTriggerRef.current = null
+    setSelectedId(requestedProject.id)
+    setEditForm(toCoreForm(requestedProject))
+    setActiveTab('members')
+    setIsEditingCore(false)
+    setLeadershipDirty(false)
+    setResearchFieldsDirty(false)
+    setDocumentsDirty(false)
+    setDocumentsBusy(false)
+  }, [loading, projects, requestedProjectId, selectedId])
 
   useEffect(() => {
     setProjectPage(0)
@@ -240,6 +288,13 @@ export function ProjectManagementPage() {
   function finishClosingProjectDialog() {
     if (projectDialogRef.current?.open) projectDialogRef.current.close()
     setSelectedId(null)
+    if (searchParams.has('projectId')) {
+      setSearchParams((current) => {
+        const next = new URLSearchParams(current)
+        next.delete('projectId')
+        return next
+      }, { replace: true })
+    }
     resetProjectDialogState()
     restoreProjectDialogFocus()
   }
@@ -331,7 +386,7 @@ export function ProjectManagementPage() {
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!token || !canManageProject || isBusy) return
+    if (!token || !canCreateProject || isBusy) return
 
     const validationError = validateCoreForm(createForm)
     if (validationError) {
@@ -391,7 +446,7 @@ export function ProjectManagementPage() {
   }
 
   async function handleDelete() {
-    if (!token || !selectedProject || !canManageProject || isBusy) return
+    if (!token || !selectedProject || !canAdminManageProject || isBusy) return
     const draftWarning = selectedProjectDirty ? ' Các thay đổi chưa lưu cũng sẽ bị bỏ.' : ''
     if (!window.confirm(`Xóa mềm dự án “${selectedProject.name}” (${selectedProject.code})? Dự án sẽ không còn xuất hiện trong danh sách.${draftWarning}`)) return
 
@@ -428,12 +483,14 @@ export function ProjectManagementPage() {
     <div className="project-management-page">
       <div className="page-title">
         <div>
-          <span className="eyebrow">Không gian quản trị</span>
-          <h1>Quản lý dự án</h1>
-          <p>Tìm dự án và mở cửa sổ quản lý để xem hoặc cập nhật từng nhóm thông tin.</p>
+          <span className="eyebrow">{isAdmin ? 'Không gian quản trị' : 'Không gian thành viên'}</span>
+          <h1>{isAdmin ? 'Quản lý dự án' : 'Dự án của tôi'}</h1>
+          <p>{isAdmin
+            ? 'Tìm dự án và mở cửa sổ quản lý để xem hoặc cập nhật từng nhóm thông tin.'
+            : 'Theo dõi các dự án bạn đang tham gia và xem lịch sử tham gia của mình.'}</p>
         </div>
         <div className="project-page-actions">
-          {canManageProject && token ? (
+          {canCreateProject && token ? (
             <button
               ref={createTriggerRef}
               className="btn primary"
@@ -460,8 +517,8 @@ export function ProjectManagementPage() {
         <section className="panel project-list-panel">
           <div className="panel-head">
             <div>
-              <h2>Danh sách dự án</h2>
-              <p>{projects.length} dự án bạn có quyền xem. Mỗi dự án được quản lý trong một cửa sổ riêng.</p>
+              <h2>{isAdmin ? 'Danh sách dự án' : 'Dự án đang tham gia'}</h2>
+              <p>{projects.length} {isAdmin ? 'dự án bạn có quyền xem' : 'dự án có membership ACTIVE'}. Mỗi dự án được mở trong một cửa sổ riêng.</p>
             </div>
             <FolderKanban size={20} aria-hidden="true" />
           </div>
@@ -531,6 +588,7 @@ export function ProjectManagementPage() {
                 <div className="field-admin-list project-management-list">
                   {pagedProjects.map((project) => {
                     const canEdit = canEditProject(project)
+                    const membership = membershipByProjectId.get(project.id)
                     return (
                     <article className="member-select-row project-management-row" key={project.id}>
                       <span className="member-avatar">{project.code.slice(0, 2).toUpperCase()}</span>
@@ -542,6 +600,11 @@ export function ProjectManagementPage() {
                         <span className={`badge ${PROJECT_STATUS_BADGES[project.status]}`}>
                           {PROJECT_STATUS_LABELS[project.status]}
                         </span>
+                        {membership ? (
+                          <span className={`badge ${membership.projectRole === 'LEADER' ? 'info' : 'success'}`}>
+                            {membership.projectRole === 'LEADER' ? 'Leader' : 'Thành viên'}
+                          </span>
+                        ) : null}
                         <button
                           className="btn ghost table-btn"
                           type="button"
@@ -594,15 +657,21 @@ export function ProjectManagementPage() {
           ) : (
             <EmptyState
               title="Chưa có dự án"
-              description={canManageProject
+              description={canCreateProject
                 ? 'Bấm “Tạo dự án” để thêm dự án đầu tiên.'
-                : 'Hiện chưa có dự án nào bạn có quyền xem.'}
+                : isAdmin
+                  ? 'Hiện chưa có dự án nào bạn có quyền xem.'
+                  : 'Bạn chưa tham gia dự án nào. Hãy xem danh sách công khai để gửi yêu cầu tham gia.'}
             />
           )}
         </section>
       )}
 
-      {isCreating && canManageProject && token ? (
+      {!loading && !isAdmin ? (
+        <MembershipHistoryPanel memberships={removedMemberships} />
+      ) : null}
+
+      {isCreating && canCreateProject && token ? (
         <dialog
           ref={createDialogRef}
           className="project-create-dialog"
@@ -677,7 +746,9 @@ export function ProjectManagementPage() {
                 </select>
               </label>
               <div className="project-create-dialog-note">
-                Mô tả, thời gian, leader, thành viên và lĩnh vực có thể bổ sung sau khi tạo.
+                {isAdmin
+                  ? 'Mô tả, thời gian, leader, thành viên và lĩnh vực có thể bổ sung sau khi tạo.'
+                  : 'Bạn sẽ được gán làm leader chính. Mô tả, thời gian, thành viên và lĩnh vực có thể bổ sung sau.'}
               </div>
             </div>
 
@@ -889,7 +960,7 @@ export function ProjectManagementPage() {
                 </div>
               )}
 
-              {!isEditingCore && canManageProject ? (
+              {!isEditingCore && canAdminManageProject ? (
                 <div className="project-danger-zone">
                   <div>
                     <strong>Xóa mềm dự án</strong>
@@ -910,7 +981,7 @@ export function ProjectManagementPage() {
                 tabIndex={0}
                 hidden={activeTab !== 'leaders'}
               >
-              {canManageProject && token ? (
+              {canAdminManageProject && token ? (
                 <ProjectLeadershipEditor
                   key={selectedProject.id}
                   project={selectedProject}
@@ -996,6 +1067,52 @@ export function ProjectManagementPage() {
         </dialog>
       ) : null}
     </div>
+  )
+}
+
+function MembershipHistoryPanel({ memberships }: { memberships: ProjectMembershipHistory[] }) {
+  return (
+    <section className="panel project-membership-history" aria-labelledby="project-membership-history-title">
+      <div className="panel-head">
+        <div>
+          <h2 id="project-membership-history-title">Lịch sử tham gia</h2>
+          <p>Các membership đã chuyển sang REMOVED vẫn được giữ lại cho riêng bạn.</p>
+        </div>
+        <History size={20} aria-hidden="true" />
+      </div>
+
+      {memberships.length ? (
+        <div className="field-admin-list project-membership-history-list">
+          {memberships.map((membership) => (
+            <article
+              className="member-select-row project-management-row project-membership-history-row"
+              key={`${membership.projectId}-${membership.joinedAt}`}
+            >
+              <span className="member-avatar">{membership.projectCode.slice(0, 2).toUpperCase()}</span>
+              <span className="project-management-row-main">
+                <strong>{membership.projectName}</strong>
+                <small>{membership.projectCode} · {PROJECT_STATUS_LABELS[membership.projectStatus]}</small>
+                <small>
+                  Tham gia {formatDateTime(membership.joinedAt)}
+                  {membership.removedAt ? ` · Rời dự án ${formatDateTime(membership.removedAt)}` : ''}
+                </small>
+              </span>
+              <span className="project-management-row-actions">
+                <span className={`badge ${membership.projectRole === 'LEADER' ? 'info' : 'success'}`}>
+                  {membership.projectRole === 'LEADER' ? 'Leader' : 'Thành viên'}
+                </span>
+                <span className="badge danger">Đã rời dự án</span>
+              </span>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <EmptyState
+          title="Chưa có lịch sử đã rời dự án"
+          description="Khi membership của bạn chuyển sang REMOVED, thông tin tham gia sẽ xuất hiện tại đây."
+        />
+      )}
+    </section>
   )
 }
 
@@ -1156,6 +1273,23 @@ function projectCreatedAt(project: Project) {
   if (!project.createdAt) return 0
   const value = Date.parse(project.createdAt)
   return Number.isNaN(value) ? 0 : value
+}
+
+function positiveInteger(value: string | null) {
+  if (value === null || !/^\d+$/.test(value)) return null
+  const number = Number(value)
+  return Number.isSafeInteger(number) && number > 0 ? number : null
+}
+
+function membershipTimestamp(membership: ProjectMembershipHistory) {
+  const value = Date.parse(membership.removedAt ?? membership.joinedAt)
+  return Number.isNaN(value) ? 0 : value
+}
+
+function formatDateTime(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' }).format(date)
 }
 
 function formatProjectDates(project: Project) {

@@ -24,6 +24,10 @@ public class ProjectAccessService {
     private final ProjectMemberRepository projectMemberRepository;
     private final PermissionService permissionService;
 
+    public UserEntity requireAuthenticatedUser(String authenticatedEmail) {
+        return requireUsableUser(authenticatedEmail);
+    }
+
     public UserEntity requireRead(ProjectEntity project, String authenticatedEmail) {
         UserEntity user = requireUsableUser(authenticatedEmail);
         boolean memberReader = permissionService.getEffectivePermissionCodes(user).contains(PROJECT_READ)

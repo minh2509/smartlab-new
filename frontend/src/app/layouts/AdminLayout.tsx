@@ -7,6 +7,12 @@ export function AdminLayout() {
   const { isAuthenticated, profile, logout } = useAuth()
   const can = (...permissions: string[]) => permissions.every((permission) => profile?.permissions.includes(permission))
 
+  const workspaceLabel = profile?.roles.includes('ADMIN')
+    ? 'Admin Workspace'
+    : profile?.roles.includes('LEADER')
+      ? 'Leader Workspace'
+      : 'Member Workspace'
+
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />
   }
@@ -18,7 +24,7 @@ export function AdminLayout() {
           <div className="sticky">
             <div className="admin-brand">
               <Logo />
-              <span>Admin Workspace</span>
+              <span>{workspaceLabel}</span>
             </div>
 
             <nav className="admin-nav" aria-label="Admin navigation">

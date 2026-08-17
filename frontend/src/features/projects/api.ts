@@ -3,8 +3,11 @@ import type {
   CreateProjectPayload,
   Project,
   ProjectLeaderCandidate,
+  ProjectJoinRequest,
+  ProjectJoinRequestDecision,
   ProjectMember,
   ProjectMemberCandidate,
+  ProjectMembershipHistory,
   ProjectMemberStatus,
   ProjectResearchField,
   UpdateProjectLeadershipPayload,
@@ -105,6 +108,49 @@ export function removeProjectMember(token: string, projectId: number, userId: st
   return apiClient<void>(`/projects/${projectId}/members/${encodeURIComponent(userId)}`, {
     method: 'DELETE',
     token,
+  })
+}
+
+export function listMyProjectMemberships(token: string) {
+  return apiClient<ProjectMembershipHistory[]>('/projects/memberships/me', { token })
+}
+
+export function createProjectJoinRequest(token: string, projectId: number, message?: string) {
+  return apiClient<ProjectJoinRequest>(`/projects/${projectId}/join-requests`, {
+    method: 'POST',
+    token,
+    body: JSON.stringify({ message: message?.trim() || undefined }),
+  })
+}
+
+export function getMyProjectJoinRequest(token: string, projectId: number) {
+  return apiClient<ProjectJoinRequest | null>(`/projects/${projectId}/join-requests/me`, { token })
+}
+
+export function cancelMyProjectJoinRequest(token: string, projectId: number) {
+  return apiClient<void>(`/projects/${projectId}/join-requests/me`, {
+    method: 'DELETE',
+    token,
+  })
+}
+
+export function listProjectJoinRequests(token: string, projectId: number) {
+  return apiClient<ProjectJoinRequest[]>(
+    `/projects/${projectId}/join-requests${toQuery({ status: 'PENDING' })}`,
+    { token },
+  )
+}
+
+export function reviewProjectJoinRequest(
+  token: string,
+  projectId: number,
+  requestId: number,
+  decision: ProjectJoinRequestDecision,
+) {
+  return apiClient<ProjectJoinRequest>(`/projects/${projectId}/join-requests/${requestId}`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify({ decision }),
   })
 }
 

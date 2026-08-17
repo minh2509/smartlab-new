@@ -1,5 +1,5 @@
-import { Plus, RefreshCw, RotateCcw, Search, Trash2, UsersRound } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Check, Plus, RefreshCw, RotateCcw, Search, Trash2, UserCheck, UsersRound, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { EmptyState } from '../../../shared/components/EmptyState'
 import { Feedback } from '../../../shared/components/Feedback'
 import { useAuth } from '../../auth/authContext'
@@ -7,7 +7,9 @@ import {
   addProjectMember,
   listProjectMemberCandidates,
   listProjectMembers,
+  listProjectJoinRequests,
   removeProjectMember,
+  reviewProjectJoinRequest,
 } from '../api'
 import {
   PROJECT_MEMBER_ROLE_LABELS,
@@ -18,6 +20,7 @@ import type {
   ProjectMember,
   ProjectMemberCandidate,
   ProjectMemberFilter,
+  ProjectJoinRequest,
 } from '../types'
 
 export function ProjectMembersPanel({ project }: { project: Project | null }) {
@@ -27,11 +30,16 @@ export function ProjectMembersPanel({ project }: { project: Project | null }) {
   const [filter, setFilter] = useState<ProjectMemberFilter>('ACTIVE')
   const [query, setQuery] = useState('')
   const [candidates, setCandidates] = useState<ProjectMemberCandidate[]>([])
+  const [joinRequests, setJoinRequests] = useState<ProjectJoinRequest[]>([])
   const [loading, setLoading] = useState(false)
   const [searching, setSearching] = useState(false)
+  const [loadingRequests, setLoadingRequests] = useState(false)
   const [busyUserId, setBusyUserId] = useState<string | null>(null)
+  const [busyRequestId, setBusyRequestId] = useState<number | null>(null)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const memberLoadIdRef = useRef(0)
+  const joinRequestLoadIdRef = useRef(0)
 
   const isAdmin = Boolean(profile?.roles.includes('ADMIN') && profile.permissions.includes('PROJECT_MANAGE'))
   const isProjectLeader = Boolean(
@@ -41,15 +49,24 @@ export function ProjectMembersPanel({ project }: { project: Project | null }) {
 
   const loadMembers = useCallback(async () => {
     if (!token || !projectId) return
+    const loadId = ++memberLoadIdRef.current
     const [activeMembers, removedMembers] = await Promise.all([
       listProjectMembers(token, projectId, 'ACTIVE'),
       listProjectMembers(token, projectId, 'REMOVED'),
     ])
-    setMembers([...activeMembers, ...removedMembers])
+    if (loadId === memberLoadIdRef.current) setMembers([...activeMembers, ...removedMembers])
   }, [projectId, token])
+
+  const loadJoinRequests = useCallback(async () => {
+    if (!token || !projectId || !canManage) return
+    const loadId = ++joinRequestLoadIdRef.current
+    const result = await listProjectJoinRequests(token, projectId)
+    if (loadId === joinRequestLoadIdRef.current) setJoinRequests(result)
+  }, [canManage, projectId, token])
 
   useEffect(() => {
     setMembers([])
+    memberLoadIdRef.current += 1
     setQuery('')
     setCandidates([])
     setMessage('')
@@ -69,6 +86,27 @@ export function ProjectMembersPanel({ project }: { project: Project | null }) {
       active = false
     }
   }, [loadMembers, projectId, token])
+
+  useEffect(() => {
+    setJoinRequests([])
+    joinRequestLoadIdRef.current += 1
+    if (!canManage || !projectId || !token) return
+
+    let active = true
+    setLoadingRequests(true)
+    void loadJoinRequests()
+      .catch((reason: unknown) => {
+        if (active) setError(errorMessage(reason, 'Không tải được yêu cầu tham gia.'))
+      })
+      .finally(() => {
+        if (active) setLoadingRequests(false)
+      })
+    return () => {
+      active = false
+      memberLoadIdRef.current += 1
+      joinRequestLoadIdRef.current += 1
+    }
+  }, [canManage, loadJoinRequests, projectId, token])
 
   useEffect(() => {
     const normalizedQuery = query.trim()
@@ -141,6 +179,33 @@ export function ProjectMembersPanel({ project }: { project: Project | null }) {
       setError(errorMessage(reason, 'Không thể gỡ thành viên.'))
     } finally {
       setBusyUserId(null)
+    }
+  }
+
+  async function handleReview(request: ProjectJoinRequest, decision: 'APPROVE' | 'REJECT') {
+    if (!token || !project || !canManage || busyRequestId || busyUserId) return
+    const actionLabel = decision === 'APPROVE' ? 'chấp nhận' : 'từ chối'
+    if (decision === 'APPROVE' && !window.confirm(`Chấp nhận “${request.requesterName}” vào dự án với vai trò thành viên?`)) return
+    if (decision === 'REJECT' && !window.confirm(`Từ chối yêu cầu của “${request.requesterName}”?`)) return
+
+    setBusyRequestId(request.id)
+    clearFeedback()
+    try {
+      await reviewProjectJoinRequest(token, project.id, request.id, decision)
+      setJoinRequests((current) => current.filter((item) => item.id !== request.id))
+      if (decision === 'APPROVE') {
+        setFilter('ACTIVE')
+        try {
+          await loadMembers()
+        } catch (reason: unknown) {
+          setError(errorMessage(reason, 'Yêu cầu đã được chấp nhận nhưng chưa tải lại được danh sách thành viên.'))
+        }
+      }
+      setMessage(`Đã ${actionLabel} yêu cầu tham gia của ${request.requesterName}.`)
+    } catch (reason: unknown) {
+      setError(errorMessage(reason, `Không thể ${actionLabel} yêu cầu tham gia.`))
+    } finally {
+      setBusyRequestId(null)
     }
   }
 
@@ -246,6 +311,73 @@ export function ProjectMembersPanel({ project }: { project: Project | null }) {
       ) : null}
       {!loading && !visibleMembers.length ? (
         <EmptyState title="Không có thành viên" description="Không có membership phù hợp với bộ lọc hiện tại." />
+      ) : null}
+
+      {canManage ? (
+        <div className="page-section project-join-review">
+          <div className="panel-head">
+            <div>
+              <h3>Yêu cầu tham gia</h3>
+              <p>Duyệt thành viên muốn tham gia dự án. Khi chấp nhận, membership sẽ được tạo hoặc kích hoạt lại.</p>
+            </div>
+            <span className="badge info">{joinRequests.length} chờ duyệt</span>
+          </div>
+
+          <div className="form-actions" style={{ marginBottom: 12 }}>
+            <button
+              className="btn ghost table-btn"
+              type="button"
+              disabled={loadingRequests || Boolean(busyRequestId) || Boolean(busyUserId)}
+              onClick={() => {
+                setLoadingRequests(true)
+                clearFeedback()
+                void loadJoinRequests()
+                  .catch((reason: unknown) => setError(errorMessage(reason, 'Không tải lại được yêu cầu tham gia.')))
+                  .finally(() => setLoadingRequests(false))
+              }}
+            >
+              <RefreshCw aria-hidden="true" /> Tải lại yêu cầu
+            </button>
+          </div>
+
+          {loadingRequests ? <div className="empty tight">Đang tải yêu cầu tham gia...</div> : null}
+          {!loadingRequests && joinRequests.length ? (
+            <div className="field-admin-list">
+              {joinRequests.map((request) => (
+                <article className="field-admin-row" key={request.id}>
+                  <div>
+                    <strong>{request.requesterName}</strong>
+                    <span>{request.requesterEmail}</span>
+                    <span>Gửi {formatDateTime(request.createdAt)}</span>
+                    {request.message ? <p className="project-join-review-message">“{request.message}”</p> : null}
+                  </div>
+                  <span className="field-admin-actions">
+                    <button
+                      className="btn primary table-btn"
+                      type="button"
+                      disabled={Boolean(busyRequestId) || Boolean(busyUserId)}
+                      onClick={() => void handleReview(request, 'APPROVE')}
+                    >
+                      {busyRequestId === request.id ? <UserCheck aria-hidden="true" /> : <Check aria-hidden="true" />}
+                      {busyRequestId === request.id ? 'Đang xử lý...' : 'Chấp nhận'}
+                    </button>
+                    <button
+                      className="btn ghost table-btn danger-text"
+                      type="button"
+                      disabled={Boolean(busyRequestId) || Boolean(busyUserId)}
+                      onClick={() => void handleReview(request, 'REJECT')}
+                    >
+                      <X aria-hidden="true" /> Từ chối
+                    </button>
+                  </span>
+                </article>
+              ))}
+            </div>
+          ) : null}
+          {!loadingRequests && !joinRequests.length ? (
+            <EmptyState title="Không có yêu cầu chờ duyệt" description="Yêu cầu mới từ thành viên sẽ xuất hiện tại đây." />
+          ) : null}
+        </div>
       ) : null}
 
       {canManage ? (

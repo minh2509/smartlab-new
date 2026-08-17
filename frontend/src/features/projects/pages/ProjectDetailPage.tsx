@@ -1,10 +1,11 @@
-import { CalendarDays, FolderKanban, UsersRound } from 'lucide-react'
+import { CalendarDays, UsersRound } from 'lucide-react'
 import { Fragment, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Feedback } from '../../../shared/components/Feedback'
 import { useAuth } from '../../auth/authContext'
 import { PublicPageHead } from '../../public/components/PublicPageHead'
 import { getProject } from '../api'
+import { ProjectJoinRequestCard } from '../components/ProjectJoinRequestCard'
 import {
   PROJECT_STATUS_BADGES,
   PROJECT_STATUS_LABELS,
@@ -167,18 +168,11 @@ function ProjectWorkspaceSection({ project }: { project: Project }) {
     <section className="section alt" aria-label="Công cụ nội bộ của dự án">
       <div className="wrap">
         <div className="sec-head">
-          <div className="kicker">Không gian nội bộ</div>
-          <h2>Tiếp tục làm việc với dự án</h2>
-          <p>Thành viên, lĩnh vực nghiên cứu, tài liệu, phiên bản và sự kiện đã được quản lý trong khu vực đăng nhập.</p>
+          <div className="kicker">Dành cho thành viên</div>
+          <h2>Trạng thái tham gia dự án</h2>
+          <p>Xem membership hiện tại hoặc gửi yêu cầu tham gia tới nhóm leader.</p>
         </div>
-        <div className="row gap-6 wrapf">
-          <Link className="btn primary" to="/admin/projects">
-            <FolderKanban aria-hidden="true" /> Mở quản lý dự án
-          </Link>
-          <Link className="btn" to={`/admin/events?projectId=${project.id}`}>
-            <CalendarDays aria-hidden="true" /> Xem sự kiện dự án
-          </Link>
-        </div>
+        <ProjectJoinRequestCard project={project} />
       </div>
     </section>
   )

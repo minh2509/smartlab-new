@@ -1,0 +1,126 @@
+.project-join-card {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--sh-1);
+}
+
+.project-join-card.compact {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.project-join-card.compact > div {
+  display: grid;
+  gap: 3px;
+}
+
+.project-join-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.project-join-head h3 {
+  margin-top: 2px;
+}
+
+.project-join-head .btn.table-btn {
+  width: 40px;
+  min-width: 40px;
+  padding: 0;
+}
+
+.project-join-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--brand-1) 10%, var(--surface));
+  color: var(--brand-1);
+}
+
+.project-join-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.project-join-state {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+}
+
+.project-join-state > svg {
+  width: 22px;
+  height: 22px;
+}
+
+.project-join-state p,
+.project-join-note {
+  margin-top: 3px;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.project-join-state.success {
+  border-color: color-mix(in srgb, var(--ok) 26%, var(--line));
+  background: color-mix(in srgb, var(--ok) 6%, var(--surface));
+}
+
+.project-join-state.success > svg {
+  color: var(--ok);
+}
+
+.project-join-state.pending {
+  border-color: color-mix(in srgb, var(--warn) 30%, var(--line));
+  background: color-mix(in srgb, var(--warn) 7%, var(--surface));
+}
+
+.project-join-state.pending > svg {
+  color: var(--warn);
+}
+
+.project-join-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.project-join-form {
+  display: grid;
+  gap: 12px;
+}
+
+.project-join-form .btn {
+  justify-self: start;
+}
+
+@media (max-width: 680px) {
+  .project-join-card.compact,
+  .project-join-state {
+    grid-template-columns: 1fr;
+    align-items: flex-start;
+  }
+
+  .project-join-card.compact .btn,
+  .project-join-state .btn,
+  .project-join-form .btn {
+    width: 100%;
+  }
+
+  .project-join-actions {
+    width: 100%;
+  }
+}

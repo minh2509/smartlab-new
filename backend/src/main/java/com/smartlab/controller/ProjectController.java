@@ -68,10 +68,10 @@ public class ProjectController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasRole('ADMIN') and hasAuthority('PROJECT_MANAGE')")
+    @PreAuthorize("hasAuthority('PROJECT_MANAGE') and (hasRole('ADMIN') or hasRole('LEADER'))")
     @Operation(
             summary = "Create a project",
-            description = "Primary and additional leaders are optional and may be assigned later."
+            description = "Administrators may choose leaders. A global LEADER is automatically assigned as the project's primary leader."
     )
     public ProjectResponse create(
             @Valid @RequestBody CreateProjectRequest request,

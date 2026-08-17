@@ -2,6 +2,7 @@ package com.smartlab.service.impl;
 
 import com.smartlab.dto.request.AddProjectMemberRequest;
 import com.smartlab.dto.response.ProjectMemberResponse;
+import com.smartlab.dto.response.ProjectMembershipHistoryResponse;
 import com.smartlab.entity.ProjectEntity;
 import com.smartlab.entity.ProjectMemberEntity;
 import com.smartlab.entity.UserEntity;
@@ -96,6 +97,31 @@ class ProjectMemberServiceImplTest {
                 eq(2L), eq("PROJECT_MEMBER_ADDED"), eq("You were added to project Smart Lab AI"),
                 eq(new NotificationRelated(1L, "PROJECT", 7L, "/du-an/7")), any(Instant.class)
         );
+    }
+
+    @Test
+    void listsOwnRemovedMembershipHistoryWithoutProjectReadCheck() {
+        ProjectMemberEntity removedMembership = ProjectMemberEntity.createMember(project, member);
+        ReflectionTestUtils.setField(
+                removedMembership,
+                "joinedAt",
+                Timestamp.from(Instant.parse("2026-01-01T00:00:00Z"))
+        );
+        removedMembership.remove();
+        when(projectAccessService.requireAuthenticatedUser(member.getEmail())).thenReturn(member);
+        when(projectMemberRepository.findMembershipHistoryByUserId(2L))
+                .thenReturn(List.of(removedMembership));
+
+        List<ProjectMembershipHistoryResponse> history = service.listMine(member.getEmail());
+
+        assertThat(history).singleElement().satisfies(item -> {
+            assertThat(item.getProjectId()).isEqualTo(7L);
+            assertThat(item.getProjectCode()).isEqualTo("SL-AI");
+            assertThat(item.getProjectRole()).isEqualTo(ProjectRole.MEMBER);
+            assertThat(item.getStatus()).isEqualTo(ProjectMemberStatus.REMOVED);
+            assertThat(item.getRemovedAt()).isNotNull();
+        });
+        verify(projectAccessService, never()).requireRead(any(), any());
     }
 
     @Test
