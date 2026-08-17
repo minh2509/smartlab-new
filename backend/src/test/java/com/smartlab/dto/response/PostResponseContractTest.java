@@ -35,7 +35,7 @@ class PostResponseContractTest {
     }
 
     @Test
-    void postDetailExposesSummaryFieldsPlusContentJson() {
+    void postDetailExposesExactlyTheApprovedFields() {
         assertThat(fieldNames(PostDetailResponse.class)).containsExactlyInAnyOrder(
                 "id",
                 "title",
@@ -47,6 +47,7 @@ class PostResponseContractTest {
                 "status",
                 "category",
                 "author",
+                "reviewFeedback",
                 "publishedAt",
                 "createdAt",
                 "updatedAt"
@@ -56,6 +57,11 @@ class PostResponseContractTest {
                 .singleElement()
                 .extracting(field -> field.getType())
                 .isEqualTo(Map.class);
+        assertThat(PostDetailResponse.class.getDeclaredFields())
+                .filteredOn(field -> field.getName().equals("reviewFeedback"))
+                .singleElement()
+                .extracting(field -> field.getType())
+                .isEqualTo(PostReviewFeedbackResponse.class);
     }
 
     @Test

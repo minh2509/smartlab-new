@@ -6,6 +6,7 @@ export type AuthContextValue = {
   sessionId: string | null
   profile: AccountResponse | null
   isAuthenticated: boolean
+  isHydrating: boolean
   login: (email: string, password: string) => Promise<void>
   logout: () => Promise<void>
   clearAuth: () => void
