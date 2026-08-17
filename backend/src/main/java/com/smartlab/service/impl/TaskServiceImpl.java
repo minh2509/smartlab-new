@@ -123,6 +123,25 @@ public class TaskServiceImpl implements TaskService {
         }
     }
 
+    private void requireSubmissionAccess(UserEntity user, TaskEntity task) {
+        Long projectId = task.getProject().getId();
+        boolean isAssignee = taskAssigneeRepository.existsById_TaskIdAndId_UserId(task.getId(), user.getId());
+        boolean isActiveAssignee = isAssignee
+                && projectMemberRepository.existsByProject_IdAndUser_IdAndStatus(
+                        projectId, user.getId(), ProjectMemberStatus.ACTIVE
+                );
+
+        boolean isManager = false;
+        try {
+            requireTaskManageAccess(user, projectId);
+            isManager = true;
+        } catch (ResponseStatusException ignored) { }
+
+        if (!isActiveAssignee && !isManager) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only active assignees or managers can submit this task");
+        }
+    }
+
     /** Admins, or ACTIVE members with TASK_READ, may read tasks. */
     private void requireTaskReadAccess(UserEntity user, Long projectId) {
         Set<String> roles = permissionService.getRoleCodes(user);
@@ -387,27 +406,20 @@ public class TaskServiceImpl implements TaskService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public Long requireAttachmentUploadProjectId(Long taskId, String currentEmail) {
+        UserEntity user = requireUser(currentEmail);
+        TaskEntity task = requireTask(taskId);
+        requireProjectMemberAccess(user, task.getProject().getId());
+        return task.getProject().getId();
+    }
+
+    @Override
     @Transactional
     public TaskDetailResponse submitTask(Long taskId, SubmitTaskRequest request, String currentEmail) {
         UserEntity user = requireUser(currentEmail);
         TaskEntity task = requireTask(taskId);
-
-        // An assignee may submit only while still an ACTIVE project member.
-        boolean isAssignee = taskAssigneeRepository.existsById_TaskIdAndId_UserId(taskId, user.getId());
-        boolean isActiveAssignee = isAssignee
-                && projectMemberRepository.existsByProject_IdAndUser_IdAndStatus(
-                        task.getProject().getId(), user.getId(), ProjectMemberStatus.ACTIVE
-                );
-
-        boolean isManager = false;
-        try {
-            requireTaskManageAccess(user, task.getProject().getId());
-            isManager = true;
-        } catch (ResponseStatusException ignored) { }
-
-        if (!isActiveAssignee && !isManager) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only active assignees or managers can submit this task");
-        }
+        requireSubmissionAccess(user, task);
 
         StoredFileEntity file = requireOwnedProjectFile(request.getFileId(), user, task.getProject().getId());
 
@@ -417,5 +429,14 @@ public class TaskServiceImpl implements TaskService {
         taskAttachmentRepository.save(attachment);
         task.transitionStatus(TaskStatus.REVIEW);
         return toDetailResponse(task);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Long requireSubmissionUploadProjectId(Long taskId, String currentEmail) {
+        UserEntity user = requireUser(currentEmail);
+        TaskEntity task = requireTask(taskId);
+        requireSubmissionAccess(user, task);
+        return task.getProject().getId();
     }
 }

@@ -157,6 +157,16 @@ class TaskServiceImplTest {
     }
 
     @Test
+    void attachmentUploadPrecheckAllowsAnActiveMemberWithoutTaskRead() {
+        when(projectMemberRepository.existsByProject_IdAndUser_IdAndStatus(
+                PROJECT_ID, user.getId(), ProjectMemberStatus.ACTIVE)).thenReturn(true);
+
+        assertThat(service.requireAttachmentUploadProjectId(TASK_ID, EMAIL)).isEqualTo(PROJECT_ID);
+
+        verify(permissionService, never()).getEffectivePermissionCodes(user);
+    }
+
+    @Test
     void getDetailAllowsAnActiveMemberWithTaskRead() {
         when(permissionService.getEffectivePermissionCodes(user)).thenReturn(Set.of("TASK_READ"));
         when(projectMemberRepository.existsByProject_IdAndUser_IdAndStatus(
@@ -252,6 +262,26 @@ class TaskServiceImplTest {
         assertThat(response.getStatus()).isEqualTo(TaskStatus.REVIEW.name());
         assertThat(task.getStatus()).isEqualTo(TaskStatus.REVIEW);
         verify(taskAttachmentRepository).save(any());
+    }
+
+    @Test
+    void submissionUploadPrecheckAllowsAnActiveAssigneeWithoutTaskManage() {
+        when(taskAssigneeRepository.existsById_TaskIdAndId_UserId(TASK_ID, user.getId())).thenReturn(true);
+        when(projectMemberRepository.existsByProject_IdAndUser_IdAndStatus(
+                PROJECT_ID, user.getId(), ProjectMemberStatus.ACTIVE)).thenReturn(true);
+        when(permissionService.getEffectivePermissionCodes(user)).thenReturn(Set.of());
+        when(projectMemberRepository.existsByProject_IdAndUser_IdAndProjectRoleAndStatus(
+                PROJECT_ID, user.getId(), ProjectRole.LEADER, ProjectMemberStatus.ACTIVE)).thenReturn(false);
+
+        assertThat(service.requireSubmissionUploadProjectId(TASK_ID, EMAIL)).isEqualTo(PROJECT_ID);
+    }
+
+    @Test
+    void submissionUploadPrecheckAllowsATaskManagerWhoIsNotAnAssignee() {
+        when(taskAssigneeRepository.existsById_TaskIdAndId_UserId(TASK_ID, user.getId())).thenReturn(false);
+        when(permissionService.getEffectivePermissionCodes(user)).thenReturn(Set.of("TASK_MANAGE"));
+
+        assertThat(service.requireSubmissionUploadProjectId(TASK_ID, EMAIL)).isEqualTo(PROJECT_ID);
     }
 
     private static AddAttachmentRequest attachmentRequest(long fileId) {

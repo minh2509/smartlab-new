@@ -17,6 +17,8 @@ public interface FileService {
             Long projectId
     );
 
+    FileResponse uploadForTaskProject(MultipartFile file, String description, String email, Long projectId);
+
     List<FileResponse> listOwn(String email);
 
     FileResponse describe(Long id, Authentication authentication);
