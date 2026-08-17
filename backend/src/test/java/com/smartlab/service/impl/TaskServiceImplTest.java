@@ -293,6 +293,87 @@ class TaskServiceImplTest {
     }
 
     @Test
+    void updateSendsNotificationToCurrentAssigneesWhenTaskChanges() {
+        UserEntity member = user(2L, "assignee@smartlab.test");
+        when(permissionService.getRoleCodes(user)).thenReturn(Set.of("ADMIN"));
+        when(taskAssigneeRepository.findAllByTask_Id(TASK_ID))
+                .thenReturn(List.of(TaskAssigneeEntity.of(task, member)));
+
+        UpdateTaskRequest request = new UpdateTaskRequest();
+        request.setDescription("Updated description");
+
+        service.update(TASK_ID, request, EMAIL);
+
+        verify(notificationService).notify(
+                eq(member.getId()),
+                eq("TASK_UPDATED"),
+                eq("Nhiệm vụ đã được cập nhật: " + task.getTitle()),
+                any(),
+                any()
+        );
+    }
+
+    @Test
+    void updateNotifiesEachDistinctAssigneeOnce() {
+        UserEntity first = user(2L, "first@smartlab.test");
+        UserEntity second = user(3L, "second@smartlab.test");
+        when(permissionService.getRoleCodes(user)).thenReturn(Set.of("ADMIN"));
+        when(taskAssigneeRepository.findAllByTask_Id(TASK_ID))
+                .thenReturn(List.of(
+                        TaskAssigneeEntity.of(task, first),
+                        TaskAssigneeEntity.of(task, first),
+                        TaskAssigneeEntity.of(task, second)
+                ));
+
+        UpdateTaskRequest request = new UpdateTaskRequest();
+        request.setDescription("Updated description");
+
+        service.update(TASK_ID, request, EMAIL);
+
+        verify(notificationService).notify(
+                eq(first.getId()), eq("TASK_UPDATED"), any(), any(), any()
+        );
+        verify(notificationService).notify(
+                eq(second.getId()), eq("TASK_UPDATED"), any(), any(), any()
+        );
+    }
+
+    @Test
+    void updateDoesNotNotifyActorWhenActorIsAlsoAssignee() {
+        UserEntity member = user(2L, "member@smartlab.test");
+        when(permissionService.getRoleCodes(user)).thenReturn(Set.of("ADMIN"));
+        when(taskAssigneeRepository.findAllByTask_Id(TASK_ID))
+                .thenReturn(List.of(
+                        TaskAssigneeEntity.of(task, user),
+                        TaskAssigneeEntity.of(task, member)
+                ));
+
+        UpdateTaskRequest request = new UpdateTaskRequest();
+        request.setDescription("Updated description");
+
+        service.update(TASK_ID, request, EMAIL);
+
+        verify(notificationService, never()).notify(
+                eq(user.getId()), any(), any(), any(), any()
+        );
+        verify(notificationService).notify(
+                eq(member.getId()), eq("TASK_UPDATED"), any(), any(), any()
+        );
+    }
+
+    @Test
+    void updateDoesNotSendNotificationForNoOpRequest() {
+        when(permissionService.getRoleCodes(user)).thenReturn(Set.of("ADMIN"));
+
+        UpdateTaskRequest request = new UpdateTaskRequest();
+
+        service.update(TASK_ID, request, EMAIL);
+
+        verify(taskAssigneeRepository).findAllByTask_Id(TASK_ID);
+        verify(notificationService, never()).notify(any(), any(), any(), any(), any());
+    }
+
+    @Test
     void addAssigneesSendsNotificationToNewAssignee() {
         UserEntity member = user(2L, "assignee@smartlab.test");
         when(permissionService.getRoleCodes(user)).thenReturn(Set.of("ADMIN"));
