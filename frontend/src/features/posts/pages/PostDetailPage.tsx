@@ -172,11 +172,27 @@ export function PostDetailPage() {
               <Feedback message={success ?? undefined} error={error ?? undefined} />
             </div>
 
+            <PostReviewFeedback post={post} />
+
             <hr className="post-page-divider" />
             <PostContent contentJson={post.contentJson} slug={post.slug} token={token} className="post-page-content-body" />
           </article>
         ) : null}
       </div>
+    </section>
+  )
+}
+
+function PostReviewFeedback({ post }: { post: PostDetail }) {
+  const feedback = post.reviewFeedback
+  const isRevisionRequired = post.status === 'REVISION_REQUIRED' && feedback?.decision === 'REVISION_REQUIRED'
+  const isRejected = post.status === 'REJECTED' && feedback?.decision === 'REJECTED'
+  if (!feedback || (!isRevisionRequired && !isRejected)) return null
+
+  return (
+    <section className="post-review-feedback" aria-label="Phản hồi đánh giá">
+      <strong>{isRevisionRequired ? 'Yêu cầu chỉnh sửa' : 'Lý do từ chối'}</strong>
+      <p>{feedback.reason}</p>
     </section>
   )
 }
@@ -196,20 +212,21 @@ type PostActionsProps = {
 function PostActions(props: PostActionsProps) {
   const { post, pending, confirmingDelete } = props
   const isDraft = post.status === 'DRAFT'
-  const hasActions = isDraft || (post.status === 'APPROVED' && props.canPublish)
+  const isAuthorEditable = isDraft || post.status === 'REVISION_REQUIRED'
+  const hasActions = isAuthorEditable || (post.status === 'APPROVED' && props.canPublish)
   if (!hasActions) return null
 
   return (
     <section className="post-author-actions" aria-label="Thao tác bài viết">
       <div className="post-author-action-row">
-        {isDraft ? (
+        {isAuthorEditable ? (
           <Link className="btn" to={`/posts/${encodeURIComponent(post.slug)}/edit`}>
             <Edit3 aria-hidden="true" /> Chỉnh sửa
           </Link>
         ) : null}
-        {isDraft && props.canSubmit ? (
+        {isAuthorEditable && props.canSubmit ? (
           <button className="btn" type="button" disabled={Boolean(pending)} onClick={() => void props.onMutate('submit')}>
-            <Send aria-hidden="true" /> {pending === 'submit' ? 'Đang gửi...' : 'Gửi duyệt'}
+            <Send aria-hidden="true" /> {pending === 'submit' ? 'Đang gửi...' : isDraft ? 'Gửi duyệt' : 'Gửi duyệt lại'}
           </button>
         ) : null}
         {isDraft && props.canDirectPublish ? (

@@ -4,9 +4,11 @@ import com.smartlab.dto.response.PostDetailResponse;
 import com.smartlab.dto.response.PostSummaryResponse;
 import com.smartlab.entity.ContentCategoryEntity;
 import com.smartlab.entity.PostEntity;
+import com.smartlab.entity.PostReviewEntity;
 import com.smartlab.entity.UserEntity;
 import com.smartlab.enums.PostStatus;
 import com.smartlab.enums.PostVisibility;
+import com.smartlab.enums.ReviewDecision;
 import com.smartlab.repo.ContentCategoryRepository;
 import com.smartlab.repo.PostRepository;
 import com.smartlab.repo.PostReviewRepository;
@@ -333,8 +335,107 @@ class PostReadServiceImplTest {
         assertThat(response.getVisibility()).isEqualTo(PostVisibility.PUBLIC);
         assertThat(response.getAuthor()).extracting("userId", "name")
                 .containsExactly("public-author-91", "Public Author");
+        assertThat(response.getReviewFeedback()).isNull();
         verify(userRepository, never()).findByEmail(any());
         verify(postRepository, never()).findActiveBySlug(any());
+        verifyNoInteractions(postReviewRepository);
+    }
+
+    @Test
+    void authorDetailExposesLatestRevisionRequiredFeedbackOnly() throws ReflectiveOperationException {
+        PostEntity post = post(1L, VIEWER_ID, PostStatus.REVISION_REQUIRED, PostVisibility.LAB,
+                null, "revision-required", 1);
+        PostReviewEntity latestFeedback = review(1L, 12L, ReviewDecision.REVISION_REQUIRED,
+                "Please clarify the methodology.", Instant.parse("2026-08-17T09:00:00Z"), 8L);
+        activeViewer();
+        when(postRepository.findActiveBySlug("revision-required")).thenReturn(Optional.of(post));
+        when(postReviewRepository.findFirstByPostIdAndDecisionOrderByCreatedAtDescIdDesc(
+                1L, ReviewDecision.REVISION_REQUIRED)).thenReturn(Optional.of(latestFeedback));
+
+        PostDetailResponse response = postService.getPostBySlug(VIEWER_EMAIL, "revision-required");
+
+        assertThat(response.getReviewFeedback()).extracting("decision", "reason", "createdAt")
+                .containsExactly(ReviewDecision.REVISION_REQUIRED, "Please clarify the methodology.",
+                        Instant.parse("2026-08-17T09:00:00Z"));
+        verify(postReviewRepository).findFirstByPostIdAndDecisionOrderByCreatedAtDescIdDesc(
+                1L, ReviewDecision.REVISION_REQUIRED);
+        verify(postReviewRepository, never()).save(any());
+        verify(postReviewRepository, never()).delete(any());
+    }
+
+    @Test
+    void authorDetailExposesLatestRejectedFeedbackOnly() throws ReflectiveOperationException {
+        PostEntity post = post(1L, VIEWER_ID, PostStatus.REJECTED, PostVisibility.LAB,
+                null, "rejected", 1);
+        PostReviewEntity latestFeedback = review(1L, 12L, ReviewDecision.REJECTED,
+                "The submission does not meet the publication criteria.", Instant.parse("2026-08-17T09:00:00Z"), 9L);
+        activeViewer();
+        when(postRepository.findActiveBySlug("rejected")).thenReturn(Optional.of(post));
+        when(postReviewRepository.findFirstByPostIdAndDecisionOrderByCreatedAtDescIdDesc(
+                1L, ReviewDecision.REJECTED)).thenReturn(Optional.of(latestFeedback));
+
+        PostDetailResponse response = postService.getPostBySlug(VIEWER_EMAIL, "rejected");
+
+        assertThat(response.getReviewFeedback()).extracting("decision", "reason")
+                .containsExactly(ReviewDecision.REJECTED, "The submission does not meet the publication criteria.");
+        verify(postReviewRepository).findFirstByPostIdAndDecisionOrderByCreatedAtDescIdDesc(1L, ReviewDecision.REJECTED);
+    }
+
+    @Test
+    void authorDetailUsesLatestMatchingFeedbackWhenReviewHistoryContainsMultipleRecords() throws ReflectiveOperationException {
+        PostEntity post = post(1L, VIEWER_ID, PostStatus.REVISION_REQUIRED, PostVisibility.LAB,
+                null, "revision-history", 1);
+        PostReviewEntity latestMatchingFeedback = review(1L, 12L, ReviewDecision.REVISION_REQUIRED,
+                "Latest requested revision.", Instant.parse("2026-08-17T10:00:00Z"), 11L);
+        activeViewer();
+        when(postRepository.findActiveBySlug("revision-history")).thenReturn(Optional.of(post));
+        when(postReviewRepository.findFirstByPostIdAndDecisionOrderByCreatedAtDescIdDesc(
+                1L, ReviewDecision.REVISION_REQUIRED)).thenReturn(Optional.of(latestMatchingFeedback));
+
+        PostDetailResponse response = postService.getPostBySlug(VIEWER_EMAIL, "revision-history");
+
+        assertThat(response.getReviewFeedback().getReason()).isEqualTo("Latest requested revision.");
+        verify(postReviewRepository).findFirstByPostIdAndDecisionOrderByCreatedAtDescIdDesc(
+                1L, ReviewDecision.REVISION_REQUIRED);
+    }
+
+    @Test
+    void authorDetailReturnsNullWhenNoMatchingFeedbackExists() {
+        PostEntity post = post(1L, VIEWER_ID, PostStatus.REVISION_REQUIRED, PostVisibility.LAB,
+                null, "missing-feedback", 1);
+        activeViewer();
+        when(postRepository.findActiveBySlug("missing-feedback")).thenReturn(Optional.of(post));
+        when(postReviewRepository.findFirstByPostIdAndDecisionOrderByCreatedAtDescIdDesc(
+                1L, ReviewDecision.REVISION_REQUIRED)).thenReturn(Optional.empty());
+
+        PostDetailResponse response = postService.getPostBySlug(VIEWER_EMAIL, "missing-feedback");
+
+        assertThat(response.getReviewFeedback()).isNull();
+    }
+
+    @ParameterizedTest
+    @MethodSource("authorStatusesWithoutReviewFeedback")
+    void authorDetailDoesNotExposeFeedbackOutsideRevisionRequiredOrRejected(PostStatus status) {
+        PostEntity post = post(1L, VIEWER_ID, status, PostVisibility.LAB, null, "no-feedback", 1);
+        activeViewer();
+        when(postRepository.findActiveBySlug("no-feedback")).thenReturn(Optional.of(post));
+
+        PostDetailResponse response = postService.getPostBySlug(VIEWER_EMAIL, "no-feedback");
+
+        assertThat(response.getReviewFeedback()).isNull();
+        verifyNoInteractions(postReviewRepository);
+    }
+
+    @Test
+    void authenticatedNonOwnerReadableDetailDoesNotExposeFeedback() {
+        PostEntity post = post(1L, 99L, PostStatus.PUBLISHED, PostVisibility.PUBLIC, null, "other-author", 1);
+        activeViewer();
+        when(postRepository.findActiveBySlug("other-author")).thenReturn(Optional.of(post));
+
+        PostDetailResponse response = postService.getPostBySlug(VIEWER_EMAIL, "other-author");
+
+        assertThat(response.getReviewFeedback()).isNull();
+        verifyNoInteractions(postReviewRepository);
     }
 
     @Test
@@ -516,6 +617,10 @@ class PostReadServiceImplTest {
         );
     }
 
+    private static Stream<PostStatus> authorStatusesWithoutReviewFeedback() {
+        return Stream.of(PostStatus.DRAFT, PostStatus.PENDING_REVIEW, PostStatus.PUBLISHED);
+    }
+
     private static PostEntity post(Long id, Long authorId, PostStatus status, PostVisibility visibility, Long categoryId, String slug, int second) {
         return post(id, authorId, status, visibility, categoryId, slug, second,
                 Map.of("id", id));
@@ -539,6 +644,21 @@ class PostReadServiceImplTest {
         Field field = PostEntity.class.getDeclaredField(fieldName);
         field.setAccessible(true);
         field.set(post, value);
+    }
+
+    private static PostReviewEntity review(
+            Long postId,
+            Long reviewerUserId,
+            ReviewDecision decision,
+            String reason,
+            Instant createdAt,
+            Long id
+    ) throws ReflectiveOperationException {
+        PostReviewEntity review = PostReviewEntity.create(postId, reviewerUserId, decision, reason, createdAt);
+        Field field = PostReviewEntity.class.getDeclaredField("id");
+        field.setAccessible(true);
+        field.set(review, id);
+        return review;
     }
 
     private static UserEntity user(Long id, boolean active) {

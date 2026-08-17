@@ -138,6 +138,20 @@ class PostSubmitServiceImplTest {
     }
 
     @Test
+    void ownedActiveRevisionRequiredTransitionsUnderLockToPendingReview() throws ReflectiveOperationException {
+        PostEntity post = draft();
+        set(post, "status", PostStatus.REVISION_REQUIRED);
+        activeOwner();
+        when(postRepository.findActiveByIdForUpdate(POST_ID)).thenReturn(Optional.of(post));
+
+        PostDetailResponse response = postService.submitForReview(OWNER_EMAIL, POST_ID);
+
+        assertThat(post.getStatus()).isEqualTo(PostStatus.PENDING_REVIEW);
+        assertThat(response.getStatus()).isEqualTo(PostStatus.PENDING_REVIEW);
+        verify(postRepository).findActiveByIdForUpdate(POST_ID);
+    }
+
+    @Test
     void missingOrSoftDeletedPostFromLockedActiveLookupReturnsNotFound() {
         activeOwner();
         when(postRepository.findActiveByIdForUpdate(POST_ID)).thenReturn(Optional.empty());
@@ -164,7 +178,7 @@ class PostSubmitServiceImplTest {
     }
 
     @ParameterizedTest
-    @EnumSource(value = PostStatus.class, names = "DRAFT", mode = EnumSource.Mode.EXCLUDE)
+    @EnumSource(value = PostStatus.class, names = {"DRAFT", "REVISION_REQUIRED"}, mode = EnumSource.Mode.EXCLUDE)
     void ownedLockedNonDraftReturnsConflictWithoutInvokingTransition(PostStatus status) throws ReflectiveOperationException {
         PostEntity post = draft();
         set(post, "status", status);

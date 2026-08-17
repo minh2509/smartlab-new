@@ -209,8 +209,8 @@ public class PostEntity {
             Long projectId,
             Instant updatedAt
     ) {
-        if (status != PostStatus.DRAFT) {
-            throw new IllegalStateException("Only draft posts can be updated");
+        if (status != PostStatus.DRAFT && status != PostStatus.REVISION_REQUIRED) {
+            throw new IllegalStateException("Only draft or revision-required posts can be updated");
         }
 
         this.title = title;
@@ -225,8 +225,8 @@ public class PostEntity {
 
     public void submitForReview(Instant mutationInstant) {
         Objects.requireNonNull(mutationInstant, "Mutation instant is required");
-        if (status != PostStatus.DRAFT) {
-            throw new IllegalStateException("Only draft posts can be submitted for review");
+        if (status != PostStatus.DRAFT && status != PostStatus.REVISION_REQUIRED) {
+            throw new IllegalStateException("Only draft or revision-required posts can be submitted for review");
         }
 
         this.status = PostStatus.PENDING_REVIEW;

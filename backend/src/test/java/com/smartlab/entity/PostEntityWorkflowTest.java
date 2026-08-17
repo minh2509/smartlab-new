@@ -35,15 +35,26 @@ class PostEntityWorkflowTest {
     }
 
     @ParameterizedTest
-    @MethodSource("nonDraftStatuses")
-    void rejectsSubmitFromEveryNonDraftState(PostStatus sourceStatus) throws Exception {
+    @MethodSource("nonSubmittableStatuses")
+    void rejectsSubmitFromEveryNonSubmittableState(PostStatus sourceStatus) throws Exception {
         PostEntity post = draftWithStatus(sourceStatus);
 
         assertThatThrownBy(() -> post.submitForReview(SUBMITTED_AT))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessage("Only draft posts can be submitted for review");
+                .hasMessage("Only draft or revision-required posts can be submitted for review");
         assertThat(post.getStatus()).isEqualTo(sourceStatus);
         assertThat(post.getUpdatedAt()).isEqualTo(CREATED_AT);
+    }
+
+    @Test
+    void resubmitsRevisionRequiredPostWithTheSuppliedTimestamp() throws Exception {
+        PostEntity post = draftWithStatus(PostStatus.REVISION_REQUIRED);
+
+        post.submitForReview(SUBMITTED_AT);
+
+        assertThat(post.getStatus()).isEqualTo(PostStatus.PENDING_REVIEW);
+        assertThat(post.getUpdatedAt()).isEqualTo(SUBMITTED_AT);
+        assertThat(post.getPublishedAt()).isNull();
     }
 
     @Test
@@ -264,6 +275,15 @@ class PostEntityWorkflowTest {
         return Stream.of(
                 PostStatus.PENDING_REVIEW,
                 PostStatus.REVISION_REQUIRED,
+                PostStatus.APPROVED,
+                PostStatus.REJECTED,
+                PostStatus.PUBLISHED
+        );
+    }
+
+    private static Stream<PostStatus> nonSubmittableStatuses() {
+        return Stream.of(
+                PostStatus.PENDING_REVIEW,
                 PostStatus.APPROVED,
                 PostStatus.REJECTED,
                 PostStatus.PUBLISHED
