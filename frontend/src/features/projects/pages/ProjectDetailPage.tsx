@@ -1,10 +1,11 @@
 import { CalendarDays, FolderKanban, UsersRound } from 'lucide-react'
 import { Fragment, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { hasAllPermissions } from '../../../app/accessPolicy'
 import { Feedback } from '../../../shared/components/Feedback'
 import { useAuth } from '../../auth/authContext'
 import { PublicPageHead } from '../../public/components/PublicPageHead'
-import { getProject } from '../api'
+import { getProject, listMyProjectMemberships } from '../api'
 import { ProjectJoinRequestCard } from '../components/ProjectJoinRequestCard'
 import {
   PROJECT_STATUS_BADGES,
@@ -15,8 +16,9 @@ import type { Project } from '../types'
 
 export function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>()
-  const { token } = useAuth()
+  const { token, profile } = useAuth()
   const [project, setProject] = useState<Project | null>(null)
+  const [hasActiveMembership, setHasActiveMembership] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
@@ -54,6 +56,36 @@ export function ProjectDetailPage() {
       active = false
     }
   }, [id, reloadKey, token])
+
+  const isAdminProjectManager = Boolean(
+    profile?.roles.includes('ADMIN')
+      && hasAllPermissions(profile.permissions, ['PROJECT_MANAGE']),
+  )
+
+  useEffect(() => {
+    if (!token || !project || isAdminProjectManager) {
+      setHasActiveMembership(false)
+      return
+    }
+
+    let active = true
+    setHasActiveMembership(false)
+    listMyProjectMemberships(token)
+      .then((memberships) => {
+        if (active) {
+          setHasActiveMembership(memberships.some(
+            (membership) => membership.projectId === project.id && membership.status === 'ACTIVE',
+          ))
+        }
+      })
+      .catch(() => {
+        if (active) setHasActiveMembership(false)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [isAdminProjectManager, project, token])
 
   if (loading) {
     return (
@@ -158,31 +190,35 @@ export function ProjectDetailPage() {
         </div>
       </section>
 
-      {token ? <ProjectWorkspaceSection project={project} /> : null}
+      {token ? (
+        <section className="section alt" aria-label="Công cụ nội bộ của dự án">
+          <div className="wrap">
+            {isAdminProjectManager || hasActiveMembership ? <ProjectWorkspaceSection project={project} /> : null}
+            <ProjectJoinRequestCard project={project} />
+          </div>
+        </section>
+      ) : null}
     </>
   )
 }
 
 function ProjectWorkspaceSection({ project }: { project: Project }) {
   return (
-    <section className="section alt" aria-label="Công cụ nội bộ của dự án">
-      <div className="wrap">
-        <div className="sec-head">
-          <div className="kicker">Không gian nội bộ</div>
-          <h2>Tiếp tục làm việc với dự án</h2>
-          <p>Thành viên, lĩnh vực nghiên cứu, tài liệu, phiên bản và sự kiện đã được quản lý trong khu vực đăng nhập.</p>
-        </div>
-        <div className="row gap-6 wrapf">
-          <Link className="btn primary" to="/admin/projects">
-            <FolderKanban aria-hidden="true" /> Mở quản lý dự án
-          </Link>
-          <Link className="btn" to={`/admin/events?projectId=${project.id}`}>
-            <CalendarDays aria-hidden="true" /> Xem sự kiện dự án
-          </Link>
-        </div>
-        <ProjectJoinRequestCard project={project} />
+    <>
+      <div className="sec-head">
+        <div className="kicker">Không gian nội bộ</div>
+        <h2>Tiếp tục làm việc với dự án</h2>
+        <p>Thành viên, lĩnh vực nghiên cứu, tài liệu, phiên bản và sự kiện đã được quản lý trong khu vực đăng nhập.</p>
       </div>
-    </section>
+      <div className="row gap-6 wrapf">
+        <Link className="btn primary" to="/admin/projects">
+          <FolderKanban aria-hidden="true" /> Mở quản lý dự án
+        </Link>
+        <Link className="btn" to={`/admin/events?projectId=${project.id}`}>
+          <CalendarDays aria-hidden="true" /> Xem sự kiện dự án
+        </Link>
+      </div>
+    </>
   )
 }
 
