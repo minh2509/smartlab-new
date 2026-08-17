@@ -18,7 +18,7 @@ export function LoginPage() {
     typeof location.state === 'object' && location.state && 'resetPasswordDone' in location.state
 
   if (isAuthenticated) {
-    return <Navigate to="/profile" replace />
+    return <Navigate to="/" replace />
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -27,9 +27,7 @@ export function LoginPage() {
     setFormError('')
     try {
       await login(email.trim(), password)
-      const next =
-        typeof location.state === 'object' && location.state && 'from' in location.state ? String(location.state.from) : '/profile'
-      navigate(next, { replace: true })
+      navigate('/', { replace: true })
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Đăng nhập không thành công')
     } finally {

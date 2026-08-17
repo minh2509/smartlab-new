@@ -1,5 +1,5 @@
 import { Award, CalendarDays, CheckSquare, Files, FlaskConical, FolderKanban, LogOut, ShieldCheck, UserCircle, UsersRound } from 'lucide-react'
-import { NavLink, Navigate, Outlet } from 'react-router-dom'
+import { Link, NavLink, Navigate, Outlet } from 'react-router-dom'
 import { useAuth } from '../../features/auth/authContext'
 import { Logo } from '../../shared/components/Logo'
 import { accessPolicies, hasAllPermissions } from '../accessPolicy'
@@ -22,10 +22,10 @@ export function AdminLayout() {
       <div className="route-shell">
         <aside className="admin-sidebar">
           <div className="sticky">
-            <div className="admin-brand">
+            <Link className="admin-brand" to="/">
               <Logo />
               <span>{workspace.brand}</span>
-            </div>
+            </Link>
 
             <nav className="admin-nav" aria-label="Điều hướng không gian làm việc">
               <span className="admin-nav-label">Tổng quan</span>
