@@ -9,6 +9,7 @@ import java.time.Instant;
 @Builder
 public class TaskAssigneeResponse {
     private Long userId;
+    private String accountUserId;
     private String name;
     private String email;
     private Instant assignedAt;

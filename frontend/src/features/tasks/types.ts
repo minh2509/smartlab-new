@@ -34,6 +34,7 @@ export const TASK_PRIORITY_BADGES: Record<TaskPriority, string> = {
 
 export type TaskAssignee = {
   userId: number
+  accountUserId: string
   name: string
   email: string
   assignedAt?: string

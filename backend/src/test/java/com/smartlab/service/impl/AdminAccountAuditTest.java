@@ -1,6 +1,7 @@
 package com.smartlab.service.impl;
 
 import com.smartlab.dto.request.PermissionOverrideRequest;
+import com.smartlab.entity.MemberProfileEntity;
 import com.smartlab.entity.PermissionEntity;
 import com.smartlab.entity.RoleEntity;
 import com.smartlab.entity.UserEntity;
@@ -21,6 +22,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import static com.smartlab.service.AuditVocabulary.*;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -49,6 +51,21 @@ class AdminAccountAuditTest {
         service.updateRoles("external-user-id", Set.of("member", "admin"), "admin-external-id");
         verify(audit).log(USER_ROLES_UPDATED, USER, "11",
                 Map.of("roleCodes", List.of("LEADER", "MEMBER")), Map.of("roleCodes", List.of("ADMIN", "MEMBER")));
+    }
+
+    @Test void deactivateAccountMarksInactiveAndRevokesSessions() {
+        MemberProfileEntity profile = MemberProfileEntity.create(user);
+        when(memberProfiles.findByUserId(11L)).thenReturn(Optional.of(profile));
+
+        var response = service.setActive("external-user-id", false);
+
+        assertThat(user.getIsActive()).isFalse();
+        assertThat(profile.getActiveStatus()).isEqualTo("INACTIVE");
+        assertThat(response.getIsActive()).isFalse();
+        verify(users).save(user);
+        verify(memberProfiles).save(profile);
+        verify(sessions).revokeAllByEmail("member@test");
+        verify(users, never()).delete(any(UserEntity.class));
     }
 
     @Test void setOverrideAuditsPreviousAndResultingEffectOnly() {

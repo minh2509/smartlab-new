@@ -21,6 +21,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 
@@ -121,6 +122,25 @@ class AuthControllerRefreshSessionTest {
                 value.startsWith("refresh_token=refresh-login") && value.contains("HttpOnly"));
 
         verify(authenticationManager).authenticate(any());
+    }
+
+    @Test
+    void disabledAuthenticationDoesNotCreateSession() {
+        when(authenticationManager.authenticate(any()))
+                .thenThrow(new DisabledException("disabled"));
+
+        ResponseEntity<?> response = controller.login(
+                AuthRequest.builder()
+                        .email("disabled@example.test")
+                        .password("password")
+                        .build(),
+                httpRequest
+        );
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        verify(userSessionService, never()).createSessionCredential(any(), any(), any());
+        verify(jwtUtil, never()).generateToken(any(), any());
+        verify(userRepository, never()).findByEmail(any());
     }
 
     @Test
