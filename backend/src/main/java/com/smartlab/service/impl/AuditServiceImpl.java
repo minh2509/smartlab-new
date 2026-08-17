@@ -3,6 +3,7 @@ package com.smartlab.service.impl;
 import com.smartlab.entity.AuditLogEntity;
 import com.smartlab.repo.AuditLogRepository;
 import com.smartlab.service.AuditContextProvider;
+import com.smartlab.service.AuditPayloadSanitizer;
 import com.smartlab.service.AuditService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -23,6 +24,8 @@ public class AuditServiceImpl implements AuditService {
         AuditContextProvider.AuditContext context = auditContextProvider.current();
         auditLogRepository.saveAndFlush(AuditLogEntity.create(
                 context.actorUserId(), action, targetType, targetId,
-                beforeJson, afterJson, context.ipAddress(), context.userAgent()));
+                AuditPayloadSanitizer.sanitize(beforeJson),
+                AuditPayloadSanitizer.sanitize(afterJson),
+                context.ipAddress(), context.userAgent()));
     }
 }
