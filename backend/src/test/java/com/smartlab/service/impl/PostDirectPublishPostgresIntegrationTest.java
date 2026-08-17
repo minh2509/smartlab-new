@@ -8,6 +8,7 @@ import com.smartlab.enums.PostVisibility;
 import com.smartlab.repo.PostRepository;
 import com.smartlab.repo.UserRepository;
 import com.smartlab.service.PostService;
+import com.smartlab.service.PermissionService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -50,6 +51,8 @@ class PostDirectPublishPostgresIntegrationTest {
 
     @MockitoBean
     private UserRepository userRepository;
+    @MockitoBean
+    private PermissionService permissionService;
 
     private final Set<Long> postIds = new LinkedHashSet<>();
     private final Set<Long> userIds = new LinkedHashSet<>();
@@ -100,6 +103,7 @@ class PostDirectPublishPostgresIntegrationTest {
         UserFixture owner = insertUser("commit-owner");
         PostFixture post = insertPost(owner.id(), PostStatus.DRAFT, "commit");
         when(userRepository.findByEmail(owner.email())).thenReturn(Optional.of(owner.entity()));
+        grantGlobalDirectPublish(owner);
 
         PostDetailResponse response = postService.directPublishPost(owner.email(), post.id());
 
@@ -117,6 +121,7 @@ class PostDirectPublishPostgresIntegrationTest {
         UserFixture owner = insertUser("repeat-owner");
         PostFixture post = insertPost(owner.id(), PostStatus.DRAFT, "repeat");
         when(userRepository.findByEmail(owner.email())).thenReturn(Optional.of(owner.entity()));
+        grantGlobalDirectPublish(owner);
 
         postService.directPublishPost(owner.email(), post.id());
         PostSnapshot firstPublication = readPost(post.id());
@@ -252,6 +257,10 @@ class PostDirectPublishPostgresIntegrationTest {
         assertThat(id).isNotNull();
         postIds.add(id);
         return new PostFixture(id);
+    }
+
+    private void grantGlobalDirectPublish(UserFixture user) {
+        when(permissionService.getEffectivePermissionCodes(user.entity())).thenReturn(Set.of("posts.publish.direct"));
     }
 
     private PostSnapshot readPost(Long postId) {

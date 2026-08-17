@@ -92,7 +92,8 @@ class PostReviewEntityMappingTest {
     @Test
     void createsValidReviewsForEveryDecision() {
         assertThat(review(ReviewDecision.APPROVED, null).getDecision()).isEqualTo(ReviewDecision.APPROVED);
-        assertThat(review(ReviewDecision.REVISION_REQUIRED, " ").getReason()).isEqualTo(" ");
+        assertThat(review(ReviewDecision.REVISION_REQUIRED, "Please clarify the conclusion").getReason())
+                .isEqualTo("Please clarify the conclusion");
         assertThat(review(ReviewDecision.REJECTED, "Needs changes").getDecision()).isEqualTo(ReviewDecision.REJECTED);
     }
 
@@ -100,6 +101,7 @@ class PostReviewEntityMappingTest {
     void preservesReasonWithoutTrimmingOrRewritingIt() {
         String reason = "  Needs changes  ";
 
+        assertThat(review(ReviewDecision.REVISION_REQUIRED, reason).getReason()).isEqualTo(reason);
         assertThat(review(ReviewDecision.REJECTED, reason).getReason()).isEqualTo(reason);
     }
 
@@ -120,10 +122,13 @@ class PostReviewEntityMappingTest {
     @ParameterizedTest
     @NullSource
     @ValueSource(strings = {"", " \t\n "})
-    void rejectsRejectedDecisionWithoutANonblankReason(String reason) {
+    void rejectsRevisionRequiredAndRejectedDecisionsWithoutANonblankReason(String reason) {
+        assertThatThrownBy(() -> review(ReviewDecision.REVISION_REQUIRED, reason))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Revision-required and rejected review reasons must be non-blank");
         assertThatThrownBy(() -> review(ReviewDecision.REJECTED, reason))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Rejected review reason must be non-blank");
+                .hasMessage("Revision-required and rejected review reasons must be non-blank");
     }
 
     @Test

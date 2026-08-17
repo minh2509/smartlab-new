@@ -54,8 +54,10 @@ export function PostReviewDetailPage() {
 
     if (!token || !post || !decision || submitting) return
 
-    if (decision === 'REJECTED' && !reason.trim()) {
-      setFormError('Vui lòng nêu lý do từ chối.')
+    if (requiresReviewReason(decision) && !reason.trim()) {
+      setFormError(decision === 'REVISION_REQUIRED'
+        ? 'Vui lòng nêu nội dung cần chỉnh sửa.'
+        : 'Vui lòng nêu lý do từ chối.')
       return
     }
 
@@ -78,6 +80,7 @@ export function PostReviewDetailPage() {
   }
 
   const canReview = post?.status === 'PENDING_REVIEW' && !reviewSucceeded
+  const reasonRequired = requiresReviewReason(decision)
 
   return (
     <section className="section post-review-page">
@@ -175,9 +178,11 @@ export function PostReviewDetailPage() {
 
                     <div className="post-review-reason">
                       <label htmlFor="review-reason">
-                        {decision === 'REJECTED' ? 'Lý do từ chối' : 'Lý do hoặc ghi chú'}
+                        {decision === 'REJECTED'
+                          ? 'Lý do từ chối'
+                          : decision === 'REVISION_REQUIRED' ? 'Nội dung cần chỉnh sửa' : 'Lý do hoặc ghi chú'}
                         <span className="post-review-reason-required">
-                          {decision === 'REJECTED' ? 'Bắt buộc khi từ chối' : 'Không bắt buộc'}
+                          {reasonRequired ? 'Bắt buộc cho quyết định này' : 'Không bắt buộc'}
                         </span>
                       </label>
                       <textarea
@@ -187,9 +192,13 @@ export function PostReviewDetailPage() {
                         onChange={(event) => setReason(event.target.value)}
                         maxLength={1000}
                         rows={4}
-                        aria-required={decision === 'REJECTED'}
+                        aria-required={reasonRequired}
                         aria-describedby="review-reason-help review-reason-count"
-                        placeholder={decision === 'REJECTED' ? 'Nêu lý do từ chối bài viết.' : 'Thêm ghi chú nếu cần.'}
+                        placeholder={decision === 'REJECTED'
+                          ? 'Nêu lý do từ chối bài viết.'
+                          : decision === 'REVISION_REQUIRED'
+                            ? 'Nêu các nội dung tác giả cần chỉnh sửa.'
+                            : 'Thêm ghi chú nếu cần.'}
                       />
                       <div className="post-review-reason-meta">
                         <span id="review-reason-help">
@@ -221,8 +230,12 @@ export function PostReviewDetailPage() {
 
 function reasonHelp(decision: ReviewDecision | '') {
   if (decision === 'REJECTED') return 'Vui lòng nêu lý do trước khi gửi.'
-  if (decision === 'REVISION_REQUIRED') return 'Gợi ý: nêu các điểm cần cập nhật để tác giả dễ chỉnh sửa.'
+  if (decision === 'REVISION_REQUIRED') return 'Vui lòng nêu các điểm cần cập nhật trước khi gửi.'
   return 'Có thể thêm ghi chú nếu cần.'
+}
+
+function requiresReviewReason(decision: ReviewDecision | '') {
+  return decision === 'REVISION_REQUIRED' || decision === 'REJECTED'
 }
 
 function formatDate(value: string) {

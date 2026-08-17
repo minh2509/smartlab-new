@@ -225,9 +225,10 @@ class PostWorkflowDatabaseRbacSecurityIntegrationTest {
 
     @Test
     @Order(5)
-    void leaderJwtAllowsOnlySubmitWorkflowCommand() throws Exception {
+    void leaderJwtAllowsSubmitAndProjectManageDirectPublishEntryPointsOnly() throws Exception {
         FixtureActor leader = actor("LEADER");
         stubSubmit(leader.email());
+        stubDirectPublish(leader.email());
 
         perform(leader, "/posts/1313/submit", null)
                 .andExpect(status().isOk())
@@ -237,12 +238,13 @@ class PostWorkflowDatabaseRbacSecurityIntegrationTest {
         perform(leader, "/posts/1313/publish", null)
                 .andExpect(status().isForbidden());
         perform(leader, "/posts/1313/direct-publish", null)
-                .andExpect(status().isForbidden());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PUBLISHED"));
 
         verify(postService).submitForReview(leader.email(), POST_ID);
         verify(postService, never()).reviewPost(any(), any(), any());
         verify(postService, never()).publishPost(any(), any());
-        verify(postService, never()).directPublishPost(any(), any());
+        verify(postService).directPublishPost(leader.email(), POST_ID);
     }
 
     @Test

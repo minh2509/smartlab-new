@@ -2,15 +2,20 @@ package com.smartlab.service.impl;
 
 import com.smartlab.dto.response.PostDetailResponse;
 import com.smartlab.entity.PostEntity;
+import com.smartlab.entity.ProjectMemberEntity;
 import com.smartlab.entity.UserEntity;
 import com.smartlab.enums.PostStatus;
 import com.smartlab.enums.PostVisibility;
+import com.smartlab.enums.ProjectMemberStatus;
+import com.smartlab.enums.ProjectRole;
 import com.smartlab.enums.ReviewDecision;
 import com.smartlab.repo.ContentCategoryRepository;
 import com.smartlab.repo.PostRepository;
 import com.smartlab.repo.PostReviewRepository;
 import com.smartlab.repo.UserRepository;
 import com.smartlab.service.NotificationService;
+import com.smartlab.service.NotificationRelated;
+import com.smartlab.service.PermissionService;
 import com.smartlab.service.PostService;
 import com.smartlab.service.PostSlugGenerator;
 import com.smartlab.service.PostContentRenderer;
@@ -30,15 +35,19 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -68,6 +77,7 @@ class PostDirectPublishServiceImplTest {
     @Mock private com.smartlab.service.AuditService auditService;
     @Mock private com.smartlab.repo.ProjectRepository projectRepository;
     @Mock private com.smartlab.repo.ProjectMemberRepository projectMemberRepository;
+    @Mock private PermissionService permissionService;
 
     private PostService postService;
 
@@ -86,6 +96,7 @@ class PostDirectPublishServiceImplTest {
                 projectRepository,
                 projectMemberRepository
         );
+        setServiceField(postService, "permissionService", permissionService);
     }
 
     @AfterEach
@@ -97,9 +108,9 @@ class PostDirectPublishServiceImplTest {
                 postReviewRepository,
                 contentCategoryRepository,
                 postSlugGenerator,
-                postCreateAttemptService,
-                notificationService
+                postCreateAttemptService
         );
+        verifyNoMoreInteractions(notificationService);
     }
 
     @Test
@@ -110,6 +121,7 @@ class PostDirectPublishServiceImplTest {
         setField(post, "coverFileId", 12L);
         PostSnapshot before = snapshot(post);
         activeOwner();
+        globalDirectPublishPermission();
         when(postRepository.findActiveByIdForUpdate(POST_ID)).thenReturn(Optional.of(post));
         Instant beforePublish = Instant.now();
 
@@ -125,6 +137,83 @@ class PostDirectPublishServiceImplTest {
         assertThat(response.getPublishedAt()).isEqualTo(post.getPublishedAt());
         assertThat(response.getUpdatedAt()).isEqualTo(post.getUpdatedAt());
         assertThat(snapshot(post)).isEqualTo(before.withPublication(post.getPublishedAt()));
+        verifyNoInteractions(notificationService);
+    }
+
+    @Test
+    void activeLeaderWithProjectManageDirectlyPublishesOwnProjectDraftAndNotifiesOtherActiveMembers() throws Exception {
+        PostEntity post = projectDraft(11L);
+        activeOwner();
+        when(permissionService.getEffectivePermissionCodes(any())).thenReturn(Set.of("PROJECT_MANAGE"));
+        when(postRepository.findActiveByIdForUpdate(POST_ID)).thenReturn(Optional.of(post));
+        when(projectMemberRepository.existsByProject_IdAndUser_IdAndProjectRoleAndStatus(
+                11L, OWNER_ID, ProjectRole.LEADER, ProjectMemberStatus.ACTIVE)).thenReturn(true);
+        ProjectMemberEntity actor = org.mockito.Mockito.mock(ProjectMemberEntity.class);
+        when(actor.getUser()).thenReturn(user(OWNER_ID, true));
+        ProjectMemberEntity recipient = org.mockito.Mockito.mock(ProjectMemberEntity.class);
+        when(recipient.getUser()).thenReturn(user(52L, true));
+        when(projectMemberRepository.findMembersForDisplay(11L, ProjectMemberStatus.ACTIVE))
+                .thenReturn(List.of(actor, recipient));
+
+        PostDetailResponse response = postService.directPublishPost(OWNER_EMAIL, POST_ID);
+
+        assertThat(response.getStatus()).isEqualTo(PostStatus.PUBLISHED);
+        verify(notificationService).notify(
+                eq(52L),
+                eq("PROJECT_ANNOUNCEMENT_PUBLISHED"),
+                any(String.class),
+                eq(new NotificationRelated(OWNER_ID, "POST", POST_ID, "/posts/immutable-slug")),
+                any(Instant.class)
+        );
+    }
+
+    @Test
+    void activeLeaderOfAnotherProjectCannotDirectlyPublish() throws Exception {
+        PostEntity post = projectDraft(11L);
+        activeOwner();
+        when(permissionService.getEffectivePermissionCodes(any())).thenReturn(Set.of("PROJECT_MANAGE"));
+        when(projectMemberRepository.existsByProject_IdAndUser_IdAndProjectRoleAndStatus(
+                11L, OWNER_ID, ProjectRole.LEADER, ProjectMemberStatus.ACTIVE)).thenReturn(false);
+
+        assertEligibilityFailureDoesNotMutate(post, HttpStatus.FORBIDDEN);
+    }
+
+    @Test
+    void activeProjectMemberCannotDirectlyPublish() throws Exception {
+        PostEntity post = projectDraft(11L);
+        activeOwner();
+        when(permissionService.getEffectivePermissionCodes(any())).thenReturn(Set.of("PROJECT_MANAGE"));
+        when(projectMemberRepository.existsByProject_IdAndUser_IdAndProjectRoleAndStatus(
+                11L, OWNER_ID, ProjectRole.LEADER, ProjectMemberStatus.ACTIVE)).thenReturn(false);
+
+        assertEligibilityFailureDoesNotMutate(post, HttpStatus.FORBIDDEN);
+        verify(projectMemberRepository).existsByProject_IdAndUser_IdAndProjectRoleAndStatus(
+                11L, OWNER_ID, ProjectRole.LEADER, ProjectMemberStatus.ACTIVE);
+    }
+
+    @Test
+    void projectManageDoesNotDirectlyPublishLabOrPublicPosts() throws Exception {
+        for (PostVisibility visibility : List.of(PostVisibility.LAB, PostVisibility.PUBLIC)) {
+            PostEntity post = draft(OWNER_ID);
+            setField(post, "visibility", visibility);
+            activeOwner();
+            when(permissionService.getEffectivePermissionCodes(any())).thenReturn(Set.of("PROJECT_MANAGE"));
+            when(postRepository.findActiveByIdForUpdate(POST_ID)).thenReturn(Optional.of(post));
+
+            assertStatus(HttpStatus.FORBIDDEN, () -> postService.directPublishPost(OWNER_EMAIL, POST_ID));
+            assertThat(post.getStatus()).isEqualTo(PostStatus.DRAFT);
+        }
+    }
+
+    @Test
+    void activeLeaderWithoutProjectManageCannotDirectlyPublish() throws Exception {
+        PostEntity post = projectDraft(11L);
+        activeOwner();
+        when(permissionService.getEffectivePermissionCodes(any())).thenReturn(Set.of());
+
+        assertEligibilityFailureDoesNotMutate(post, HttpStatus.FORBIDDEN);
+        verify(projectMemberRepository, never()).existsByProject_IdAndUser_IdAndProjectRoleAndStatus(
+                any(), any(), any(), any());
     }
 
     @Test
@@ -220,10 +309,15 @@ class PostDirectPublishServiceImplTest {
 
         verify(postRepository).findActiveByIdForUpdate(POST_ID);
         assertThat(snapshot(post)).isEqualTo(before);
+        verifyNoInteractions(notificationService);
     }
 
     private void activeOwner() {
         when(userRepository.findByEmail(OWNER_EMAIL)).thenReturn(Optional.of(user(OWNER_ID, true)));
+    }
+
+    private void globalDirectPublishPermission() {
+        when(permissionService.getEffectivePermissionCodes(any())).thenReturn(Set.of("posts.publish.direct"));
     }
 
     private static UserEntity user(Long id, boolean active) {
@@ -247,6 +341,23 @@ class PostDirectPublishServiceImplTest {
             throw new AssertionError(exception);
         }
         return post;
+    }
+
+    private static PostEntity projectDraft(Long projectId) throws ReflectiveOperationException {
+        PostEntity post = draft(OWNER_ID);
+        setField(post, "visibility", PostVisibility.PROJECT);
+        setField(post, "projectId", projectId);
+        return post;
+    }
+
+    private static void setServiceField(Object target, String fieldName, Object value) {
+        try {
+            Field field = PostServiceImpl.class.getDeclaredField(fieldName);
+            field.setAccessible(true);
+            field.set(target, value);
+        } catch (ReflectiveOperationException exception) {
+            throw new AssertionError(exception);
+        }
     }
 
     private static PostEntity postInState(PostStatus status, Long authorUserId) {

@@ -74,8 +74,9 @@ public class PostReviewEntity {
         if (reason != null && reason.length() > 1000) {
             throw new IllegalArgumentException("Review reason must be at most 1000 characters");
         }
-        if (decision == ReviewDecision.REJECTED && (reason == null || reason.trim().isEmpty())) {
-            throw new IllegalArgumentException("Rejected review reason must be non-blank");
+        if ((decision == ReviewDecision.REVISION_REQUIRED || decision == ReviewDecision.REJECTED)
+                && (reason == null || reason.trim().isEmpty())) {
+            throw new IllegalArgumentException("Revision-required and rejected review reasons must be non-blank");
         }
     }
 }

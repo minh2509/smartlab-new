@@ -3,6 +3,7 @@ package com.smartlab.service.impl;
 import com.smartlab.entity.AuditLogEntity;
 import com.smartlab.repo.AuditLogRepository;
 import com.smartlab.service.AuditContextProvider;
+import com.smartlab.service.AuditPayloadSanitizer;
 import com.smartlab.service.AuditService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -56,5 +57,27 @@ class AuditServiceImplTest {
         Transactional tx = AuditServiceImpl.class.getMethod("log", String.class, String.class, String.class,
                 Map.class, Map.class).getAnnotation(Transactional.class);
         assertThat(tx.propagation()).isEqualTo(Propagation.REQUIRED);
+    }
+
+    @Test
+    void logSendsSanitizedSnapshotsToEntityAndRepositoryWithoutMutatingCallerPayload() {
+        when(contextProvider.current()).thenReturn(new AuditContextProvider.AuditContext(4L, null, null));
+        AuditService service = new AuditServiceImpl(repository, contextProvider);
+        Map<String, Object> nested = new LinkedHashMap<>(Map.of("refreshToken", "secret", "status", "OLD"));
+        Map<String, Object> before = new LinkedHashMap<>(Map.of("password", "secret", "nested", nested));
+        Map<String, Object> after = new LinkedHashMap<>(Map.of("attachment", new byte[]{1, 2}));
+
+        service.log("ROLE_UPDATED", "ROLE", "9", before, after);
+
+        ArgumentCaptor<AuditLogEntity> captor = ArgumentCaptor.forClass(AuditLogEntity.class);
+        verify(repository).saveAndFlush(captor.capture());
+        assertThat(captor.getValue().getBeforeJson()).containsEntry("password", AuditPayloadSanitizer.REDACTED);
+        assertThat((Map<String, Object>) captor.getValue().getBeforeJson().get("nested"))
+                .containsEntry("refreshToken", AuditPayloadSanitizer.REDACTED)
+                .containsEntry("status", "OLD");
+        assertThat(captor.getValue().getAfterJson()).containsEntry("attachment", AuditPayloadSanitizer.BINARY_REDACTED);
+        assertThat(before).containsEntry("password", "secret");
+        assertThat(nested).containsEntry("refreshToken", "secret");
+        assertThat(after.get("attachment")).isInstanceOf(byte[].class);
     }
 }
