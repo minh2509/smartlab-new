@@ -36,6 +36,16 @@ import java.util.List;
 public class EventController {
     private final EventService eventService;
 
+    @GetMapping("/public")
+    @PreAuthorize("permitAll()")
+    @Operation(summary = "List public events")
+    public List<EventResponse> listPublic(
+            @RequestParam(required = false) EventStatus status,
+            @RequestParam(required = false) Boolean upcoming
+    ) {
+        return eventService.listPublic(status, upcoming);
+    }
+
     @GetMapping
     @Operation(summary = "List events visible to the authenticated account")
     public List<EventResponse> list(

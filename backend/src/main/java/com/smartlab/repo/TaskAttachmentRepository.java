@@ -11,6 +11,8 @@ import java.util.List;
 @Repository
 public interface TaskAttachmentRepository extends JpaRepository<TaskAttachmentEntity, Long> {
 
+    boolean existsByFile_IdAndTask_DeletedAtIsNull(Long fileId);
+
     @Query("""
             select ta from TaskAttachmentEntity ta
             join fetch ta.file

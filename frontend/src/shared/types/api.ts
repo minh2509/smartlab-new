@@ -81,6 +81,8 @@ export type MemberProfile = {
   featuredOrder?: number
   avatar?: FileResponse
   researchFields: ResearchField[]
+  roles?: string[]
+  permissions?: string[]
 }
 
 export type ApiErrorPayload = {

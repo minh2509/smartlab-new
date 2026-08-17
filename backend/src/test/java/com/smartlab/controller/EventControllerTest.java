@@ -94,6 +94,20 @@ class EventControllerTest {
     }
 
     @Test
+    void listsPublicEventsWithoutViewerContext() throws Exception {
+        when(eventService.listPublic(EventStatus.SCHEDULED, true))
+                .thenReturn(List.of(response()));
+
+        mockMvc.perform(get("/events/public")
+                        .queryParam("status", "SCHEDULED")
+                        .queryParam("upcoming", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(41));
+
+        verify(eventService).listPublic(EventStatus.SCHEDULED, true);
+    }
+
+    @Test
     void getsVisibleDetailAndPreservesHiddenNotFoundStatus() throws Exception {
         when(eventService.get(41L, EMAIL)).thenReturn(response());
         when(eventService.get(42L, EMAIL))

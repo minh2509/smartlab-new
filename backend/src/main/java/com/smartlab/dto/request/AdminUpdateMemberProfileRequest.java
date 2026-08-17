@@ -2,9 +2,11 @@ package com.smartlab.dto.request;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.PastOrPresent;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
+import java.time.LocalDate;
 import java.util.Set;
 
 @Data
@@ -30,4 +32,7 @@ public class AdminUpdateMemberProfileRequest {
     private Boolean isFeatured;
     private Integer featuredOrder;
     private Boolean clearFeaturedOrder;
+
+    @PastOrPresent
+    private LocalDate joinedLabAt;
 }

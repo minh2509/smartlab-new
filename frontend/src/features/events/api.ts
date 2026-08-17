@@ -5,6 +5,10 @@ export function listEvents(token: string, filters: EventListFilters = {}, signal
   return apiClient<LabEvent[]>(`/events${toQuery(filters)}`, { token, signal })
 }
 
+export function listPublicEvents(filters: Omit<EventListFilters, 'projectId'> = {}, signal?: AbortSignal) {
+  return apiClient<LabEvent[]>(`/events/public${toQuery(filters)}`, { signal })
+}
+
 export function getEvent(token: string, eventId: number) {
   return apiClient<LabEvent>(`/events/${eventId}`, { token })
 }

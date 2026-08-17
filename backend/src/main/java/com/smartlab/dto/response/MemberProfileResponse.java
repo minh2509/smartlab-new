@@ -5,6 +5,7 @@ import lombok.Data;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 
 @Data
 @Builder
@@ -21,4 +22,6 @@ public class MemberProfileResponse {
     private Integer featuredOrder;
     private FileResponse avatar;
     private List<ResearchFieldResponse> researchFields;
+    private Set<String> roles;
+    private Set<String> permissions;
 }

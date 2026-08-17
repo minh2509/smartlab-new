@@ -4,6 +4,8 @@ import com.smartlab.dto.response.FileResponse;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.List;
+
 public interface FileService {
     FileResponse upload(MultipartFile file, String accessScope, String description, String email);
 
@@ -14,6 +16,8 @@ public interface FileService {
             String email,
             Long projectId
     );
+
+    List<FileResponse> listOwn(String email);
 
     FileResponse describe(Long id, Authentication authentication);
 

@@ -59,6 +59,21 @@ public class EventServiceImpl implements EventService {
 
     @Override
     @Transactional(readOnly = true)
+    public List<EventResponse> listPublic(EventStatus status, Boolean upcoming) {
+        List<EventEntity> events = eventRepository.findPublicEvents(
+                EventVisibility.PUBLIC,
+                status,
+                upcoming,
+                Instant.now()
+        );
+        Map<Long, EventCreatorResponse> creators = findCreators(events);
+        return events.stream()
+                .map(event -> toResponse(event, creators.get(event.getCreatedByUserId())))
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<EventResponse> list(
             String authenticatedEmail,
             Long projectId,

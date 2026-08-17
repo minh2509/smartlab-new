@@ -1,22 +1,24 @@
 import { BadgeCheck, CalendarDays, Clock3, FileText, FlaskConical, GraduationCap, MapPin, Search } from 'lucide-react'
-import type { CSSProperties } from 'react'
-import { Fragment, useEffect, useState } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getMembers } from '../../profile/api'
-import type { MemberProfile } from '../../../shared/types/api'
-import { aboutQuickFacts, coreValues, documents, events, fields, gallery, members, operatingSteps, posts, projects, stats } from '../publicData'
+import type { MemberProfile, ResearchField } from '../../../shared/types/api'
+import { listPublicEvents } from '../../events/api'
+import { EVENT_MODE_LABELS, EVENT_STATUS_LABELS, type LabEvent } from '../../events/types'
+import { listPosts } from '../../posts/api'
+import type { PostFeedItem } from '../../posts/types'
+import { getMembers, getResearchFields } from '../../profile/api'
+import { listProjects } from '../../projects/api'
+import type { Project } from '../../projects/types'
+import { aboutQuickFacts, coreValues, documents, gallery, operatingSteps } from '../publicData'
+import { PublicMemberCard, PublicPostCard, PublicProjectCard, ResearchFieldCard } from '../components/PublicDataCards'
 import { PublicPageHead } from '../components/PublicPageHead'
 
 type StaticPublicPageProps = {
   title: string
   description: string
-  kind: 'about' | 'fields' | 'projects' | 'members' | 'blog' | 'documents' | 'events' | 'gallery' | 'contact' | 'search'
+  kind: 'about' | 'fields' | 'members' | 'documents' | 'events' | 'gallery' | 'contact' | 'search'
 }
-
-type Field = (typeof fields)[number]
-type Project = (typeof projects)[number]
-type Member = (typeof members)[number]
-type Post = (typeof posts)[number]
 
 export function StaticPublicPage({ title, description, kind }: StaticPublicPageProps) {
   return (
@@ -24,9 +26,7 @@ export function StaticPublicPage({ title, description, kind }: StaticPublicPageP
       <PublicPageHead title={title} description={description} />
       {kind === 'about' ? <AboutContent /> : null}
       {kind === 'fields' ? <FieldsContent /> : null}
-      {kind === 'projects' ? <ProjectsContent /> : null}
       {kind === 'members' ? <ApiMembersContent /> : null}
-      {kind === 'blog' ? <BlogContent /> : null}
       {kind === 'documents' ? <DocumentsContent /> : null}
       {kind === 'events' ? <EventsContent /> : null}
       {kind === 'gallery' ? <GalleryContent /> : null}
@@ -36,99 +36,26 @@ export function StaticPublicPage({ title, description, kind }: StaticPublicPageP
   )
 }
 
-export function FieldCard({ field }: { field: Field }) {
-  return (
-    <Link className="fieldcard" to="/linh-vuc" style={{ '--c': field.color } as CSSProperties}>
-      <span className="fieldcard-media">
-        <img src={field.image} alt={field.imageAlt} loading="lazy" />
-      </span>
-      <h3>{field.name}</h3>
-      <p>{field.description}</p>
-      <div className="tags">
-        {field.tags.map((tag) => (
-          <span className="chip" key={tag}>
-            {tag}
-          </span>
-        ))}
-      </div>
-      <span className="more">Xem lĩnh vực</span>
-    </Link>
-  )
-}
-
-export function ProjectCard({ project }: { project: Project }) {
-  return (
-    <Link className="card hover projcard" to="/du-an">
-      <div className={`cover ph ${project.cover}`}>
-        <span className={`lbl badge ${project.badge}`}>
-          <span className="dot" />
-          {project.status}
-        </span>
-      </div>
-      <div className="body">
-        <div className="row gap-6 wrapf">
-          <span className="chip accent">{project.field}</span>
-          <span className="chip">{project.type}</span>
-        </div>
-        <h3>{project.title}</h3>
-        <p>{project.description}</p>
-        <div className="foot">
-          <span className="ava-stack">
-            {project.members.map((member) => (
-              <span className="ava xs" style={{ background: member.startsWith('+') ? 'var(--text-3)' : 'var(--s1)' }} key={member}>
-                {member}
-              </span>
-            ))}
-          </span>
-          <span className="pct">{project.progress}</span>
-        </div>
-      </div>
-    </Link>
-  )
-}
-
-export function MemberCard({ member }: { member: Member }) {
-  return (
-    <Link className="card hover person" to="/thanh-vien">
-      <span className="ava lg" style={{ background: member.color }}>
-        {member.initials}
-      </span>
-      <h3>{member.name}</h3>
-      <div className="role">{member.role}</div>
-      <div className="exp">{member.exp}</div>
-      <div className="tags">
-        <span className="chip accent">{member.field}</span>
-      </div>
-    </Link>
-  )
-}
-
-export function PostCard({ post }: { post: Post }) {
-  return (
-    <Link className="card hover postcard" to="/bai-viet">
-      <div className={`cover ph ${post.cover}`} />
-      <div className="body">
-        <div className="pmeta">
-          <span className="chip accent">{post.category}</span>
-          <span>{post.date}</span>
-          <span>·</span>
-          <span>{post.read}</span>
-        </div>
-        <h3>{post.title}</h3>
-        <p>{post.description}</p>
-        <div className="by">
-          <span className="ava xs" style={{ background: 'var(--s1)' }}>
-            {post.initials}
-          </span>
-          {post.author}
-        </div>
-      </div>
-    </Link>
-  )
-}
-
 function AboutContent() {
   const valueIcons = [FlaskConical, GraduationCap, BadgeCheck]
+  const [counts, setCounts] = useState({ members: null as number | null, projects: null as number | null, fields: null as number | null, events: null as number | null })
+
+  useEffect(() => {
+    let active = true
+    void Promise.all([getMembers(), listProjects(null), getResearchFields(), listPublicEvents({ upcoming: true })])
+      .then(([members, projects, fields, events]) => {
+        if (active) setCounts({ members: members.length, projects: projects.length, fields: fields.length, events: events.length })
+      })
+      .catch(() => undefined)
+    return () => { active = false }
+  }, [])
+
+  const liveStats = [
+    { value: countLabel(counts.members), label: 'hồ sơ thành viên công khai' },
+    { value: countLabel(counts.projects), label: 'dự án có thể xem' },
+    { value: countLabel(counts.events), label: 'sự kiện công khai sắp tới' },
+    { value: countLabel(counts.fields), label: 'lĩnh vực nghiên cứu' },
+  ]
 
   return (
     <>
@@ -165,7 +92,11 @@ function AboutContent() {
                   {aboutQuickFacts.map((fact) => (
                     <Fragment key={fact.label}>
                       <dt>{fact.label}</dt>
-                      <dd>{fact.value}</dd>
+                      <dd>{fact.label === 'Thành viên'
+                        ? `${countLabel(counts.members)} hồ sơ công khai`
+                        : fact.label === 'Lĩnh vực'
+                          ? `${countLabel(counts.fields)} hướng nghiên cứu`
+                          : fact.value}</dd>
                     </Fragment>
                   ))}
                 </dl>
@@ -181,7 +112,7 @@ function AboutContent() {
       <section className="section alt tight">
         <div className="wrap">
           <div className="grid c4">
-            {stats.map((stat) => (
+            {liveStats.map((stat) => (
               <div className="card pad center stat-card" key={stat.label}>
                 <b>{stat.value}</b>
                 <span className="muted small">{stat.label}</span>
@@ -265,151 +196,94 @@ function AboutContent() {
 }
 
 function FieldsContent() {
-  return (
-    <section className="section">
-      <div className="wrap">
-        <div className="grid c3">
-          {fields.map((field) => (
-            <FieldCard key={field.id} field={field} />
-          ))}
-        </div>
-      </div>
-    </section>
-  )
-}
+  const [fields, setFields] = useState<ResearchField[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
 
-function ProjectsContent() {
-  return (
-    <section className="section">
-      <div className="wrap">
-        <Toolbar placeholder="Tìm dự án theo tên, lĩnh vực hoặc công nghệ..." />
-        <div className="grid c3">
-          {projects.map((project) => (
-            <ProjectCard key={project.title} project={project} />
-          ))}
-        </div>
-      </div>
-    </section>
-  )
-}
+  useEffect(() => {
+    let active = true
+    setLoading(true)
+    setError(null)
+    void getResearchFields()
+      .then((result) => { if (active) setFields(result) })
+      .catch((reason: unknown) => {
+        if (active) setError(messageOf(reason, 'Không tải được danh sách lĩnh vực nghiên cứu.'))
+      })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [reloadKey])
 
-export function MembersContent() {
   return (
     <section className="section">
       <div className="wrap">
-        <Toolbar placeholder="Tìm thành viên theo tên, role hoặc lĩnh vực..." />
-        <div className="grid c4">
-          {members.map((member) => (
-            <MemberCard key={member.name} member={member} />
-          ))}
-        </div>
+        {loading ? <div className="public-empty empty tight">Đang tải lĩnh vực nghiên cứu...</div> : null}
+        {error ? <LoadError message={error} onRetry={() => setReloadKey((value) => value + 1)} /> : null}
+        {!loading && !error && fields.length === 0 ? <div className="public-empty empty tight">Chưa có lĩnh vực nghiên cứu công khai.</div> : null}
+        {!loading && !error && fields.length > 0 ? <div className="grid c3">{fields.map((field) => <ResearchFieldCard key={field.id} field={field} />)}</div> : null}
       </div>
     </section>
   )
 }
 
 function ApiMembersContent() {
-  const [apiMembers, setApiMembers] = useState<MemberProfile[] | null>(null)
+  const [apiMembers, setApiMembers] = useState<MemberProfile[]>([])
+  const [publicProjects, setPublicProjects] = useState<Project[]>([])
   const [query, setQuery] = useState('')
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
-    getMembers()
-      .then(setApiMembers)
-      .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Không tải được danh sách thành viên.'))
-  }, [])
+    let active = true
+    setLoading(true)
+    setError(null)
+    void Promise.all([getMembers(), listProjects(null).catch(() => [] as Project[])])
+      .then(([memberResult, projectResult]) => {
+        if (!active) return
+        setApiMembers(memberResult)
+        setPublicProjects(projectResult)
+      })
+      .catch((reason: unknown) => {
+        if (active) setError(messageOf(reason, 'Không tải được danh sách thành viên.'))
+      })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [reloadKey])
 
-  const visibleMembers = apiMembers?.filter((member) => {
-    const normalized = query.trim().toLowerCase()
-    if (!normalized) return true
-    return member.name.toLowerCase().includes(normalized)
-      || (member.bio ?? '').toLowerCase().includes(normalized)
-      || member.researchFields.some((field) => field.name.toLowerCase().includes(normalized))
-  })
-
-  if (apiMembers === null && !error) {
-    return <section className="section"><div className="wrap"><div className="public-empty empty tight">Đang tải danh sách thành viên...</div></div></section>
-  }
-
-  if (apiMembers && apiMembers.length > 0) {
-    return (
-      <section className="section">
-        <div className="wrap">
-          <div className="toolbar">
-            <div className="searchbar" style={{ flex: 1, minWidth: 220 }}>
-              <Search aria-hidden="true" />
-              <input className="input" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm thành viên theo tên hoặc lĩnh vực..." />
-            </div>
-          </div>
-          {visibleMembers?.length ? (
-            <div className="grid c4">
-              {visibleMembers.map((member) => <ApiMemberCard key={member.userId} member={member} />)}
-            </div>
-          ) : <div className="public-empty empty tight">Không tìm thấy thành viên phù hợp.</div>}
-        </div>
-      </section>
-    )
-  }
+  const visibleMembers = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase('vi')
+    return [...apiMembers]
+      .sort((left, right) => {
+        const byFeatured = Number(right.isFeatured) - Number(left.isFeatured)
+        if (byFeatured !== 0) return byFeatured
+        return (left.featuredOrder ?? Number.MAX_SAFE_INTEGER) - (right.featuredOrder ?? Number.MAX_SAFE_INTEGER)
+      })
+      .filter((member) => !normalized
+        || member.name.toLocaleLowerCase('vi').includes(normalized)
+        || (member.bio ?? '').toLocaleLowerCase('vi').includes(normalized)
+        || member.researchFields.some((field) => field.name.toLocaleLowerCase('vi').includes(normalized)))
+  }, [apiMembers, query])
+  const publicLeaderIds = useMemo(
+    () => new Set(publicProjects.flatMap((project) => project.leaders.map((leader) => leader.userId))),
+    [publicProjects],
+  )
 
   return (
     <section className="section">
       <div className="wrap">
-        {error && <div className="alert error">{error}</div>}
-        {!error && <div className="public-empty empty tight">Chưa có thành viên công khai.</div>}
+        <div className="toolbar">
+          <div className="searchbar" style={{ flex: 1, minWidth: 220 }}>
+            <Search aria-hidden="true" />
+            <input className="input" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm thành viên theo tên hoặc lĩnh vực..." aria-label="Tìm thành viên" />
+          </div>
+        </div>
+        {loading ? <div className="public-empty empty tight">Đang tải danh sách thành viên...</div> : null}
+        {error ? <LoadError message={error} onRetry={() => setReloadKey((value) => value + 1)} /> : null}
+        {!loading && !error && visibleMembers.length > 0 ? <div className="grid c4">{visibleMembers.map((member) => <PublicMemberCard key={member.userId} member={member} isProjectLeader={publicLeaderIds.has(member.userId)} />)}</div> : null}
+        {!loading && !error && visibleMembers.length === 0 ? <div className="public-empty empty tight">{apiMembers.length === 0 ? 'Chưa có thành viên công khai.' : 'Không tìm thấy thành viên phù hợp.'}</div> : null}
       </div>
     </section>
-  )
-}
-
-function ApiMemberCard({ member }: { member: MemberProfile }) {
-  const initials = member.name.split(' ').filter(Boolean).slice(-2).map((part) => part[0]).join('').toUpperCase()
-  const avatarUrl = member.avatar ? `${import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1.0'}/files/${member.avatar.id}` : null
-  return (
-    <article className="card hover person">
-      {avatarUrl ? <img className="public-member-avatar" src={avatarUrl} alt={member.name} /> : <span className="ava lg" style={{ background: 'var(--s1)' }}>{initials}</span>}
-      <h3>{member.name}</h3>
-      <div className="role">{member.activeStatus}</div>
-      <div className="exp">{member.bio || 'Thành viên Smart Lab'}</div>
-      <div className="tags">
-        {member.researchFields.map((field) => <span className="chip accent" key={field.id}>{field.name}</span>)}
-      </div>
-    </article>
-  )
-}
-
-function BlogContent() {
-  return (
-    <>
-      <section className="section">
-        <div className="wrap">
-          <div className="sec-head">
-            <div className="kicker">Đáng chú ý</div>
-            <h2>Bài viết nổi bật</h2>
-            <p>Những nội dung được ban biên tập chọn lọc trong tháng này.</p>
-          </div>
-          <div className="grid c3">
-            {posts.slice(0, 3).map((post) => (
-              <PostCard key={post.title} post={post} />
-            ))}
-          </div>
-        </div>
-      </section>
-      <section className="section alt">
-        <div className="wrap">
-          <div className="sec-head">
-            <div className="kicker">Tất cả bài viết</div>
-            <h2>Mới nhất</h2>
-            <p>Lọc theo loại nội dung hoặc tìm kiếm nhanh theo từ khoá.</p>
-          </div>
-          <Toolbar placeholder="Tìm bài viết theo tiêu đề, tác giả..." />
-          <div className="grid c3">
-            {posts.map((post) => (
-              <PostCard key={post.title} post={post} />
-            ))}
-          </div>
-        </div>
-      </section>
-    </>
   )
 }
 
@@ -439,36 +313,53 @@ function DocumentsContent() {
 }
 
 function EventsContent() {
+  const [events, setEvents] = useState<LabEvent[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    setLoading(true)
+    setError(null)
+    void listPublicEvents({ upcoming: true }, controller.signal)
+      .then(setEvents)
+      .catch((reason: unknown) => {
+        if (!controller.signal.aborted) setError(messageOf(reason, 'Không tải được danh sách sự kiện.'))
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false)
+      })
+    return () => controller.abort()
+  }, [reloadKey])
+
   return (
     <section className="section">
       <div className="wrap">
-        <div className="event-list">
-          {events.map((event) => (
-            <Link className="eventrow" to="/su-kien" key={event.title}>
-              <div className="datebox">
-                <b>{event.day}</b>
-                <span>{event.month}</span>
-              </div>
-              <div className="info">
-                <h3>{event.title}</h3>
-                <div className="emeta">
-                  <span>
-                    <CalendarDays />
-                    2026
-                  </span>
-                  <span>
-                    <MapPin />
-                    {event.meta}
-                  </span>
-                  <span>
-                    <Clock3 />
-                    Sắp diễn ra
-                  </span>
-                </div>
-              </div>
-            </Link>
-          ))}
-        </div>
+        {loading ? <div className="public-empty empty tight">Đang tải sự kiện...</div> : null}
+        {error ? <LoadError message={error} onRetry={() => setReloadKey((value) => value + 1)} /> : null}
+        {!loading && !error && events.length === 0 ? <div className="public-empty empty tight">Chưa có sự kiện công khai sắp diễn ra.</div> : null}
+        {!loading && !error && events.length > 0 ? (
+          <div className="event-list">
+            {events.map((event) => {
+              const date = eventDate(event.startAt)
+              return (
+                <article className="eventrow" key={event.id}>
+                  <div className="datebox"><b>{date.day}</b><span>{date.month}</span></div>
+                  <div className="info">
+                    <h3>{event.title}</h3>
+                    {event.content ? <p>{shorten(event.content, 240)}</p> : null}
+                    <div className="emeta">
+                      <span><CalendarDays /> <time dateTime={event.startAt}>{date.full}</time></span>
+                      <span><MapPin /> {event.mode === 'ONLINE' ? EVENT_MODE_LABELS.ONLINE : event.location || EVENT_MODE_LABELS.IN_PERSON}</span>
+                      <span><Clock3 /> {EVENT_STATUS_LABELS[event.status]}</span>
+                    </div>
+                  </div>
+                </article>
+              )
+            })}
+          </div>
+        ) : null}
       </div>
     </section>
   )
@@ -533,47 +424,114 @@ function ContactContent() {
 }
 
 function SearchContent() {
+  const [query, setQuery] = useState('')
+  const [projects, setProjects] = useState<Project[]>([])
+  const [posts, setPosts] = useState<PostFeedItem[]>([])
+  const [members, setMembers] = useState<MemberProfile[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
+
+  useEffect(() => {
+    let active = true
+    setLoading(true)
+    setError(null)
+    void Promise.all([listProjects(null), listPosts(null, undefined, 30), getMembers()])
+      .then(([projectResult, postResult, memberResult]) => {
+        if (!active) return
+        setProjects(projectResult)
+        setPosts(postResult.items)
+        setMembers(memberResult)
+      })
+      .catch((reason: unknown) => {
+        if (active) setError(messageOf(reason, 'Không tải được dữ liệu tìm kiếm công khai.'))
+      })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [reloadKey])
+
+  const normalized = query.trim().toLocaleLowerCase('vi')
+  const matchingProjects = projects.filter((project) => includesQuery([
+    project.code,
+    project.name,
+    project.description,
+    ...project.leaders.map((leader) => leader.name),
+  ], normalized))
+  const matchingPosts = posts.filter((post) => includesQuery([
+    post.title,
+    post.excerpt,
+    post.author?.name,
+    post.category?.name,
+  ], normalized))
+  const matchingMembers = members.filter((member) => includesQuery([
+    member.name,
+    member.bio,
+    ...member.researchFields.map((field) => field.name),
+  ], normalized))
+  const publicLeaderIds = new Set(projects.flatMap((project) => project.leaders.map((leader) => leader.userId)))
+  const total = matchingProjects.length + matchingPosts.length + matchingMembers.length
+
   return (
     <section className="section">
       <div className="wrap">
-        <Toolbar placeholder="Tìm dự án, bài viết, thành viên..." />
-        <div className="grid c3">
-          {projects.slice(0, 2).map((project) => (
-            <ProjectCard key={project.title} project={project} />
-          ))}
-          {posts.slice(0, 2).map((post) => (
-            <PostCard key={post.title} post={post} />
-          ))}
-          {members.slice(0, 2).map((member) => (
-            <MemberCard key={member.name} member={member} />
-          ))}
+        <div className="toolbar">
+          <div className="searchbar" style={{ flex: 1, minWidth: 220 }}>
+            <Search aria-hidden="true" />
+            <input className="input" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm dự án, bài viết, thành viên..." aria-label="Tìm nội dung công khai" autoFocus />
+          </div>
         </div>
+        {loading ? <div className="public-empty empty tight">Đang tải dữ liệu tìm kiếm...</div> : null}
+        {error ? <LoadError message={error} onRetry={() => setReloadKey((value) => value + 1)} /> : null}
+        {!loading && !error && total === 0 ? <div className="public-empty empty tight">Không tìm thấy nội dung phù hợp.</div> : null}
+        {!loading && !error && matchingProjects.length > 0 ? <SearchGroup title={`Dự án (${matchingProjects.length})`}><div className="grid c3">{matchingProjects.map((project) => <PublicProjectCard key={project.id} project={project} />)}</div></SearchGroup> : null}
+        {!loading && !error && matchingPosts.length > 0 ? <SearchGroup title={`Bài viết (${matchingPosts.length})`}><div className="grid c3">{matchingPosts.map((post) => <PublicPostCard key={post.id} post={post} />)}</div></SearchGroup> : null}
+        {!loading && !error && matchingMembers.length > 0 ? <SearchGroup title={`Thành viên (${matchingMembers.length})`}><div className="grid c4">{matchingMembers.map((member) => <PublicMemberCard key={member.userId} member={member} isProjectLeader={publicLeaderIds.has(member.userId)} />)}</div></SearchGroup> : null}
       </div>
     </section>
   )
 }
 
-function Toolbar({ placeholder }: { placeholder: string }) {
+function SearchGroup({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="toolbar">
-      <div className="searchbar" style={{ flex: 1, minWidth: 220 }}>
-        <Search aria-hidden="true" />
-        <input className="input" type="search" placeholder={placeholder} />
-      </div>
-      <div className="pills sp">
-        <button className="pill" type="button" aria-pressed="true">
-          Tất cả
-        </button>
-        <button className="pill" type="button" aria-pressed="false">
-          AI
-        </button>
-        <button className="pill" type="button" aria-pressed="false">
-          Robotics
-        </button>
-        <button className="pill" type="button" aria-pressed="false">
-          SE
-        </button>
-      </div>
+    <div className="mt-20">
+      <h2>{title}</h2>
+      {children}
     </div>
   )
+}
+
+function LoadError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div role="alert">
+      <div className="alert error">{message}</div>
+      <button className="btn" type="button" onClick={onRetry}>Thử tải lại</button>
+    </div>
+  )
+}
+
+function includesQuery(values: Array<string | null | undefined>, normalizedQuery: string) {
+  if (!normalizedQuery) return true
+  return values.some((value) => value?.toLocaleLowerCase('vi').includes(normalizedQuery))
+}
+
+function eventDate(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return { day: '--', month: '--', full: value }
+  return {
+    day: new Intl.DateTimeFormat('vi-VN', { day: '2-digit' }).format(date),
+    month: new Intl.DateTimeFormat('vi-VN', { month: '2-digit' }).format(date),
+    full: new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium', timeStyle: 'short' }).format(date),
+  }
+}
+
+function messageOf(reason: unknown, fallback: string) {
+  return reason instanceof Error ? reason.message : fallback
+}
+
+function countLabel(value: number | null) {
+  return value === null ? '—' : String(value)
+}
+
+function shorten(value: string, maximum: number) {
+  return value.length > maximum ? `${value.slice(0, maximum).trimEnd()}…` : value
 }

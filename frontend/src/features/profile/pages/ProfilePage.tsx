@@ -14,6 +14,7 @@ type FormState = {
 
 export function ProfilePage() {
   const { token, profile: account } = useAuth()
+  const canUpdate = account?.permissions.includes('PROFILE_UPDATE') ?? false
   const [member, setMember] = useState<MemberProfile | null>(null)
   const [fields, setFields] = useState<ResearchField[]>([])
   const [form, setForm] = useState<FormState>({ phone: '', publicEmail: '', bio: '', researchFieldIds: [] })
@@ -84,6 +85,7 @@ export function ProfilePage() {
   }, [member?.joinedLabAt])
 
   const toggleField = (fieldId: number) => {
+    if (!canUpdate) return
     setForm((current) => ({
       ...current,
       researchFieldIds: current.researchFieldIds.includes(fieldId)
@@ -94,7 +96,7 @@ export function ProfilePage() {
 
   const handleSave = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!token) return
+    if (!token || !canUpdate) return
     if (!phonePattern.test(form.phone.trim())) {
       setError('Số điện thoại phải có dạng 0xxxxxxxxx hoặc +84xxxxxxxxx.')
       return
@@ -115,7 +117,7 @@ export function ProfilePage() {
 
   const handleAvatar = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
-    if (!file || !token) return
+    if (!file || !token || !canUpdate) return
     setUploading(true)
     setError(null)
     setMessage(null)
@@ -134,7 +136,7 @@ export function ProfilePage() {
   }
 
   const removeAvatar = async () => {
-    if (!token || !member?.avatar) return
+    if (!token || !member?.avatar || !canUpdate) return
     setSaving(true)
     setError(null)
     setMessage(null)
@@ -166,22 +168,23 @@ export function ProfilePage() {
 
       {error && <div className="alert error"><CircleUserRound />{error}</div>}
       {message && <div className="alert"><Check />{message}</div>}
+      {!canUpdate && <div className="alert">Bạn chỉ có quyền xem hồ sơ. Liên hệ quản trị viên nếu cần cập nhật thông tin.</div>}
 
       <section className="admin-profile-hero">
         <div className="admin-profile-main">
           <div className="profile-avatar-wrap">
             {avatarUrl ? <img className="profile-avatar-image" src={avatarUrl} alt="Ảnh đại diện" /> : <span className="admin-profile-avatar">{initials}</span>}
-            <label className="avatar-upload" title="Đổi ảnh đại diện">
+            {canUpdate && <label className="avatar-upload" title="Đổi ảnh đại diện">
               <Camera size={15} />
               <input type="file" accept="image/jpeg,image/png,image/gif,image/webp" onChange={handleAvatar} disabled={uploading} />
-            </label>
+            </label>}
           </div>
           <div>
             <span className="eyebrow">Smart Lab member</span>
             <h2>{member?.name ?? account?.name}</h2>
             <p>{member?.email ?? account?.email}</p>
           </div>
-          {member?.avatar && <button className="btn ghost" type="button" onClick={() => void removeAvatar()} disabled={saving || uploading}><Trash2 size={15} /> Gỡ ảnh</button>}
+          {member?.avatar && canUpdate && <button className="btn ghost" type="button" onClick={() => void removeAvatar()} disabled={saving || uploading}><Trash2 size={15} /> Gỡ ảnh</button>}
         </div>
         <div className="admin-profile-status">
           {member?.researchFields.map((field) => <span className="badge info" key={field.id}>{field.name}</span>)}
@@ -195,10 +198,10 @@ export function ProfilePage() {
             <UserRound size={20} />
           </div>
           <div className="form-stack">
-            <label className="field"><span>Số điện thoại</span><input className="input" type="tel" inputMode="tel" placeholder="0901234567" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /><small className="muted">Để trống nếu không muốn khai báo. Ví dụ: 0901234567 hoặc +84901234567.</small></label>
-            <label className="field"><span>Email công khai</span><input className="input" type="email" value={form.publicEmail} onChange={(event) => setForm({ ...form, publicEmail: event.target.value })} /></label>
+            <label className="field"><span>Số điện thoại</span><input className="input" type="tel" inputMode="tel" placeholder="0901234567" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} disabled={!canUpdate} /><small className="muted">Để trống nếu không muốn khai báo. Ví dụ: 0901234567 hoặc +84901234567.</small></label>
+            <label className="field"><span>Email công khai</span><input className="input" type="email" value={form.publicEmail} onChange={(event) => setForm({ ...form, publicEmail: event.target.value })} disabled={!canUpdate} /></label>
             <div className="field"><span>Ngày tham gia Lab</span><strong className="input">{joinedLabDate}</strong><small className="muted">Ngày tham gia do hệ thống ghi nhận và không thể chỉnh sửa.</small></div>
-            <label className="field"><span>Giới thiệu</span><textarea className="textarea" rows={6} value={form.bio} onChange={(event) => setForm({ ...form, bio: event.target.value })} /></label>
+            <label className="field"><span>Giới thiệu</span><textarea className="textarea" rows={6} value={form.bio} onChange={(event) => setForm({ ...form, bio: event.target.value })} disabled={!canUpdate} /></label>
           </div>
         </section>
 
@@ -207,7 +210,7 @@ export function ProfilePage() {
           <div className="field-options">
             {fields.map((field) => (
               <label className={`field-option ${form.researchFieldIds.includes(field.id) ? 'selected' : ''}`} key={field.id}>
-                <input type="checkbox" checked={form.researchFieldIds.includes(field.id)} onChange={() => toggleField(field.id)} />
+                <input type="checkbox" checked={form.researchFieldIds.includes(field.id)} onChange={() => toggleField(field.id)} disabled={!canUpdate} />
                 <span><strong>{field.name}</strong><small>{field.code}</small></span>
                 {form.researchFieldIds.includes(field.id) && <Check size={17} />}
               </label>
@@ -215,7 +218,7 @@ export function ProfilePage() {
             {!fields.length && <div className="empty tight">Chưa có lĩnh vực active.</div>}
           </div>
           <div className="form-actions profile-save-actions">
-            <button className="btn primary" type="submit" disabled={saving || uploading}><Save size={16} />{saving ? 'Đang lưu...' : 'Lưu hồ sơ'}</button>
+            {canUpdate && <button className="btn primary" type="submit" disabled={saving || uploading}><Save size={16} />{saving ? 'Đang lưu...' : 'Lưu hồ sơ'}</button>}
             {uploading && <span className="muted">Đang tải ảnh lên Drive...</span>}
           </div>
         </section>

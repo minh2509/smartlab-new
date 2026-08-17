@@ -2,6 +2,7 @@ package com.smartlab.repo;
 
 import com.smartlab.entity.EventEntity;
 import com.smartlab.enums.EventStatus;
+import com.smartlab.enums.EventVisibility;
 import jakarta.persistence.LockModeType;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -41,6 +42,23 @@ class EventRepositoryContractTest {
         assertThat(query).contains(":upcoming = false", "e.startAt < :now");
         assertThat(query).contains("case when e.startAt >= :now then 0 else 1 end");
         assertThat(query).contains("e.startAt", "e.id");
+    }
+
+    @Test
+    void publicListIsConstrainedByVisibilityAndNeverAcceptsAProjectFilter()
+            throws NoSuchMethodException {
+        Method method = EventRepository.class.getMethod(
+                "findPublicEvents",
+                EventVisibility.class,
+                EventStatus.class,
+                Boolean.class,
+                Instant.class
+        );
+        String query = method.getAnnotation(Query.class).value();
+
+        assertThat(query).contains("e.deletedAt is null", "e.visibility = :visibility");
+        assertThat(query).doesNotContain("projectId");
+        assertThat(query).contains(":status is null", ":upcoming = true", ":upcoming = false");
     }
 
     @Test

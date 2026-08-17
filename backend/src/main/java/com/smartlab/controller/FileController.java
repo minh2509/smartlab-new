@@ -1,7 +1,11 @@
 package com.smartlab.controller;
 
+import com.smartlab.config.OpenApiConfig;
 import com.smartlab.dto.response.FileResponse;
 import com.smartlab.service.FileService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ContentDisposition;
@@ -21,23 +25,40 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 @RestController
 @RequiredArgsConstructor
+@Tag(name = "Files", description = "Permission-aware file upload, download, and soft deletion.")
 public class FileController {
     private final FileService fileService;
 
+    @GetMapping("/me/files")
+    @PreAuthorize("isAuthenticated()")
+    @Operation(summary = "List all active files uploaded by the current member")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+    public List<FileResponse> listOwn() {
+        return fileService.listOwn(currentEmail());
+    }
+
     @PostMapping(value = "/files/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasAuthority('FILE_UPLOAD')")
+    @Operation(summary = "Upload a file")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
     public FileResponse upload(
             @RequestPart("file") MultipartFile file,
             @RequestParam(defaultValue = "PRIVATE") String accessScope,
-            @RequestParam(required = false) @Size(max = 5000) String description
+            @RequestParam(required = false) @Size(max = 5000) String description,
+            @RequestParam(required = false) Long projectId
     ) {
+        if (projectId != null) {
+            return fileService.uploadForProject(file, accessScope, description, currentEmail(), projectId);
+        }
         return fileService.upload(file, accessScope, description, currentEmail());
     }
 
     @GetMapping("/files/{id}")
+    @Operation(summary = "Download a file when its access scope permits")
     public ResponseEntity<byte[]> download(@PathVariable Long id, Authentication authentication) {
         FileService.DownloadedFile file = fileService.download(id, authentication);
         MediaType mediaType;
@@ -56,6 +77,8 @@ public class FileController {
 
     @DeleteMapping("/files/{id}")
     @PreAuthorize("hasAuthority('FILE_DELETE')")
+    @Operation(summary = "Soft-delete an owned or administratively managed file")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
     public ResponseEntity<Void> delete(@PathVariable Long id, Authentication authentication) {
         fileService.delete(id, currentEmail(), authentication);
         return ResponseEntity.noContent().build();

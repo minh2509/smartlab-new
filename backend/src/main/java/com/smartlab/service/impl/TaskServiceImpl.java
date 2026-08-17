@@ -78,13 +78,19 @@ public class TaskServiceImpl implements TaskService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
     }
 
-    private StoredFileEntity requireOwnedActiveFile(Long fileId, UserEntity user) {
+    private StoredFileEntity requireOwnedProjectFile(Long fileId, UserEntity user, Long projectId) {
         StoredFileEntity file = storedFileRepository.findById(fileId)
                 .filter(candidate -> candidate.getDeletedAt() == null)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "File not found"));
 
         if (file.getOwnerUser() == null || !file.getOwnerUser().getId().equals(user.getId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You can only attach your own files");
+        }
+        if (!"PROJECT".equals(file.getAccessScope()) || !projectId.equals(file.getProjectId())) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Task attachments must use PROJECT scope for the same project"
+            );
         }
 
         return file;
@@ -353,7 +359,7 @@ public class TaskServiceImpl implements TaskService {
         TaskEntity task = requireTask(taskId);
         requireProjectMemberAccess(user, task.getProject().getId());
 
-        StoredFileEntity file = requireOwnedActiveFile(request.getFileId(), user);
+        StoredFileEntity file = requireOwnedProjectFile(request.getFileId(), user, task.getProject().getId());
 
         TaskAttachmentEntity attachment = TaskAttachmentEntity.create(
                 task, file, request.getAttachmentType(), request.getDescription(), user
@@ -385,7 +391,7 @@ public class TaskServiceImpl implements TaskService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only active assignees or managers can submit this task");
         }
 
-        StoredFileEntity file = requireOwnedActiveFile(request.getFileId(), user);
+        StoredFileEntity file = requireOwnedProjectFile(request.getFileId(), user, task.getProject().getId());
 
         TaskAttachmentEntity attachment = TaskAttachmentEntity.create(
                 task, file, AttachmentType.RESULT, request.getNote(), user
