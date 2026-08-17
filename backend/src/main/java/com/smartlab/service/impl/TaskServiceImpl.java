@@ -47,6 +47,7 @@ import java.util.stream.Collectors;
 public class TaskServiceImpl implements TaskService {
 
     private static final String ADMIN = "ADMIN";
+    private static final String TASK_READ = "TASK_READ";
     private static final String TASK_MANAGE = "TASK_MANAGE";
 
     private final TaskRepository taskRepository;
@@ -116,9 +117,26 @@ public class TaskServiceImpl implements TaskService {
         }
     }
 
+    /** Admins, or ACTIVE members with TASK_READ, may read tasks. */
+    private void requireTaskReadAccess(UserEntity user, Long projectId) {
+        Set<String> roles = permissionService.getRoleCodes(user);
+        if (roles.contains(ADMIN)) return;
+        Set<String> permissions = permissionService.getEffectivePermissionCodes(user);
+        if (!permissions.contains(TASK_READ)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Insufficient permissions");
+        }
+        boolean isMember = projectMemberRepository.existsByProject_IdAndUser_IdAndStatus(
+                projectId, user.getId(), ProjectMemberStatus.ACTIVE
+        );
+        if (!isMember) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not a member of this project");
+        }
+    }
+
     private TaskAssigneeResponse toAssigneeResponse(TaskAssigneeEntity a) {
         return TaskAssigneeResponse.builder()
                 .userId(a.getUser().getId())
+                .accountUserId(a.getUser().getUserId())
                 .name(a.getUser().getName())
                 .email(a.getUser().getEmail())
                 .assignedAt(a.getAssignedAt())
@@ -181,7 +199,7 @@ public class TaskServiceImpl implements TaskService {
     ) {
         UserEntity user = currentEmail != null ? userRepository.findByEmail(currentEmail).orElse(null) : null;
         if (user != null) {
-            requireProjectMemberAccess(user, projectId);
+            requireTaskReadAccess(user, projectId);
         } else {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         }
@@ -226,7 +244,7 @@ public class TaskServiceImpl implements TaskService {
     public TaskDetailResponse getDetail(Long taskId, String currentEmail) {
         UserEntity user = requireUser(currentEmail);
         TaskEntity task = requireTask(taskId);
-        requireProjectMemberAccess(user, task.getProject().getId());
+        requireTaskReadAccess(user, task.getProject().getId());
         return toDetailResponse(task);
     }
 

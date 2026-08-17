@@ -57,7 +57,7 @@ type ActiveTab = 'tasks' | 'criteria' | 'evaluations'
 type ViewMode = 'kanban' | 'list'
 
 export function TasksPage() {
-  const { token } = useAuth()
+  const { token, profile } = useAuth()
   const [projects, setProjects] = useState<Project[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null)
   const [activeTab, setActiveTab] = useState<ActiveTab>('tasks')
@@ -125,6 +125,20 @@ export function TasksPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
+  const selectedProject = projects.find((project) => project.id === selectedProjectId)
+  const isAdmin = profile?.roles.includes('ADMIN') ?? false
+  const isSelectedProjectLeader = Boolean(
+    profile?.userId && selectedProject?.leaders.some((leader) => leader.userId === profile.userId),
+  )
+  const canManageTasks = isAdmin || (profile?.permissions.includes('TASK_MANAGE') ?? false) || isSelectedProjectLeader
+  const canManageEvaluations = isAdmin || isSelectedProjectLeader
+  const canAttachToTask = profile?.permissions.includes('FILE_UPLOAD') ?? false
+  const canSubmitSelectedTask = Boolean(
+    canAttachToTask
+      && taskDetail
+      && (canManageTasks || taskDetail.assignees.some((assignee) => assignee.accountUserId === profile?.userId)),
+  )
+
   // Load Projects on mount
   useEffect(() => {
     if (!token) return
@@ -137,6 +151,12 @@ export function TasksPage() {
       })
       .catch((err: Error) => setError(err.message))
   }, [token])
+
+  useEffect(() => {
+    if ((activeTab === 'criteria' || activeTab === 'evaluations') && !canManageEvaluations) {
+      setActiveTab('tasks')
+    }
+  }, [activeTab, canManageEvaluations])
 
   // Load Tasks when project or filters change
   const loadTaskList = useCallback(async () => {
@@ -164,7 +184,7 @@ export function TasksPage() {
 
   // Load Criteria when Criteria tab or Evaluation tab opened
   const loadCriteriaList = useCallback(async () => {
-    if (!token || !selectedProjectId) return
+    if (!token || !selectedProjectId || !canManageEvaluations) return
     setLoadingCriteria(true)
     try {
       const res = await listEvaluationCriteria(token, selectedProjectId)
@@ -174,16 +194,16 @@ export function TasksPage() {
     } finally {
       setLoadingCriteria(false)
     }
-  }, [token, selectedProjectId])
+  }, [token, selectedProjectId, canManageEvaluations])
 
   useEffect(() => {
-    if ((activeTab === 'criteria' || activeTab === 'evaluations') && selectedProjectId) {
+    if (canManageEvaluations && (activeTab === 'criteria' || activeTab === 'evaluations') && selectedProjectId) {
       loadCriteriaList()
     }
-  }, [activeTab, selectedProjectId, loadCriteriaList])
+  }, [activeTab, selectedProjectId, canManageEvaluations, loadCriteriaList])
 
   const loadEvaluationMembers = useCallback(async () => {
-    if (!token || !selectedProjectId) return
+    if (!token || !selectedProjectId || !canManageEvaluations) return
     setLoadingEvaluationMembers(true)
     try {
       const members = await listProjectMembers(token, selectedProjectId, 'ACTIVE')
@@ -193,16 +213,16 @@ export function TasksPage() {
     } finally {
       setLoadingEvaluationMembers(false)
     }
-  }, [token, selectedProjectId])
+  }, [token, selectedProjectId, canManageEvaluations])
 
   useEffect(() => {
     setEvalSelectedUserId('')
-    if (activeTab === 'evaluations' && selectedProjectId) {
+    if (canManageEvaluations && activeTab === 'evaluations' && selectedProjectId) {
       loadEvaluationMembers()
     } else {
       setEvaluationMembers([])
     }
-  }, [activeTab, selectedProjectId, loadEvaluationMembers])
+  }, [activeTab, selectedProjectId, canManageEvaluations, loadEvaluationMembers])
 
   // Load Task Detail
   const fetchTaskDetail = async (taskId: number) => {
@@ -222,7 +242,7 @@ export function TasksPage() {
   // Handle Save Task (Create/Edit)
   const handleSaveTask = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!token || !selectedProjectId) return
+    if (!token || !selectedProjectId || !canManageTasks) return
     setSavingTask(true)
     setError('')
     try {
@@ -258,7 +278,7 @@ export function TasksPage() {
 
   // Handle Delete Task
   const handleDeleteTask = async (taskId: number) => {
-    if (!token || !window.confirm('Bạn có chắc chắn muốn xóa nhiệm vụ này?')) return
+    if (!token || !canManageTasks || !window.confirm('Bạn có chắc chắn muốn xóa nhiệm vụ này?')) return
     try {
       await deleteTask(token, taskId)
       setSuccess('Đã xóa nhiệm vụ!')
@@ -274,7 +294,7 @@ export function TasksPage() {
 
   // Handle Quick Status Change
   const handleStatusChange = async (taskId: number, newStatus: TaskStatus) => {
-    if (!token) return
+    if (!token || !canManageTasks) return
     try {
       await updateTask(token, taskId, { status: newStatus })
       loadTaskList()
@@ -289,7 +309,7 @@ export function TasksPage() {
   // Handle Add Assignees
   const handleAddAssignees = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!token || !selectedTaskId) return
+    if (!token || !selectedTaskId || !canManageTasks) return
     const ids = assigneeUserIdsInput
       .split(',')
       .map((s) => parseInt(s.trim()))
@@ -317,7 +337,7 @@ export function TasksPage() {
 
   // Handle Remove Assignee
   const handleRemoveAssignee = async (userId: number) => {
-    if (!token || !selectedTaskId) return
+    if (!token || !selectedTaskId || !canManageTasks) return
     try {
       await removeTaskAssignee(token, selectedTaskId, userId)
       setSuccess('Đã gỡ phân công!')
@@ -331,6 +351,7 @@ export function TasksPage() {
   // Handle Attach File
   const handleAttachFile = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!canAttachToTask) return
     if (!token || !selectedTaskId || !attachFile) {
       setError('Vui lòng chọn tệp')
       return
@@ -360,6 +381,7 @@ export function TasksPage() {
   // Handle Submit Task Result
   const handleSubmitTask = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!canSubmitSelectedTask) return
     if (!token || !selectedTaskId || !submitFile) {
       setError('Vui lòng chọn tệp báo cáo kết quả')
       return
@@ -388,7 +410,7 @@ export function TasksPage() {
   // Handle Create Criteria
   const handleCreateCriterion = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!token || !selectedProjectId) return
+    if (!token || !selectedProjectId || !canManageEvaluations) return
     setSavingCrit(true)
     try {
       await createEvaluationCriterion(token, selectedProjectId, {
@@ -411,7 +433,7 @@ export function TasksPage() {
 
   // Handle Toggle Active Criterion
   const handleToggleCritActive = async (criterion: EvaluationCriterion) => {
-    if (!token || !selectedProjectId) return
+    if (!token || !selectedProjectId || !canManageEvaluations) return
     try {
       await updateEvaluationCriterion(token, selectedProjectId, criterion.id, {
         isActive: !criterion.isActive,
@@ -425,6 +447,7 @@ export function TasksPage() {
   // Handle Submit Member Evaluation
   const handleSubmitEvaluation = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!canManageEvaluations) return
     if (!token || !selectedProjectId || !evalSelectedUserId) {
       setError('Vui lòng chọn thành viên cần đánh giá')
       return
@@ -514,22 +537,26 @@ export function TasksPage() {
               <CheckSquare size={16} />
               Nhiệm vụ
             </button>
-            <button
-              type="button"
-              className={`btn ${activeTab === 'criteria' ? 'primary' : 'secondary'}`}
-              onClick={() => setActiveTab('criteria')}
-            >
-              <Sliders size={16} />
-              Tiêu chí đánh giá
-            </button>
-            <button
-              type="button"
-              className={`btn ${activeTab === 'evaluations' ? 'primary' : 'secondary'}`}
-              onClick={() => setActiveTab('evaluations')}
-            >
-              <Award size={16} />
-              Đánh giá thành viên
-            </button>
+            {canManageEvaluations ? (
+              <>
+                <button
+                  type="button"
+                  className={`btn ${activeTab === 'criteria' ? 'primary' : 'secondary'}`}
+                  onClick={() => setActiveTab('criteria')}
+                >
+                  <Sliders size={16} />
+                  Tiêu chí đánh giá
+                </button>
+                <button
+                  type="button"
+                  className={`btn ${activeTab === 'evaluations' ? 'primary' : 'secondary'}`}
+                  onClick={() => setActiveTab('evaluations')}
+                >
+                  <Award size={16} />
+                  Đánh giá thành viên
+                </button>
+              </>
+            ) : null}
           </div>
         </div>
       </div>
@@ -586,22 +613,24 @@ export function TasksPage() {
                 </div>
               </div>
 
-              <button
-                type="button"
-                className="btn primary"
-                onClick={() => {
-                  setEditingTask(null)
-                  setTaskFormTitle('')
-                  setTaskFormDesc('')
-                  setTaskFormPriority('MEDIUM')
-                  setTaskFormStatus('TODO')
-                  setTaskFormStartAt('')
-                  setTaskFormDueAt('')
-                  setShowTaskModal(true)
-                }}
-              >
-                <Plus size={16} /> Tạo nhiệm vụ mới
-              </button>
+              {canManageTasks ? (
+                <button
+                  type="button"
+                  className="btn primary"
+                  onClick={() => {
+                    setEditingTask(null)
+                    setTaskFormTitle('')
+                    setTaskFormDesc('')
+                    setTaskFormPriority('MEDIUM')
+                    setTaskFormStatus('TODO')
+                    setTaskFormStartAt('')
+                    setTaskFormDueAt('')
+                    setShowTaskModal(true)
+                  }}
+                >
+                  <Plus size={16} /> Tạo nhiệm vụ mới
+                </button>
+              ) : null}
             </div>
 
             {loadingTasks ? (
@@ -700,13 +729,15 @@ export function TasksPage() {
                             >
                               Chi tiết
                             </button>
-                            <button
-                              type="button"
-                              className="btn ghost sm danger"
-                              onClick={() => handleDeleteTask(t.id)}
-                            >
-                              <Trash2 size={14} />
-                            </button>
+                            {canManageTasks ? (
+                              <button
+                                type="button"
+                                className="btn ghost sm danger"
+                                onClick={() => handleDeleteTask(t.id)}
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            ) : null}
                           </div>
                         </td>
                       </tr>
@@ -736,17 +767,23 @@ export function TasksPage() {
                 </div>
 
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <select
-                    className={`select sm ${TASK_STATUS_BADGES[taskDetail.status]}`}
-                    value={taskDetail.status}
-                    onChange={(e) => handleStatusChange(taskDetail.id, e.target.value as TaskStatus)}
-                  >
-                    {(Object.keys(TASK_STATUS_LABELS) as TaskStatus[]).map((st) => (
-                      <option key={st} value={st}>
-                        {TASK_STATUS_LABELS[st]}
-                      </option>
-                    ))}
-                  </select>
+                  {canManageTasks ? (
+                    <select
+                      className={`select sm ${TASK_STATUS_BADGES[taskDetail.status]}`}
+                      value={taskDetail.status}
+                      onChange={(e) => handleStatusChange(taskDetail.id, e.target.value as TaskStatus)}
+                    >
+                      {(Object.keys(TASK_STATUS_LABELS) as TaskStatus[]).map((st) => (
+                        <option key={st} value={st}>
+                          {TASK_STATUS_LABELS[st]}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className={`badge ${TASK_STATUS_BADGES[taskDetail.status]}`}>
+                      {TASK_STATUS_LABELS[taskDetail.status]}
+                    </span>
+                  )}
 
                   <span className={`badge ${TASK_PRIORITY_BADGES[taskDetail.priority]}`}>
                     {TASK_PRIORITY_LABELS[taskDetail.priority]}
@@ -757,13 +794,15 @@ export function TasksPage() {
                 <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                     <strong style={{ fontSize: 13 }}>👥 Người phụ trách ({taskDetail.assignees.length}):</strong>
-                    <button
-                      type="button"
-                      className="btn secondary sm"
-                      onClick={() => setShowAssigneeModal(true)}
-                    >
-                      <UserPlus size={14} /> Gán
-                    </button>
+                    {canManageTasks ? (
+                      <button
+                        type="button"
+                        className="btn secondary sm"
+                        onClick={() => setShowAssigneeModal(true)}
+                      >
+                        <UserPlus size={14} /> Gán
+                      </button>
+                    ) : null}
                   </div>
                   {taskDetail.assignees.length === 0 ? (
                     <span style={{ color: 'var(--text-3)', fontSize: 13 }}>Chưa có ai phụ trách</span>
@@ -783,14 +822,16 @@ export function TasksPage() {
                           }}
                         >
                           <span>{a.name} (ID: {a.userId})</span>
-                          <button
-                            type="button"
-                            className="btn ghost sm danger"
-                            onClick={() => handleRemoveAssignee(a.userId)}
-                            title="Gỡ người này"
-                          >
-                            <X size={12} />
-                          </button>
+                          {canManageTasks ? (
+                            <button
+                              type="button"
+                              className="btn ghost sm danger"
+                              onClick={() => handleRemoveAssignee(a.userId)}
+                              title="Gỡ người này"
+                            >
+                              <X size={12} />
+                            </button>
+                          ) : null}
                         </div>
                       ))}
                     </div>
@@ -801,13 +842,15 @@ export function TasksPage() {
                 <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                     <strong style={{ fontSize: 13 }}>📎 Tệp đính kèm ({taskDetail.attachments.length}):</strong>
-                    <button
-                      type="button"
-                      className="btn secondary sm"
-                      onClick={() => setShowAttachmentModal(true)}
-                    >
-                      <Upload size={14} /> Đính kèm
-                    </button>
+                    {canAttachToTask ? (
+                      <button
+                        type="button"
+                        className="btn secondary sm"
+                        onClick={() => setShowAttachmentModal(true)}
+                      >
+                        <Upload size={14} /> Đính kèm
+                      </button>
+                    ) : null}
                   </div>
                   {taskDetail.attachments.length === 0 ? (
                     <span style={{ color: 'var(--text-3)', fontSize: 13 }}>Chưa có tệp đính kèm</span>
@@ -835,16 +878,18 @@ export function TasksPage() {
                 </div>
 
                 {/* Submit Task Action */}
-                <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
-                  <button
-                    type="button"
-                    className="btn primary"
-                    style={{ width: '100%' }}
-                    onClick={() => setShowSubmitModal(true)}
-                  >
-                    <Send size={16} /> Nộp kết quả nhiệm vụ (Submit)
-                  </button>
-                </div>
+                {canSubmitSelectedTask ? (
+                  <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+                    <button
+                      type="button"
+                      className="btn primary"
+                      style={{ width: '100%' }}
+                      onClick={() => setShowSubmitModal(true)}
+                    >
+                      <Send size={16} /> Nộp kết quả nhiệm vụ (Submit)
+                    </button>
+                  </div>
+                ) : null}
               </div>
             </div>
           )}
@@ -852,7 +897,7 @@ export function TasksPage() {
       )}
 
       {/* TAB 2: CRITERIA */}
-      {activeTab === 'criteria' && (
+      {activeTab === 'criteria' && canManageEvaluations && (
         <div className="panel">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <h2>Tiêu chí đánh giá động cho dự án</h2>
@@ -907,7 +952,7 @@ export function TasksPage() {
       )}
 
       {/* TAB 3: EVALUATIONS */}
-      {activeTab === 'evaluations' && (
+      {activeTab === 'evaluations' && canManageEvaluations && (
         <div className="panel">
           <h2>Đánh giá thành viên trong dự án</h2>
           <p style={{ color: 'var(--text-2)', marginBottom: 20 }}>
@@ -1004,7 +1049,7 @@ export function TasksPage() {
       )}
 
       {/* CREATE/EDIT TASK MODAL */}
-      {showTaskModal && (
+      {showTaskModal && canManageTasks && (
         <div className="modal-backdrop">
           <div className="modal-card">
             <h3>{editingTask ? 'Chỉnh sửa nhiệm vụ' : 'Tạo nhiệm vụ mới'}</h3>
@@ -1092,7 +1137,7 @@ export function TasksPage() {
       )}
 
       {/* ADD ASSIGNEES MODAL */}
-      {showAssigneeModal && (
+      {showAssigneeModal && canManageTasks && (
         <div className="modal-backdrop">
           <div className="modal-card">
             <h3>Phân công người phụ trách</h3>
@@ -1122,7 +1167,7 @@ export function TasksPage() {
       )}
 
       {/* ATTACHMENT MODAL */}
-      {showAttachmentModal && (
+      {showAttachmentModal && canAttachToTask && (
         <div className="modal-backdrop">
           <div className="modal-card">
             <h3>Đính kèm tệp vào nhiệm vụ</h3>
@@ -1172,7 +1217,7 @@ export function TasksPage() {
       )}
 
       {/* SUBMIT TASK RESULT MODAL */}
-      {showSubmitModal && (
+      {showSubmitModal && canSubmitSelectedTask && (
         <div className="modal-backdrop">
           <div className="modal-card">
             <h3>Nộp kết quả nhiệm vụ (Submit)</h3>
@@ -1210,7 +1255,7 @@ export function TasksPage() {
       )}
 
       {/* CREATE CRITERION MODAL */}
-      {showCritModal && (
+      {showCritModal && canManageEvaluations && (
         <div className="modal-backdrop">
           <div className="modal-card">
             <h3>Tạo tiêu chí đánh giá mới</h3>
