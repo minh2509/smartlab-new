@@ -69,7 +69,16 @@ export function App() {
             />
           }
         />
-        <Route path="/bai-viet" element={<PostFeedPage />} />
+        <Route
+          path="/bai-viet"
+          element={
+            <StaticPublicPage
+              kind="blog"
+              title="Bài viết"
+              description="Thông báo, kết quả nghiên cứu, bài viết học thuật và chia sẻ kinh nghiệm từ các nhóm dự án."
+            />
+          }
+        />
         <Route path="/blog" element={<Navigate to="/bai-viet" replace />} />
         <Route path="/posts" element={<PostFeedPage />} />
         <Route path="/my-posts" element={<MyPostsPage />} />

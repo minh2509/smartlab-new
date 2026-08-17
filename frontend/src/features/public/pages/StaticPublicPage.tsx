@@ -10,14 +10,14 @@ import type { PostFeedItem } from '../../posts/types'
 import { getMembers, getResearchFields } from '../../profile/api'
 import { listProjects } from '../../projects/api'
 import type { Project } from '../../projects/types'
-import { aboutQuickFacts, coreValues, documents, gallery, operatingSteps } from '../publicData'
+import { aboutQuickFacts, coreValues, documents, gallery, operatingSteps, posts } from '../publicData'
 import { PublicMemberCard, PublicPostCard, PublicProjectCard, ResearchFieldCard } from '../components/PublicDataCards'
 import { PublicPageHead } from '../components/PublicPageHead'
 
 type StaticPublicPageProps = {
   title: string
   description: string
-  kind: 'about' | 'fields' | 'members' | 'documents' | 'events' | 'gallery' | 'contact' | 'search'
+  kind: 'about' | 'fields' | 'members' | 'blog' | 'documents' | 'events' | 'gallery' | 'contact' | 'search'
 }
 
 export function StaticPublicPage({ title, description, kind }: StaticPublicPageProps) {
@@ -27,12 +27,37 @@ export function StaticPublicPage({ title, description, kind }: StaticPublicPageP
       {kind === 'about' ? <AboutContent /> : null}
       {kind === 'fields' ? <FieldsContent /> : null}
       {kind === 'members' ? <ApiMembersContent /> : null}
+      {kind === 'blog' ? <BlogContent /> : null}
       {kind === 'documents' ? <DocumentsContent /> : null}
       {kind === 'events' ? <EventsContent /> : null}
       {kind === 'gallery' ? <GalleryContent /> : null}
       {kind === 'contact' ? <ContactContent /> : null}
       {kind === 'search' ? <SearchContent /> : null}
     </>
+  )
+}
+
+export function PostCard({ post }: { post: (typeof posts)[number] }) {
+  return (
+    <Link className="card hover postcard" to="/bai-viet">
+      <div className={`cover ph ${post.cover}`} />
+      <div className="body">
+        <div className="pmeta">
+          <span className="chip accent">{post.category}</span>
+          <span>{post.date}</span>
+          <span>·</span>
+          <span>{post.read}</span>
+        </div>
+        <h3>{post.title}</h3>
+        <p>{post.description}</p>
+        <div className="by">
+          <span className="ava xs" style={{ background: 'var(--s1)' }}>
+            {post.initials}
+          </span>
+          {post.author}
+        </div>
+      </div>
+    </Link>
   )
 }
 
@@ -287,6 +312,43 @@ function ApiMembersContent() {
   )
 }
 
+function BlogContent() {
+  return (
+    <>
+      <section className="section">
+        <div className="wrap">
+          <div className="sec-head">
+            <div className="kicker">Đáng chú ý</div>
+            <h2>Bài viết nổi bật</h2>
+            <p>Những nội dung được ban biên tập chọn lọc trong tháng này.</p>
+          </div>
+          <div className="grid c3">
+            {posts.slice(0, 3).map((post) => (
+              <PostCard key={post.title} post={post} />
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="section alt">
+        <div className="wrap">
+          <div className="sec-head">
+            <div className="kicker">Tất cả bài viết</div>
+            <h2>Mới nhất</h2>
+            <p>Lọc theo loại nội dung hoặc tìm kiếm nhanh theo từ khoá.</p>
+          </div>
+          <Toolbar placeholder="Tìm bài viết theo tiêu đề, tác giả..." />
+          <div className="grid c3">
+            {posts.map((post) => (
+              <PostCard key={post.title} post={post} />
+            ))}
+          </div>
+        </div>
+      </section>
+    </>
+  )
+}
+
 function DocumentsContent() {
   return (
     <section className="section">
@@ -420,6 +482,31 @@ function ContactContent() {
         </div>
       </div>
     </section>
+  )
+}
+
+function Toolbar({ placeholder }: { placeholder: string }) {
+  return (
+    <div className="toolbar">
+      <div className="searchbar" style={{ flex: 1, minWidth: 220 }}>
+        <Search aria-hidden="true" />
+        <input className="input" type="search" placeholder={placeholder} />
+      </div>
+      <div className="pills sp">
+        <button className="pill" type="button" aria-pressed="true">
+          Tất cả
+        </button>
+        <button className="pill" type="button" aria-pressed="false">
+          AI
+        </button>
+        <button className="pill" type="button" aria-pressed="false">
+          Robotics
+        </button>
+        <button className="pill" type="button" aria-pressed="false">
+          SE
+        </button>
+      </div>
+    </div>
   )
 }
 
