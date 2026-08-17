@@ -157,6 +157,49 @@ class TaskServiceImplTest {
     }
 
     @Test
+    void getDetailAllowsAnActiveMemberWithTaskRead() {
+        when(permissionService.getEffectivePermissionCodes(user)).thenReturn(Set.of("TASK_READ"));
+        when(projectMemberRepository.existsByProject_IdAndUser_IdAndStatus(
+                PROJECT_ID, user.getId(), ProjectMemberStatus.ACTIVE)).thenReturn(true);
+        when(taskAssigneeRepository.findAllByTask_Id(TASK_ID)).thenReturn(List.of());
+        when(taskAttachmentRepository.findAllByTaskId(TASK_ID)).thenReturn(List.of());
+
+        TaskDetailResponse response = service.getDetail(TASK_ID, EMAIL);
+
+        assertThat(response.getId()).isEqualTo(TASK_ID);
+    }
+
+    @Test
+    void getDetailRejectsAnActiveMemberWithoutTaskRead() {
+        when(permissionService.getEffectivePermissionCodes(user)).thenReturn(Set.of());
+
+        assertStatus(() -> service.getDetail(TASK_ID, EMAIL), HttpStatus.FORBIDDEN);
+
+        verify(projectMemberRepository, never()).existsByProject_IdAndUser_IdAndStatus(
+                PROJECT_ID, user.getId(), ProjectMemberStatus.ACTIVE);
+    }
+
+    @Test
+    void getDetailRejectsTaskReadUserWhoIsNotAnActiveProjectMember() {
+        when(permissionService.getEffectivePermissionCodes(user)).thenReturn(Set.of("TASK_READ"));
+        when(projectMemberRepository.existsByProject_IdAndUser_IdAndStatus(
+                PROJECT_ID, user.getId(), ProjectMemberStatus.ACTIVE)).thenReturn(false);
+
+        assertStatus(() -> service.getDetail(TASK_ID, EMAIL), HttpStatus.FORBIDDEN);
+    }
+
+    @Test
+    void ordinaryMemberWithoutTaskManagementCapabilityCannotDeleteTask() {
+        when(permissionService.getEffectivePermissionCodes(user)).thenReturn(Set.of());
+        when(projectMemberRepository.existsByProject_IdAndUser_IdAndProjectRoleAndStatus(
+                PROJECT_ID, user.getId(), ProjectRole.LEADER, ProjectMemberStatus.ACTIVE)).thenReturn(false);
+
+        assertStatus(() -> service.delete(TASK_ID, EMAIL), HttpStatus.FORBIDDEN);
+
+        assertThat(task.getDeletedAt()).isNull();
+    }
+
+    @Test
     void submitTaskRejectsAnotherUsersFileEvenForAnAssignee() {
         when(taskAssigneeRepository.existsById_TaskIdAndId_UserId(TASK_ID, user.getId())).thenReturn(true);
         when(projectMemberRepository.existsByProject_IdAndUser_IdAndStatus(

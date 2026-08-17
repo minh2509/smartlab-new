@@ -29,6 +29,7 @@ import { ProjectManagementPage } from '../features/projects/pages/ProjectManagem
 import { EventManagementPage } from '../features/events/pages/EventManagementPage'
 import { MyEvaluationsPage } from '../features/evaluations/pages/MyEvaluationsPage'
 import { TasksPage } from '../features/tasks/pages/TasksPage'
+import { accessPolicies } from './accessPolicy'
 
 export function App() {
   return (
@@ -141,14 +142,14 @@ export function App() {
       <Route element={<AdminLayout />}>
         <Route path="/profile" element={<RequirePermissions allOf={['PROFILE_READ']}><ProfilePage /></RequirePermissions>} />
         <Route path="/my-evaluations" element={<MyEvaluationsPage />} />
-        <Route path="/files" element={<RequirePermissions allOf={['FILE_UPLOAD']}><FilesPage /></RequirePermissions>} />
-        <Route path="/admin/projects" element={<ProjectManagementPage />} />
+        <Route path="/files" element={<RequirePermissions allOf={accessPolicies.files}><FilesPage /></RequirePermissions>} />
+        <Route path="/admin/projects" element={<RequirePermissions allOf={accessPolicies.projects}><ProjectManagementPage /></RequirePermissions>} />
         <Route path="/admin/events" element={<EventManagementPage />} />
-        <Route path="/admin/tasks" element={<TasksPage />} />
-        <Route path="/admin/research-fields" element={<RequirePermissions allOf={['RESEARCH_FIELD_MANAGE']}><ResearchFieldsPage /></RequirePermissions>} />
-        <Route path="/admin/members" element={<RequirePermissions allOf={['MEMBER_MANAGE']}><AdminMembersPage /></RequirePermissions>} />
-        <Route path="/admin/accounts" element={<RequirePermissions allOf={['USER_MANAGE', 'ROLE_MANAGE', 'PERMISSION_MANAGE']}><AdminAccountsPage /></RequirePermissions>} />
-        <Route path="/admin/rbac" element={<RequirePermissions allOf={['ROLE_MANAGE', 'PERMISSION_MANAGE']}><AdminRbacPage /></RequirePermissions>} />
+        <Route path="/admin/tasks" element={<RequirePermissions allOf={accessPolicies.tasks}><TasksPage /></RequirePermissions>} />
+        <Route path="/admin/research-fields" element={<RequirePermissions allOf={accessPolicies.researchFields}><ResearchFieldsPage /></RequirePermissions>} />
+        <Route path="/admin/members" element={<RequirePermissions allOf={accessPolicies.members}><AdminMembersPage /></RequirePermissions>} />
+        <Route path="/admin/accounts" element={<RequirePermissions allOf={accessPolicies.accounts}><AdminAccountsPage /></RequirePermissions>} />
+        <Route path="/admin/rbac" element={<RequirePermissions allOf={accessPolicies.rbac}><AdminRbacPage /></RequirePermissions>} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
