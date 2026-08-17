@@ -108,6 +108,26 @@ class FileServiceImplProjectAccessTest {
     }
 
     @Test
+    void taskProjectUploadDoesNotRequireProjectReadAfterTaskAuthorization() throws Exception {
+        UserEntity owner = user();
+        MockMultipartFile upload = new MockMultipartFile(
+                "file", "document.txt", "text/plain", "document".getBytes(StandardCharsets.UTF_8)
+        );
+        ReflectionTestUtils.setField(service, "maxFileSizeBytes", 1024L);
+        ReflectionTestUtils.setField(service, "storageProvider", "google-drive");
+        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(owner));
+        when(fileStorage.upload("document.txt", "text/plain", upload.getBytes(), null))
+                .thenReturn(new FileStorage.StoredFile("drive-key", null));
+        when(storedFileRepository.saveAndFlush(any(StoredFileEntity.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = service.uploadForTaskProject(upload, null, EMAIL, 7L);
+
+        assertThat(response.getAccessScope()).isEqualTo("PROJECT");
+        verify(projectAccessService, never()).requireRead(any(), any());
+    }
+
+    @Test
     void regularFileDeleteCannotBreakRetainedDocumentVersions() {
         StoredFileEntity file = file(22L, "PRIVATE", user());
         Authentication authentication = authentication();

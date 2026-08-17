@@ -105,6 +105,15 @@ public class FileServiceImpl implements FileService, PostContentFileService {
         return uploadInternal(file, accessScope, description, email, projectId);
     }
 
+    @Override
+    @Transactional
+    public FileResponse uploadForTaskProject(MultipartFile file, String description, String email, Long projectId) {
+        if (projectId == null || projectId <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A valid project id is required");
+        }
+        return uploadInternal(file, "PROJECT", description, email, projectId);
+    }
+
     private FileResponse uploadInternal(
             MultipartFile file,
             String accessScope,

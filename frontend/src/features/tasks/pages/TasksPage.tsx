@@ -19,7 +19,7 @@ import {
 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '../../auth/authContext'
-import { deleteFile, downloadFile, uploadFile } from '../../files/api'
+import { downloadFile } from '../../files/api'
 import { listProjectMembers, listProjects } from '../../projects/api'
 import type { Project, ProjectMember } from '../../projects/types'
 import {
@@ -31,13 +31,13 @@ import {
 import type { EvaluationCriterion } from '../../evaluations/types'
 import {
   addTaskAssignees,
-  addTaskAttachment,
   createTask,
   deleteTask,
   getTaskDetail,
   listTasks,
   removeTaskAssignee,
-  submitTask,
+  uploadTaskAttachment,
+  uploadTaskSubmission,
   updateTask,
 } from '../api'
 import {
@@ -354,28 +354,20 @@ export function TasksPage() {
   const handleAttachFile = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!canAttachToTask) return
-    const projectId = taskDetail?.projectId ?? selectedProjectId
-    if (!token || !selectedTaskId || !attachFile || !projectId) {
+    if (!token || !selectedTaskId || !attachFile) {
       setError('Vui lòng chọn tệp')
       return
     }
     setUploadingAttach(true)
     setError('')
-    let uploadedFileId: number | null = null
     try {
-      const uploaded = await uploadFile(
+      await uploadTaskAttachment(
         token,
+        selectedTaskId,
         attachFile,
-        'PROJECT',
-        attachDesc || 'Task Attachment',
-        projectId,
+        attachType,
+        attachDesc || undefined,
       )
-      uploadedFileId = uploaded.id
-      await addTaskAttachment(token, selectedTaskId, {
-        fileId: uploaded.id,
-        attachmentType: attachType,
-        description: attachDesc,
-      })
       setSuccess('Đính kèm tệp thành công!')
       setShowAttachmentModal(false)
       setAttachFile(null)
@@ -383,9 +375,6 @@ export function TasksPage() {
       fetchTaskDetail(selectedTaskId)
       loadTaskList()
     } catch (err: unknown) {
-      if (uploadedFileId !== null) {
-        await deleteFile(token, uploadedFileId).catch(() => undefined)
-      }
       setError(err instanceof Error ? err.message : 'Lỗi khi đính kèm tệp')
     } finally {
       setUploadingAttach(false)
@@ -417,21 +406,14 @@ export function TasksPage() {
   const handleSubmitTask = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!canSubmitSelectedTask) return
-    const projectId = taskDetail?.projectId ?? selectedProjectId
-    if (!token || !selectedTaskId || !submitFile || !projectId) {
+    if (!token || !selectedTaskId || !submitFile) {
       setError('Vui lòng chọn tệp báo cáo kết quả')
       return
     }
     setSubmittingResult(true)
     setError('')
-    let uploadedFileId: number | null = null
     try {
-      const uploaded = await uploadFile(token, submitFile, 'PROJECT', 'Task Submission Result', projectId)
-      uploadedFileId = uploaded.id
-      await submitTask(token, selectedTaskId, {
-        fileId: uploaded.id,
-        note: submitNote,
-      })
+      await uploadTaskSubmission(token, selectedTaskId, submitFile, submitNote)
       setSuccess('Nộp kết quả nhiệm vụ thành công! Trạng thái đã chuyển sang Chờ duyệt.')
       setShowSubmitModal(false)
       setSubmitFile(null)
@@ -439,9 +421,6 @@ export function TasksPage() {
       fetchTaskDetail(selectedTaskId)
       loadTaskList()
     } catch (err: unknown) {
-      if (uploadedFileId !== null) {
-        await deleteFile(token, uploadedFileId).catch(() => undefined)
-      }
       setError(err instanceof Error ? err.message : 'Lỗi khi nộp bài')
     } finally {
       setSubmittingResult(false)

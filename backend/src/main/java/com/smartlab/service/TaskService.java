@@ -41,5 +41,9 @@ public interface TaskService {
 
     TaskAttachmentResponse addAttachment(Long taskId, AddAttachmentRequest request, String currentEmail);
 
+    Long requireAttachmentUploadProjectId(Long taskId, String currentEmail);
+
     TaskDetailResponse submitTask(Long taskId, SubmitTaskRequest request, String currentEmail);
+
+    Long requireSubmissionUploadProjectId(Long taskId, String currentEmail);
 }

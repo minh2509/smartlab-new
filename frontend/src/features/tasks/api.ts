@@ -81,10 +81,39 @@ export function addTaskAttachment(token: string, taskId: number, payload: AddAtt
   })
 }
 
+export function uploadTaskAttachment(
+  token: string,
+  taskId: number,
+  file: File,
+  attachmentType: AddAttachmentPayload['attachmentType'],
+  description?: string,
+) {
+  const body = new FormData()
+  body.append('file', file)
+  body.append('attachmentType', attachmentType)
+  if (description) body.append('description', description)
+  return apiClient<TaskAttachment>(`/tasks/${taskId}/attachments/upload`, {
+    method: 'POST',
+    token,
+    body,
+  })
+}
+
 export function submitTask(token: string, taskId: number, payload: SubmitTaskPayload) {
   return apiClient<TaskDetail>(`/tasks/${taskId}/submit`, {
     method: 'POST',
     token,
     body: JSON.stringify(payload),
+  })
+}
+
+export function uploadTaskSubmission(token: string, taskId: number, file: File, note?: string) {
+  const body = new FormData()
+  body.append('file', file)
+  if (note) body.append('note', note)
+  return apiClient<TaskDetail>(`/tasks/${taskId}/submit/upload`, {
+    method: 'POST',
+    token,
+    body,
   })
 }
