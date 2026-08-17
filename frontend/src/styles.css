@@ -484,6 +484,7 @@ select {
   gap: 10px;
   padding: 4px 2px 22px;
   border-bottom: 1px solid rgba(255, 255, 255, .12);
+  text-decoration: none;
 }
 
 .admin-brand .logo-txt b {

@@ -366,7 +366,7 @@ public class DocumentServiceImpl implements DocumentService {
                         actor.getId(),
                         DOCUMENT,
                         documentId,
-                        "/admin/projects?projectId=" + project.getId()
+                        "/admin/projects?projectId=" + project.getId() + "&tab=documents"
                 ),
                 Instant.now()
         );

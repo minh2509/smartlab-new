@@ -154,7 +154,7 @@ class DocumentServiceImplTest {
         verify(projectAccessService).requireRead(project, recipient.getEmail());
         verify(notificationService).notify(
                 eq(12L), eq("PROJECT_DOCUMENT_CREATED"), eq("A project document was added"),
-                eq(new NotificationRelated(11L, "DOCUMENT", 31L, "/admin/projects?projectId=7")), isA(java.time.Instant.class)
+                eq(new NotificationRelated(11L, "DOCUMENT", 31L, "/admin/projects?projectId=7&tab=documents")), isA(java.time.Instant.class)
         );
         verify(notificationService, never()).notify(eq(11L), any(), any(), any(), any());
     }
@@ -176,7 +176,7 @@ class DocumentServiceImplTest {
 
         verify(notificationService).notify(
                 eq(12L), eq("PROJECT_DOCUMENT_VERSION_CREATED"), eq("A new project document version was added"),
-                eq(new NotificationRelated(11L, "DOCUMENT", 31L, "/admin/projects?projectId=7")), isA(java.time.Instant.class)
+                eq(new NotificationRelated(11L, "DOCUMENT", 31L, "/admin/projects?projectId=7&tab=documents")), isA(java.time.Instant.class)
         );
         verify(notificationService, never()).notify(eq(13L), any(), any(), any(), any());
     }

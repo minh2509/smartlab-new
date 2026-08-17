@@ -127,6 +127,7 @@ export function ProjectManagementPage() {
     isAdmin || profile?.roles.includes('LEADER'),
   )
   const requestedProjectId = positiveInteger(searchParams.get('projectId'))
+  const requestedProjectTab = projectTab(searchParams.get('tab'))
   const selectedProject = useMemo(
     () => projects.find((project) => project.id === selectedId) ?? null,
     [projects, selectedId],
@@ -251,13 +252,13 @@ export function ProjectManagementPage() {
     projectDialogTriggerRef.current = null
     setSelectedId(requestedProject.id)
     setEditForm(toCoreForm(requestedProject))
-    setActiveTab('members')
+    setActiveTab(requestedProjectTab ?? 'members')
     setIsEditingCore(false)
     setLeadershipDirty(false)
     setResearchFieldsDirty(false)
     setDocumentsDirty(false)
     setDocumentsBusy(false)
-  }, [loading, projects, requestedProjectId, selectedId])
+  }, [loading, projects, requestedProjectId, requestedProjectTab, selectedId])
 
   useEffect(() => {
     setProjectPage(0)
@@ -288,10 +289,11 @@ export function ProjectManagementPage() {
   function finishClosingProjectDialog() {
     if (projectDialogRef.current?.open) projectDialogRef.current.close()
     setSelectedId(null)
-    if (searchParams.has('projectId')) {
+    if (searchParams.has('projectId') || searchParams.has('tab')) {
       setSearchParams((current) => {
         const next = new URLSearchParams(current)
         next.delete('projectId')
+        next.delete('tab')
         return next
       }, { replace: true })
     }
@@ -1068,6 +1070,10 @@ export function ProjectManagementPage() {
       ) : null}
     </div>
   )
+}
+
+function projectTab(value: string | null): ProjectTab | null {
+  return value !== null && PROJECT_TABS.includes(value as ProjectTab) ? value as ProjectTab : null
 }
 
 function MembershipHistoryPanel({ memberships }: { memberships: ProjectMembershipHistory[] }) {
