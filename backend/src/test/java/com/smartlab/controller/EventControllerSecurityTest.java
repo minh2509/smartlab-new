@@ -27,7 +27,7 @@ import java.util.List;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -63,7 +63,8 @@ class EventControllerSecurityTest {
     private UserSessionService userSessionService;
 
     @Test
-    void anonymousCannotReachAnyEventEndpoint() throws Exception {
+    void anonymousCanReadPublicEventsButCannotReachManagementEndpoints() throws Exception {
+        mockMvc.perform(get("/events/public")).andExpect(status().isOk());
         mockMvc.perform(get("/events")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/events/41")).andExpect(status().isUnauthorized());
         mockMvc.perform(post("/events").contentType(MediaType.APPLICATION_JSON).content(CREATE_BODY))
@@ -74,7 +75,8 @@ class EventControllerSecurityTest {
                 .andExpect(status().isUnauthorized());
         mockMvc.perform(delete("/events/41")).andExpect(status().isUnauthorized());
 
-        verifyNoInteractions(eventService);
+        verify(eventService).listPublic(null, null);
+        verifyNoMoreInteractions(eventService);
     }
 
     @Test

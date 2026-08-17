@@ -8,6 +8,7 @@ import com.smartlab.repo.DocumentRepository;
 import com.smartlab.repo.DocumentVersionRepository;
 import com.smartlab.repo.ProjectRepository;
 import com.smartlab.repo.StoredFileRepository;
+import com.smartlab.repo.TaskAttachmentRepository;
 import com.smartlab.repo.MemberProfileRepository;
 import com.smartlab.repo.UserRepository;
 import com.smartlab.service.FileService;
@@ -37,6 +38,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Instant;
 import java.util.Locale;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -71,6 +73,7 @@ public class FileServiceImpl implements FileService, PostContentFileService {
     private final ProjectAccessService projectAccessService;
     private final DocumentRepository documentRepository;
     private final DocumentVersionRepository documentVersionRepository;
+    private final TaskAttachmentRepository taskAttachmentRepository;
 
     @Value("${smartlab.file.max-size-bytes:26214400}")
     private long maxFileSizeBytes;
@@ -96,6 +99,9 @@ public class FileServiceImpl implements FileService, PostContentFileService {
         if (projectId == null || projectId <= 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A valid project id is required");
         }
+        var project = projectRepository.findByIdAndDeletedAtIsNull(projectId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Project not found"));
+        projectAccessService.requireRead(project, email);
         return uploadInternal(file, accessScope, description, email, projectId);
     }
 
@@ -159,6 +165,18 @@ public class FileServiceImpl implements FileService, PostContentFileService {
             }
             throw exception;
         }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<FileResponse> listOwn(String email) {
+        UserEntity owner = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found"));
+        return storedFileRepository
+                .findAllByOwnerUser_IdAndDeletedAtIsNullOrderByCreatedAtDescIdDesc(owner.getId())
+                .stream()
+                .map(this::toResponse)
+                .toList();
     }
 
     @Override
@@ -229,6 +247,9 @@ public class FileServiceImpl implements FileService, PostContentFileService {
         if (documentRepository.existsByCurrentFile_IdAndDeletedAtIsNull(id)
                 || documentVersionRepository.existsByFile_Id(id)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "File is retained by a document version");
+        }
+        if (taskAttachmentRepository.existsByFile_IdAndTask_DeletedAtIsNull(id)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "File is currently attached to an active task");
         }
         try {
             fileStorage.trash(entity.getStorageKey());

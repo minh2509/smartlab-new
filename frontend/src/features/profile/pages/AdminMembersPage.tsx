@@ -12,6 +12,7 @@ type AdminForm = {
   activeStatus: string
   isFeatured: boolean
   featuredOrder: string
+  joinedLabAt: string
   researchFieldIds: number[]
 }
 
@@ -22,6 +23,7 @@ const emptyForm: AdminForm = {
   activeStatus: 'ACTIVE',
   isFeatured: false,
   featuredOrder: '',
+  joinedLabAt: '',
   researchFieldIds: [],
 }
 
@@ -62,6 +64,7 @@ export function AdminMembersPage() {
       activeStatus: member.activeStatus,
       isFeatured: member.isFeatured,
       featuredOrder: member.featuredOrder === undefined ? '' : String(member.featuredOrder),
+      joinedLabAt: member.joinedLabAt ?? '',
       researchFieldIds: member.researchFields.map((field) => field.id),
     })
     setMessage(null)
@@ -92,6 +95,7 @@ export function AdminMembersPage() {
         token,
         body: JSON.stringify({
           ...form,
+          joinedLabAt: form.joinedLabAt || null,
           featuredOrder: form.featuredOrder ? Number(form.featuredOrder) : null,
           clearFeaturedOrder: !form.featuredOrder,
         }),
@@ -126,6 +130,7 @@ export function AdminMembersPage() {
             <label className="field"><span>Email công khai</span><input className="input" type="email" value={form.publicEmail} onChange={(event) => setForm({ ...form, publicEmail: event.target.value })} /></label>
             <label className="field"><span>Số điện thoại</span><input className="input" type="tel" inputMode="tel" placeholder="0901234567" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></label>
             <label className="field"><span>Trạng thái</span><select className="select" value={form.activeStatus} onChange={(event) => setForm({ ...form, activeStatus: event.target.value })}><option value="ACTIVE">ACTIVE</option><option value="INACTIVE">INACTIVE</option><option value="ALUMNI">ALUMNI</option></select></label>
+            <label className="field"><span>Ngày tham gia Lab</span><input className="input" type="date" max={new Date().toISOString().slice(0, 10)} value={form.joinedLabAt} onChange={(event) => setForm({ ...form, joinedLabAt: event.target.value })} /></label>
             <label className="field"><span>Giới thiệu</span><textarea className="textarea" rows={5} value={form.bio} onChange={(event) => setForm({ ...form, bio: event.target.value })} /></label>
             <label className="field-option selected"><input type="checkbox" checked={form.isFeatured} onChange={(event) => setForm({ ...form, isFeatured: event.target.checked })} /><span><strong>Thành viên nổi bật</strong><small>Hiển thị ưu tiên trên public page.</small></span></label>
             <label className="field"><span>Thứ tự nổi bật</span><input className="input" type="number" min="0" value={form.featuredOrder} onChange={(event) => setForm({ ...form, featuredOrder: event.target.value })} /></label>

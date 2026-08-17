@@ -68,16 +68,7 @@ export function App() {
             />
           }
         />
-        <Route
-          path="/bai-viet"
-          element={
-            <StaticPublicPage
-              kind="blog"
-              title="Bài viết"
-              description="Thông báo, kết quả nghiên cứu, bài viết học thuật và chia sẻ kinh nghiệm từ các nhóm dự án."
-            />
-          }
-        />
+        <Route path="/bai-viet" element={<PostFeedPage />} />
         <Route path="/blog" element={<Navigate to="/bai-viet" replace />} />
         <Route path="/posts" element={<PostFeedPage />} />
         <Route path="/my-posts" element={<MyPostsPage />} />
@@ -148,7 +139,7 @@ export function App() {
       </Route>
 
       <Route element={<AdminLayout />}>
-        <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/profile" element={<RequirePermissions allOf={['PROFILE_READ']}><ProfilePage /></RequirePermissions>} />
         <Route path="/my-evaluations" element={<MyEvaluationsPage />} />
         <Route path="/files" element={<RequirePermissions allOf={['FILE_UPLOAD']}><FilesPage /></RequirePermissions>} />
         <Route path="/admin/projects" element={<ProjectManagementPage />} />

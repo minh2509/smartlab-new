@@ -14,6 +14,7 @@ import com.smartlab.repo.ResearchFieldRepository;
 import com.smartlab.repo.StoredFileRepository;
 import com.smartlab.repo.UserRepository;
 import com.smartlab.service.MemberProfileService;
+import com.smartlab.service.PermissionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -33,6 +34,7 @@ public class MemberProfileServiceImpl implements MemberProfileService {
     private final MemberProfileRepository memberProfileRepository;
     private final StoredFileRepository storedFileRepository;
     private final ResearchFieldRepository researchFieldRepository;
+    private final PermissionService permissionService;
 
     @Override
     @Transactional
@@ -99,6 +101,9 @@ public class MemberProfileServiceImpl implements MemberProfileService {
         if (request.getIsFeatured() != null) {
             profile.setIsFeatured(request.getIsFeatured());
         }
+        if (request.getJoinedLabAt() != null) {
+            profile.setJoinedLabAt(request.getJoinedLabAt());
+        }
         if (Boolean.TRUE.equals(request.getClearFeaturedOrder())) {
             profile.setFeaturedOrder(null);
         } else if (request.getFeaturedOrder() != null && request.getFeaturedOrder() < 0) {
@@ -130,6 +135,11 @@ public class MemberProfileServiceImpl implements MemberProfileService {
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Avatar file not found"));
             if (avatar.getMimeType() == null || !avatar.getMimeType().toLowerCase(Locale.ROOT).startsWith("image/")) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Avatar must be an image");
+            }
+            boolean changingAvatar = profile.getAvatarFile() == null
+                    || !Objects.equals(profile.getAvatarFile().getId(), avatar.getId());
+            if (changingAvatar && !"PUBLIC".equalsIgnoreCase(avatar.getAccessScope())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Avatar file must use PUBLIC access scope");
             }
             boolean owned = avatar.getOwnerUser() != null && Objects.equals(avatar.getOwnerUser().getId(), user.getId());
             if (!owned && !admin) {
@@ -175,6 +185,8 @@ public class MemberProfileServiceImpl implements MemberProfileService {
                 .featuredOrder(profile.getFeaturedOrder())
                 .avatar(toFileResponse(profile.getAvatarFile()))
                 .researchFields(profile.getResearchFields().stream().map(this::toResearchFieldResponse).toList())
+                .roles(privateView ? permissionService.getRoleCodes(user) : null)
+                .permissions(privateView ? permissionService.getEffectivePermissionCodes(user) : null)
                 .build();
     }
 

@@ -1,8 +1,8 @@
 import { Check, Download, FileText, FolderOpen, Trash2, Upload, X } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../../auth/authContext'
 import type { FileResponse } from '../../../shared/types/api'
-import { D2_UPLOAD_ACCEPT, deleteFile, downloadFile, uploadFile } from '../api'
+import { D2_UPLOAD_ACCEPT, deleteFile, downloadFile, listOwnFiles, uploadFile } from '../api'
 import type { FileAccessScope } from '../api'
 
 const MAX_FILE_SIZE = 25 * 1024 * 1024
@@ -18,7 +18,8 @@ export function FilesPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [accessScope, setAccessScope] = useState<FileAccessScope>('PRIVATE')
   const [description, setDescription] = useState('')
-  const [recentFiles, setRecentFiles] = useState<FileResponse[]>([])
+  const [uploadedFiles, setUploadedFiles] = useState<FileResponse[]>([])
+  const [loadingFiles, setLoadingFiles] = useState(true)
   const [dragging, setDragging] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [busyFileId, setBusyFileId] = useState<number | null>(null)
@@ -26,6 +27,29 @@ export function FilesPage() {
   const [error, setError] = useState<string | null>(null)
 
   const canDelete = profile?.permissions.includes('FILE_DELETE') ?? false
+
+  useEffect(() => {
+    let cancelled = false
+    if (!token) {
+      setUploadedFiles([])
+      setLoadingFiles(false)
+      return
+    }
+
+    setLoadingFiles(true)
+    void listOwnFiles(token)
+      .then((files) => {
+        if (!cancelled) setUploadedFiles(files)
+      })
+      .catch((reason: unknown) => {
+        if (!cancelled) setError(reason instanceof Error ? reason.message : 'Không thể tải danh sách file.')
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingFiles(false)
+      })
+
+    return () => { cancelled = true }
+  }, [token])
 
   const chooseFile = (file?: File) => {
     setMessage(null)
@@ -59,7 +83,7 @@ export function FilesPage() {
     setError(null)
     try {
       const uploaded = await uploadFile(token, selectedFile, accessScope, description)
-      setRecentFiles((current) => [uploaded, ...current.filter((file) => file.id !== uploaded.id)])
+      setUploadedFiles((current) => [uploaded, ...current.filter((file) => file.id !== uploaded.id)])
       setSelectedFile(null)
       setDescription('')
       if (inputRef.current) inputRef.current.value = ''
@@ -97,7 +121,7 @@ export function FilesPage() {
     setError(null)
     try {
       await deleteFile(token, file.id)
-      setRecentFiles((current) => current.filter((item) => item.id !== file.id))
+      setUploadedFiles((current) => current.filter((item) => item.id !== file.id))
       setMessage(`Đã chuyển “${file.originalName}” vào thùng rác.`)
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : 'Không thể xóa file.')
@@ -187,12 +211,12 @@ export function FilesPage() {
 
         <section className="panel">
           <div className="panel-head">
-            <div><h2>Vừa tải lên</h2><p>Các file được tải lên trong phiên làm việc hiện tại.</p></div>
+            <div><h2>File đã tải lên</h2><p>Tất cả file bạn đã tải lên Google Drive của Smart Lab.</p></div>
             <FolderOpen size={20} />
           </div>
 
-          {recentFiles.length ? <div className="uploaded-file-list">
-            {recentFiles.map((file) => (
+          {loadingFiles ? <div className="empty tight"><FolderOpen /><strong>Đang tải danh sách file...</strong></div> : uploadedFiles.length ? <div className="uploaded-file-list">
+            {uploadedFiles.map((file) => (
               <article className="uploaded-file-row" key={file.id}>
                 <span className="uploaded-file-icon"><FileText /></span>
                 <div className="uploaded-file-info">
@@ -206,7 +230,7 @@ export function FilesPage() {
                 </div>
               </article>
             ))}
-          </div> : <div className="empty tight"><FolderOpen /><strong>Chưa có file trong phiên này</strong><span>File tải lên thành công sẽ xuất hiện tại đây.</span></div>}
+          </div> : <div className="empty tight"><FolderOpen /><strong>Chưa có file đã tải lên</strong><span>File tải lên thành công sẽ xuất hiện tại đây.</span></div>}
         </section>
       </div>
     </div>

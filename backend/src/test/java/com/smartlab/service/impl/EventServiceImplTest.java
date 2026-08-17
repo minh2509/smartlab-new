@@ -39,6 +39,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -63,6 +64,26 @@ class EventServiceImplTest {
 
     @InjectMocks
     private EventServiceImpl service;
+
+    @Test
+    void publicListUsesPublicOnlyQueryWithoutAuthenticationOrMembershipChecks() {
+        EventEntity publicEvent = labEvent(2L, EventVisibility.PUBLIC, 21L);
+        when(eventRepository.findPublicEvents(
+                eq(EventVisibility.PUBLIC),
+                eq(EventStatus.SCHEDULED),
+                eq(true),
+                any(Instant.class)
+        )).thenReturn(List.of(publicEvent));
+        when(userRepository.findAllById(any()))
+                .thenReturn(List.of(user(21L, "creator-user", "creator@test")));
+
+        List<EventResponse> result = service.listPublic(EventStatus.SCHEDULED, true);
+
+        assertThat(result).extracting(EventResponse::getId).containsExactly(2L);
+        assertThat(result.getFirst().getVisibility()).isEqualTo(EventVisibility.PUBLIC);
+        assertThat(result.getFirst().getCreator().getUserId()).isEqualTo("creator-user");
+        verifyNoInteractions(permissionService, projectMemberRepository);
+    }
 
     @Test
     void regularListIncludesPublicLabAndOnlyActiveMemberProjectsWhilePreservingRepositoryOrder() {

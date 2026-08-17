@@ -120,6 +120,32 @@ class TaskServiceImplTest {
     }
 
     @Test
+    void addAttachmentRejectsAPrivateFile() {
+        StoredFileEntity privateFile = activeFile(FILE_ID, user);
+        privateFile.setAccessScope("PRIVATE");
+        when(projectMemberRepository.existsByProject_IdAndUser_IdAndStatus(
+                PROJECT_ID, user.getId(), ProjectMemberStatus.ACTIVE)).thenReturn(true);
+        when(storedFileRepository.findById(FILE_ID)).thenReturn(Optional.of(privateFile));
+
+        assertStatus(() -> service.addAttachment(TASK_ID, attachmentRequest(FILE_ID), EMAIL), HttpStatus.BAD_REQUEST);
+
+        verify(taskAttachmentRepository, never()).save(any());
+    }
+
+    @Test
+    void addAttachmentRejectsAFileFromAnotherProject() {
+        StoredFileEntity otherProjectFile = activeFile(FILE_ID, user);
+        otherProjectFile.setProjectId(99L);
+        when(projectMemberRepository.existsByProject_IdAndUser_IdAndStatus(
+                PROJECT_ID, user.getId(), ProjectMemberStatus.ACTIVE)).thenReturn(true);
+        when(storedFileRepository.findById(FILE_ID)).thenReturn(Optional.of(otherProjectFile));
+
+        assertStatus(() -> service.addAttachment(TASK_ID, attachmentRequest(FILE_ID), EMAIL), HttpStatus.BAD_REQUEST);
+
+        verify(taskAttachmentRepository, never()).save(any());
+    }
+
+    @Test
     void addAttachmentRejectsNonMembersBeforeLookingUpTheFile() {
         when(projectMemberRepository.existsByProject_IdAndUser_IdAndStatus(
                 PROJECT_ID, user.getId(), ProjectMemberStatus.ACTIVE)).thenReturn(false);
@@ -202,7 +228,7 @@ class TaskServiceImplTest {
         return StoredFileEntity.builder()
                 .id(id).ownerUser(owner).storageProvider("local").storageKey("files/" + id)
                 .originalName("result.pdf").mimeType("application/pdf").sizeBytes(100L)
-                .accessScope("PRIVATE").build();
+                .projectId(PROJECT_ID).accessScope("PROJECT").build();
     }
 
     private static UserEntity user(long id, String email) {

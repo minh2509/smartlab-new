@@ -8,6 +8,11 @@ import com.smartlab.enums.EventStatus;
 import java.util.List;
 
 public interface EventService {
+    List<EventResponse> listPublic(
+            EventStatus status,
+            Boolean upcoming
+    );
+
     List<EventResponse> list(
             String authenticatedEmail,
             Long projectId,

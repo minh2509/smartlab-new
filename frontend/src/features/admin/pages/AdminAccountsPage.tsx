@@ -69,7 +69,7 @@ export function AdminAccountsPage() {
     if (result.totalPages > 0 && targetPage >= result.totalPages) {
       setPage(result.totalPages - 1)
     }
-  }, [clearAuth, navigate, page, token])
+  }, [page, token])
 
   const loadCatalogs = useCallback(async () => {
     if (!token) return
@@ -94,7 +94,7 @@ export function AdminAccountsPage() {
     } finally {
       setLoading(false)
     }
-  }, [page, token])
+  }, [clearAuth, navigate, page, token])
 
   useEffect(() => {
     void loadCatalogs()

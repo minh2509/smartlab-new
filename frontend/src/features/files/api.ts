@@ -1,7 +1,11 @@
 import { apiClient } from '../../lib/apiClient'
 import type { FileResponse } from '../../shared/types/api'
 
-export type FileAccessScope = 'PRIVATE' | 'LAB' | 'PUBLIC'
+export type FileAccessScope = 'PRIVATE' | 'LAB' | 'PROJECT' | 'PUBLIC'
+
+export function listOwnFiles(token: string) {
+  return apiClient<FileResponse[]>('/me/files', { token })
+}
 
 export const D2_UPLOAD_ACCEPT = [
   'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf', 'text/plain', 'text/csv',
@@ -16,11 +20,13 @@ export function uploadFile(
   file: File,
   accessScope: FileAccessScope,
   description: string,
+  projectId?: number,
 ) {
   const body = new FormData()
   body.append('file', file)
   body.append('accessScope', accessScope)
   if (description.trim()) body.append('description', description.trim())
+  if (projectId !== undefined) body.append('projectId', String(projectId))
 
   return apiClient<FileResponse>('/files/upload', {
     method: 'POST',

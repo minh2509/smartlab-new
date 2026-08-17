@@ -8,6 +8,7 @@ import com.smartlab.repo.DocumentVersionRepository;
 import com.smartlab.repo.MemberProfileRepository;
 import com.smartlab.repo.ProjectRepository;
 import com.smartlab.repo.StoredFileRepository;
+import com.smartlab.repo.TaskAttachmentRepository;
 import com.smartlab.repo.UserRepository;
 import com.smartlab.service.ProjectAccessService;
 import com.smartlab.storage.FileStorage;
@@ -48,6 +49,7 @@ class FileServiceImplProjectAccessTest {
     @Mock private ProjectAccessService projectAccessService;
     @Mock private DocumentRepository documentRepository;
     @Mock private DocumentVersionRepository documentVersionRepository;
+    @Mock private TaskAttachmentRepository taskAttachmentRepository;
     @InjectMocks private FileServiceImpl service;
 
     @Test
@@ -89,6 +91,23 @@ class FileServiceImplProjectAccessTest {
     }
 
     @Test
+    void projectFileUploadRejectsMemberBeforeWritingStorageWhenProjectReadIsDenied() {
+        ProjectEntity project = org.mockito.Mockito.mock(ProjectEntity.class);
+        MockMultipartFile upload = new MockMultipartFile(
+                "file", "document.txt", "text/plain", "document".getBytes(StandardCharsets.UTF_8)
+        );
+        when(projectRepository.findByIdAndDeletedAtIsNull(7L)).thenReturn(Optional.of(project));
+        when(projectAccessService.requireRead(project, EMAIL))
+                .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Project not found: 7"));
+
+        assertThatThrownBy(() -> service.uploadForProject(upload, "PROJECT", null, EMAIL, 7L))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
+
+        verify(fileStorage, never()).upload(any(), any(), any(), any());
+    }
+
+    @Test
     void regularFileDeleteCannotBreakRetainedDocumentVersions() {
         StoredFileEntity file = file(22L, "PRIVATE", user());
         Authentication authentication = authentication();
@@ -105,12 +124,15 @@ class FileServiceImplProjectAccessTest {
     @Test
     void successfulFileRowInsertRegistersCloudCleanupForOuterTransactionRollback() throws Exception {
         UserEntity owner = user();
+        ProjectEntity project = org.mockito.Mockito.mock(ProjectEntity.class);
         MockMultipartFile upload = new MockMultipartFile(
                 "file", "document.txt", "text/plain", "document".getBytes(StandardCharsets.UTF_8)
         );
         ReflectionTestUtils.setField(service, "maxFileSizeBytes", 1024L);
         ReflectionTestUtils.setField(service, "storageProvider", "google-drive");
         when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(owner));
+        when(projectRepository.findByIdAndDeletedAtIsNull(7L)).thenReturn(Optional.of(project));
+        when(projectAccessService.requireRead(project, EMAIL)).thenReturn(owner);
         when(fileStorage.upload("document.txt", "text/plain", upload.getBytes(), null))
                 .thenReturn(new FileStorage.StoredFile("drive-key", null));
         when(storedFileRepository.saveAndFlush(any(StoredFileEntity.class)))

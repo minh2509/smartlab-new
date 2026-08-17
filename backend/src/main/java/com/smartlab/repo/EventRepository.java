@@ -2,6 +2,7 @@ package com.smartlab.repo;
 
 import com.smartlab.entity.EventEntity;
 import com.smartlab.enums.EventStatus;
+import com.smartlab.enums.EventVisibility;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -15,6 +16,29 @@ import java.util.Optional;
 
 @Repository
 public interface EventRepository extends JpaRepository<EventEntity, Long> {
+    @Query("""
+            select e
+            from EventEntity e
+            where e.deletedAt is null
+              and e.visibility = :visibility
+              and (:status is null or e.status = :status)
+              and (
+                :upcoming is null
+                or (:upcoming = true and e.startAt >= :now)
+                or (:upcoming = false and e.startAt < :now)
+              )
+            order by
+              case when e.startAt >= :now then 0 else 1 end,
+              e.startAt,
+              e.id
+            """)
+    List<EventEntity> findPublicEvents(
+            @Param("visibility") EventVisibility visibility,
+            @Param("status") EventStatus status,
+            @Param("upcoming") Boolean upcoming,
+            @Param("now") Instant now
+    );
+
     @Query("""
             select e
             from EventEntity e

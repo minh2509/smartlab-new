@@ -3,6 +3,7 @@ import {
   Award,
   CheckCircle2,
   CheckSquare,
+  Download,
   Filter,
   FolderKanban,
   LayoutGrid,
@@ -18,7 +19,7 @@ import {
 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '../../auth/authContext'
-import { uploadFile } from '../../files/api'
+import { deleteFile, downloadFile, uploadFile } from '../../files/api'
 import { listProjectMembers, listProjects } from '../../projects/api'
 import type { Project, ProjectMember } from '../../projects/types'
 import {
@@ -96,6 +97,7 @@ export function TasksPage() {
   const [attachType, setAttachType] = useState<AttachmentType>('INPUT')
   const [attachDesc, setAttachDesc] = useState('')
   const [uploadingAttach, setUploadingAttach] = useState(false)
+  const [downloadingFileId, setDownloadingFileId] = useState<number | null>(null)
 
   // Submit task modal
   const [showSubmitModal, setShowSubmitModal] = useState(false)
@@ -131,8 +133,8 @@ export function TasksPage() {
     listProjects(token)
       .then((res) => {
         setProjects(res)
-        if (res.length > 0 && !selectedProjectId) {
-          setSelectedProjectId(res[0].id)
+        if (res.length > 0) {
+          setSelectedProjectId((current) => current || res[0].id)
         }
       })
       .catch((err: Error) => setError(err.message))
@@ -331,14 +333,23 @@ export function TasksPage() {
   // Handle Attach File
   const handleAttachFile = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!token || !selectedTaskId || !attachFile) {
+    const projectId = taskDetail?.projectId ?? selectedProjectId
+    if (!token || !selectedTaskId || !attachFile || !projectId) {
       setError('Vui lòng chọn tệp')
       return
     }
     setUploadingAttach(true)
     setError('')
+    let uploadedFileId: number | null = null
     try {
-      const uploaded = await uploadFile(token, attachFile, 'PRIVATE', attachDesc || 'Task Attachment')
+      const uploaded = await uploadFile(
+        token,
+        attachFile,
+        'PROJECT',
+        attachDesc || 'Task Attachment',
+        projectId,
+      )
+      uploadedFileId = uploaded.id
       await addTaskAttachment(token, selectedTaskId, {
         fileId: uploaded.id,
         attachmentType: attachType,
@@ -351,23 +362,50 @@ export function TasksPage() {
       fetchTaskDetail(selectedTaskId)
       loadTaskList()
     } catch (err: unknown) {
+      if (uploadedFileId !== null) {
+        await deleteFile(token, uploadedFileId).catch(() => undefined)
+      }
       setError(err instanceof Error ? err.message : 'Lỗi khi đính kèm tệp')
     } finally {
       setUploadingAttach(false)
     }
   }
 
+  const handleDownloadAttachment = async (fileId: number, originalName: string) => {
+    if (!token) return
+    setDownloadingFileId(fileId)
+    setError('')
+    try {
+      const blob = await downloadFile(token, fileId)
+      const objectUrl = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = objectUrl
+      link.download = originalName
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Không thể tải tệp đính kèm')
+    } finally {
+      setDownloadingFileId(null)
+    }
+  }
+
   // Handle Submit Task Result
   const handleSubmitTask = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!token || !selectedTaskId || !submitFile) {
+    const projectId = taskDetail?.projectId ?? selectedProjectId
+    if (!token || !selectedTaskId || !submitFile || !projectId) {
       setError('Vui lòng chọn tệp báo cáo kết quả')
       return
     }
     setSubmittingResult(true)
     setError('')
+    let uploadedFileId: number | null = null
     try {
-      const uploaded = await uploadFile(token, submitFile, 'PRIVATE', 'Task Submission Result')
+      const uploaded = await uploadFile(token, submitFile, 'PROJECT', 'Task Submission Result', projectId)
+      uploadedFileId = uploaded.id
       await submitTask(token, selectedTaskId, {
         fileId: uploaded.id,
         note: submitNote,
@@ -379,6 +417,9 @@ export function TasksPage() {
       fetchTaskDetail(selectedTaskId)
       loadTaskList()
     } catch (err: unknown) {
+      if (uploadedFileId !== null) {
+        await deleteFile(token, uploadedFileId).catch(() => undefined)
+      }
       setError(err instanceof Error ? err.message : 'Lỗi khi nộp bài')
     } finally {
       setSubmittingResult(false)
@@ -823,9 +864,21 @@ export function TasksPage() {
                             fontSize: 12,
                           }}
                         >
-                          <div style={{ fontWeight: 600, display: 'flex', justifyContent: 'space-between' }}>
+                          <div style={{ fontWeight: 600, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                             <span>{att.originalName}</span>
-                            <span className="badge sm secondary">{att.attachmentType}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <button
+                                type="button"
+                                className="btn ghost sm"
+                                disabled={downloadingFileId === att.fileId}
+                                onClick={() => handleDownloadAttachment(att.fileId, att.originalName)}
+                                title="Tải tệp đính kèm"
+                              >
+                                <Download size={12} />
+                                {downloadingFileId === att.fileId ? 'Đang tải...' : 'Tải tệp'}
+                              </button>
+                              <span className="badge sm secondary">{att.attachmentType}</span>
+                            </div>
                           </div>
                           {att.description && <div style={{ color: 'var(--text-2)', marginTop: 2 }}>{att.description}</div>}
                         </div>

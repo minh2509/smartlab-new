@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { apiClient } from '../../lib/apiClient'
 import type { AccountResponse, AuthResponse } from '../../shared/types/api'
@@ -11,10 +11,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY))
   const [sessionId, setSessionId] = useState<string | null>(() => localStorage.getItem(SESSION_KEY))
   const [profile, setProfile] = useState<AccountResponse | null>(null)
+  const profileRequestRef = useRef<Promise<AccountResponse | null> | null>(null)
 
   const isAuthenticated = Boolean(token)
 
   const persistAuth = useCallback((result: AuthResponse) => {
+    profileRequestRef.current = null
     localStorage.setItem(TOKEN_KEY, result.token)
     localStorage.setItem(SESSION_KEY, result.sessionId)
     setToken(result.token)
@@ -22,6 +24,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const clearAuth = useCallback(() => {
+    profileRequestRef.current = null
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(SESSION_KEY)
     setToken(null)
@@ -29,16 +32,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(null)
   }, [])
 
-  const refreshProfile = useCallback(async () => {
-    if (!token) return null
-    try {
-      const data = await apiClient<AccountResponse>('/profile', { token })
-      setProfile(data)
-      return data
-    } catch (error) {
-      clearAuth()
-      throw error
-    }
+  const refreshProfile = useCallback(() => {
+    if (!token) return Promise.resolve(null)
+    if (profileRequestRef.current) return profileRequestRef.current
+
+    const request = apiClient<AccountResponse>('/profile', { token })
+      .then((data) => {
+        setProfile(data)
+        return data
+      })
+      .catch((error: unknown) => {
+        clearAuth()
+        throw error
+      })
+      .finally(() => {
+        if (profileRequestRef.current === request) profileRequestRef.current = null
+      })
+    profileRequestRef.current = request
+    return request
   }, [clearAuth, token])
 
   const login = useCallback(

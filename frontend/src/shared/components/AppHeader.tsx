@@ -68,7 +68,7 @@ export function AppHeader() {
               <NavLink
                 end
                 className={({ isActive }) => `nav-private-link${isActive ? ' is-active' : ''}`}
-                to="/posts"
+                to="/bai-viet"
               >
                 <Newspaper size={15} aria-hidden="true" />
                 Bảng tin
@@ -95,7 +95,7 @@ export function AppHeader() {
               <NavLink
                 end
                 className={({ isActive }) => `nav-private-link nav-public-feed-link${isActive ? ' is-active' : ''}`}
-                to="/posts"
+                to="/bai-viet"
               >
                 <Newspaper size={15} aria-hidden="true" />
                 Bảng tin
