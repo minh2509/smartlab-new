@@ -25,6 +25,9 @@ public interface EvaluationRepository extends JpaRepository<EvaluationEntity, Lo
 
     @Query("""
             select e from EvaluationEntity e
+            join fetch e.evaluator
+            join fetch e.evaluatedUser
+            join fetch e.project
             left join fetch e.scores s
             left join fetch s.criterion
             where e.id = :id

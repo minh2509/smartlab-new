@@ -8,11 +8,13 @@ import com.smartlab.entity.ProjectEntity;
 import com.smartlab.entity.UserEntity;
 import com.smartlab.enums.ProjectMemberStatus;
 import com.smartlab.enums.ProjectRole;
+import com.smartlab.dto.response.EvaluationResponse;
 import com.smartlab.repo.EvaluationCriterionRepository;
 import com.smartlab.repo.EvaluationRepository;
 import com.smartlab.repo.ProjectMemberRepository;
 import com.smartlab.repo.ProjectRepository;
 import com.smartlab.repo.UserRepository;
+import com.smartlab.service.NotificationService;
 import com.smartlab.service.PermissionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -47,6 +49,7 @@ class EvaluationServiceImplTest {
     @Mock private ProjectMemberRepository projectMemberRepository;
     @Mock private UserRepository userRepository;
     @Mock private PermissionService permissionService;
+    @Mock private NotificationService notificationService;
     @Mock private ProjectEntity project;
 
     @InjectMocks private EvaluationServiceImpl service;
@@ -59,7 +62,7 @@ class EvaluationServiceImplTest {
         evaluator = user(1L, EMAIL);
         evaluatedUser = user(2L, "member@smartlab.test");
         when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(evaluator));
-        when(permissionService.getRoleCodes(evaluator)).thenReturn(Set.of("ADMIN"));
+        org.mockito.Mockito.lenient().when(permissionService.getRoleCodes(evaluator)).thenReturn(Set.of("ADMIN"));
     }
 
     @Test
@@ -120,6 +123,73 @@ class EvaluationServiceImplTest {
         assertStatus(() -> service.update(4L, new UpdateEvaluationRequest(), EMAIL), HttpStatus.FORBIDDEN);
 
         verify(criterionRepository, never()).findByIdAndProject_Id(any(), any());
+    }
+
+    @Test
+    void createSendsNotificationToEvaluatedUser() {
+        stubCreatePrerequisites();
+        allowEvaluatedMember();
+        EvaluationCriterionEntity criterion = EvaluationCriterionEntity.create(
+                project, "Quality", null, BigDecimal.TEN, 1, evaluator);
+        when(project.getName()).thenReturn("Smart Lab");
+        when(criterionRepository.findByIdAndProject_Id(3L, PROJECT_ID)).thenReturn(Optional.of(criterion));
+
+        service.create(PROJECT_ID, createRequest(3L, BigDecimal.ONE), EMAIL);
+
+        verify(evaluationRepository).save(any(EvaluationEntity.class));
+        verify(notificationService).notify(
+                eq(evaluatedUser.getId()),
+                eq("EVALUATION_CREATED"),
+                eq("Bạn nhận được đánh giá mới từ Leader trong dự án Smart Lab"),
+                any(),
+                any()
+        );
+    }
+
+    @Test
+    void updateSendsNotificationToEvaluatedUserWhenModified() {
+        EvaluationEntity evaluation = EvaluationEntity.create(project, evaluator, evaluatedUser, "Initial note");
+        when(project.getId()).thenReturn(PROJECT_ID);
+        when(project.getName()).thenReturn("Smart Lab");
+        when(evaluationRepository.findByIdWithScores(4L)).thenReturn(Optional.of(evaluation));
+
+        UpdateEvaluationRequest request = new UpdateEvaluationRequest();
+        request.setNote("Updated note");
+
+        service.update(4L, request, EMAIL);
+
+        assertThat(evaluation.getNote()).isEqualTo("Updated note");
+        verify(notificationService).notify(
+                eq(evaluatedUser.getId()),
+                eq("EVALUATION_UPDATED"),
+                eq("Đánh giá của bạn trong dự án Smart Lab đã được cập nhật"),
+                any(),
+                any()
+        );
+    }
+
+    @Test
+    void updateDoesNotSendNotificationWhenNothingChanged() {
+        EvaluationEntity evaluation = EvaluationEntity.create(project, evaluator, evaluatedUser, "Initial note");
+        when(project.getId()).thenReturn(PROJECT_ID);
+        when(evaluationRepository.findByIdWithScores(4L)).thenReturn(Optional.of(evaluation));
+
+        UpdateEvaluationRequest request = new UpdateEvaluationRequest();
+
+        service.update(4L, request, EMAIL);
+
+        verify(notificationService, never()).notify(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void getMyEvaluationsReturnsOnlyCurrentUsersEvaluations() {
+        EvaluationEntity evaluation = EvaluationEntity.create(project, evaluator, evaluator, "My note");
+        when(evaluationRepository.findAllByEvaluatedUserId(evaluator.getId())).thenReturn(List.of(evaluation));
+
+        List<EvaluationResponse> responses = service.getMyEvaluations(EMAIL);
+
+        assertThat(responses).hasSize(1);
+        verify(evaluationRepository).findAllByEvaluatedUserId(evaluator.getId());
     }
 
     private void allowEvaluatedMember() {

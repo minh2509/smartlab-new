@@ -1,11 +1,16 @@
 package com.smartlab.service.impl;
 
+import com.smartlab.dto.request.AddAssigneesRequest;
 import com.smartlab.dto.request.AddAttachmentRequest;
+import com.smartlab.dto.request.CreateTaskRequest;
 import com.smartlab.dto.request.SubmitTaskRequest;
+import com.smartlab.dto.request.UpdateTaskRequest;
+import com.smartlab.dto.response.TaskAssigneeResponse;
 import com.smartlab.dto.response.TaskAttachmentResponse;
 import com.smartlab.dto.response.TaskDetailResponse;
 import com.smartlab.entity.ProjectEntity;
 import com.smartlab.entity.StoredFileEntity;
+import com.smartlab.entity.TaskAssigneeEntity;
 import com.smartlab.entity.TaskEntity;
 import com.smartlab.entity.UserEntity;
 import com.smartlab.enums.AttachmentType;
@@ -20,6 +25,7 @@ import com.smartlab.repo.TaskAssigneeRepository;
 import com.smartlab.repo.TaskAttachmentRepository;
 import com.smartlab.repo.TaskRepository;
 import com.smartlab.repo.UserRepository;
+import com.smartlab.service.NotificationService;
 import com.smartlab.service.PermissionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -39,6 +45,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -59,6 +66,7 @@ class TaskServiceImplTest {
     @Mock private UserRepository userRepository;
     @Mock private StoredFileRepository storedFileRepository;
     @Mock private PermissionService permissionService;
+    @Mock private NotificationService notificationService;
     @Mock private ProjectEntity project;
 
     @InjectMocks private TaskServiceImpl service;
@@ -282,6 +290,79 @@ class TaskServiceImplTest {
         when(permissionService.getEffectivePermissionCodes(user)).thenReturn(Set.of("TASK_MANAGE"));
 
         assertThat(service.requireSubmissionUploadProjectId(TASK_ID, EMAIL)).isEqualTo(PROJECT_ID);
+    }
+
+    @Test
+    void addAssigneesSendsNotificationToNewAssignee() {
+        UserEntity member = user(2L, "assignee@smartlab.test");
+        when(permissionService.getRoleCodes(user)).thenReturn(Set.of("ADMIN"));
+        when(taskAssigneeRepository.existsById_TaskIdAndId_UserId(TASK_ID, 2L)).thenReturn(false);
+        when(projectMemberRepository.existsByProject_IdAndUser_IdAndStatus(
+                PROJECT_ID, 2L, ProjectMemberStatus.ACTIVE)).thenReturn(true);
+        when(userRepository.findById(2L)).thenReturn(Optional.of(member));
+        when(taskAssigneeRepository.findAllByTask_Id(TASK_ID)).thenReturn(List.of(TaskAssigneeEntity.of(task, member)));
+
+        AddAssigneesRequest request = new AddAssigneesRequest();
+        request.setUserIds(List.of(2L));
+
+        List<TaskAssigneeResponse> response = service.addAssignees(TASK_ID, request, EMAIL);
+
+        assertThat(response).hasSize(1);
+        verify(taskAssigneeRepository).save(any(TaskAssigneeEntity.class));
+        verify(notificationService).notify(
+                eq(2L),
+                eq("TASK_ASSIGNED"),
+                eq("Bạn được giao nhiệm vụ: " + task.getTitle()),
+                any(),
+                any()
+        );
+    }
+
+    @Test
+    void addAssigneesSkipsExistingAssigneeAndDoesNotSendDuplicateNotification() {
+        when(permissionService.getRoleCodes(user)).thenReturn(Set.of("ADMIN"));
+        when(taskAssigneeRepository.existsById_TaskIdAndId_UserId(TASK_ID, 2L)).thenReturn(true);
+        when(taskAssigneeRepository.findAllByTask_Id(TASK_ID)).thenReturn(List.of());
+
+        AddAssigneesRequest request = new AddAssigneesRequest();
+        request.setUserIds(List.of(2L));
+
+        service.addAssignees(TASK_ID, request, EMAIL);
+
+        verify(taskAssigneeRepository, never()).save(any());
+        verify(notificationService, never()).notify(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void addAssigneesRejectsNonActiveProjectMember() {
+        when(permissionService.getRoleCodes(user)).thenReturn(Set.of("ADMIN"));
+        when(taskAssigneeRepository.existsById_TaskIdAndId_UserId(TASK_ID, 3L)).thenReturn(false);
+        when(projectMemberRepository.existsByProject_IdAndUser_IdAndStatus(
+                PROJECT_ID, 3L, ProjectMemberStatus.ACTIVE)).thenReturn(false);
+
+        AddAssigneesRequest request = new AddAssigneesRequest();
+        request.setUserIds(List.of(3L));
+
+        assertStatus(() -> service.addAssignees(TASK_ID, request, EMAIL), HttpStatus.BAD_REQUEST);
+
+        verify(taskAssigneeRepository, never()).save(any());
+        verify(notificationService, never()).notify(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void addAssigneesRejectsNonLeaderAndNonAdmin() {
+        when(permissionService.getRoleCodes(user)).thenReturn(Set.of());
+        when(permissionService.getEffectivePermissionCodes(user)).thenReturn(Set.of());
+        when(projectMemberRepository.existsByProject_IdAndUser_IdAndProjectRoleAndStatus(
+                PROJECT_ID, user.getId(), ProjectRole.LEADER, ProjectMemberStatus.ACTIVE)).thenReturn(false);
+
+        AddAssigneesRequest request = new AddAssigneesRequest();
+        request.setUserIds(List.of(2L));
+
+        assertStatus(() -> service.addAssignees(TASK_ID, request, EMAIL), HttpStatus.FORBIDDEN);
+
+        verify(taskAssigneeRepository, never()).save(any());
+        verify(notificationService, never()).notify(any(), any(), any(), any(), any());
     }
 
     private static AddAttachmentRequest attachmentRequest(long fileId) {

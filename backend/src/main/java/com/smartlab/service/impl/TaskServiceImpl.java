@@ -27,6 +27,8 @@ import com.smartlab.repo.TaskAssigneeRepository;
 import com.smartlab.repo.TaskAttachmentRepository;
 import com.smartlab.repo.TaskRepository;
 import com.smartlab.repo.UserRepository;
+import com.smartlab.service.NotificationRelated;
+import com.smartlab.service.NotificationService;
 import com.smartlab.service.PermissionService;
 import com.smartlab.service.TaskService;
 import lombok.RequiredArgsConstructor;
@@ -37,6 +39,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -58,6 +61,7 @@ public class TaskServiceImpl implements TaskService {
     private final UserRepository userRepository;
     private final StoredFileRepository storedFileRepository;
     private final PermissionService permissionService;
+    private final NotificationService notificationService;
 
     // -------------------------------------------------------------------------
     // Helpers
@@ -367,6 +371,13 @@ public class TaskServiceImpl implements TaskService {
             UserEntity assignee = userRepository.findById(userId)
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found: " + userId));
             taskAssigneeRepository.save(TaskAssigneeEntity.of(task, assignee));
+            notificationService.notify(
+                    assignee.getId(),
+                    "TASK_ASSIGNED",
+                    "Bạn được giao nhiệm vụ: " + task.getTitle(),
+                    new NotificationRelated(currentUser.getId(), "TASK", task.getId(), "/admin/tasks"),
+                    Instant.now()
+            );
         }
 
         return taskAssigneeRepository.findAllByTask_Id(taskId)

@@ -16,6 +16,8 @@ import com.smartlab.repo.ProjectMemberRepository;
 import com.smartlab.repo.ProjectRepository;
 import com.smartlab.repo.UserRepository;
 import com.smartlab.service.EvaluationService;
+import com.smartlab.service.NotificationRelated;
+import com.smartlab.service.NotificationService;
 import com.smartlab.service.PermissionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -23,6 +25,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -39,6 +42,7 @@ public class EvaluationServiceImpl implements EvaluationService {
     private final ProjectMemberRepository projectMemberRepository;
     private final UserRepository userRepository;
     private final PermissionService permissionService;
+    private final NotificationService notificationService;
 
     private UserEntity requireUser(String email) {
         return userRepository.findByEmail(email)
@@ -111,6 +115,14 @@ public class EvaluationServiceImpl implements EvaluationService {
         List<EvaluationScoreEntity> scores = buildScores(evaluation, request.getScores(), projectId);
         evaluation.replaceScores(scores);
 
+        notificationService.notify(
+                evaluatedUser.getId(),
+                "EVALUATION_CREATED",
+                "Bạn nhận được đánh giá mới từ Leader trong dự án " + project.getName(),
+                new NotificationRelated(evaluator.getId(), "EVALUATION", evaluation.getId(), "/my-evaluations"),
+                Instant.now()
+        );
+
         return toResponse(evaluation);
     }
 
@@ -123,8 +135,10 @@ public class EvaluationServiceImpl implements EvaluationService {
 
         requireLeaderOrAdmin(user, evaluation.getProject().getId());
 
+        boolean changed = false;
         if (request.getNote() != null) {
             evaluation.updateNote(request.getNote());
+            changed = true;
         }
 
         if (request.getScores() != null && !request.getScores().isEmpty()) {
@@ -132,6 +146,17 @@ public class EvaluationServiceImpl implements EvaluationService {
                     evaluation, request.getScores(), evaluation.getProject().getId()
             );
             evaluation.replaceScores(scores);
+            changed = true;
+        }
+
+        if (changed) {
+            notificationService.notify(
+                    evaluation.getEvaluatedUser().getId(),
+                    "EVALUATION_UPDATED",
+                    "Đánh giá của bạn trong dự án " + evaluation.getProject().getName() + " đã được cập nhật",
+                    new NotificationRelated(user.getId(), "EVALUATION", evaluation.getId(), "/my-evaluations"),
+                    Instant.now()
+            );
         }
 
         return toResponse(evaluation);
