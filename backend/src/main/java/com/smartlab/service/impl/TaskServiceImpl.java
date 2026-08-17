@@ -323,15 +323,55 @@ public class TaskServiceImpl implements TaskService {
             }
         }
 
+        String newTitle = request.getTitle() != null ? request.getTitle() : task.getTitle();
+        String newDescription = request.getDescription() != null ? request.getDescription() : task.getDescription();
+        TaskStatus newStatus = request.getStatus() != null ? request.getStatus() : task.getStatus();
+        TaskPriority newPriority = request.getPriority() != null ? request.getPriority() : task.getPriority();
+        Instant newStartAt = request.getStartAt() != null ? request.getStartAt() : task.getStartAt();
+        Instant newDueAt = request.getDueAt() != null ? request.getDueAt() : task.getDueAt();
+        TaskEntity newParentTask = parentTask != null ? parentTask : task.getParentTask();
+
+        boolean changed =
+                !java.util.Objects.equals(task.getTitle(), newTitle)
+                || !java.util.Objects.equals(task.getDescription(), newDescription)
+                || !java.util.Objects.equals(task.getStatus(), newStatus)
+                || !java.util.Objects.equals(task.getPriority(), newPriority)
+                || !java.util.Objects.equals(task.getStartAt(), newStartAt)
+                || !java.util.Objects.equals(task.getDueAt(), newDueAt)
+                || !java.util.Objects.equals(
+                        task.getParentTask() != null ? task.getParentTask().getId() : null,
+                        newParentTask != null ? newParentTask.getId() : null
+                );
+
         task.update(
-                request.getTitle() != null ? request.getTitle() : task.getTitle(),
-                request.getDescription() != null ? request.getDescription() : task.getDescription(),
-                request.getStatus() != null ? request.getStatus() : task.getStatus(),
-                request.getPriority() != null ? request.getPriority() : task.getPriority(),
-                request.getStartAt() != null ? request.getStartAt() : task.getStartAt(),
-                request.getDueAt() != null ? request.getDueAt() : task.getDueAt(),
-                parentTask != null ? parentTask : task.getParentTask()
+                newTitle,
+                newDescription,
+                newStatus,
+                newPriority,
+                newStartAt,
+                newDueAt,
+                newParentTask
         );
+
+        if (changed) {
+            taskAssigneeRepository.findAllByTask_Id(taskId).stream()
+                    .map(TaskAssigneeEntity::getUser)
+                    .filter(assignee -> !assignee.getId().equals(user.getId()))
+                    .collect(java.util.stream.Collectors.toMap(
+                            UserEntity::getId,
+                            assignee -> assignee,
+                            (left, right) -> left
+                    ))
+                    .values()
+                    .forEach(assignee -> notificationService.notify(
+                            assignee.getId(),
+                            "TASK_UPDATED",
+                            "Nhiệm vụ đã được cập nhật: " + task.getTitle(),
+                            new NotificationRelated(user.getId(), "TASK", task.getId(), "/admin/tasks"),
+                            Instant.now()
+                    ));
+        }
+
         return toDetailResponse(task);
     }
 
