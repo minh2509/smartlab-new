@@ -5,6 +5,7 @@ import com.smartlab.dto.request.UpdateEventRequest;
 import com.smartlab.dto.response.EventResponse;
 import com.smartlab.entity.EventEntity;
 import com.smartlab.entity.ProjectEntity;
+import com.smartlab.entity.ProjectMemberEntity;
 import com.smartlab.entity.UserEntity;
 import com.smartlab.enums.EventMode;
 import com.smartlab.enums.EventStatus;
@@ -16,6 +17,8 @@ import com.smartlab.repo.ProjectMemberRepository;
 import com.smartlab.repo.ProjectRepository;
 import com.smartlab.repo.UserRepository;
 import com.smartlab.service.AuditService;
+import com.smartlab.service.NotificationRelated;
+import com.smartlab.service.NotificationService;
 import com.smartlab.service.PermissionService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,6 +43,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -61,6 +65,8 @@ class EventServiceImplTest {
     private PermissionService permissionService;
     @Mock
     private AuditService auditService;
+    @Mock
+    private NotificationService notificationService;
 
     @InjectMocks
     private EventServiceImpl service;
@@ -288,6 +294,130 @@ class EventServiceImplTest {
     }
 
     @Test
+    void projectEventCreateNotifiesEligibleMemberWithExactRelatedDataAndExcludesActor() throws Exception {
+        UserEntity actor = user(11L, "leader-user", EMAIL);
+        UserEntity recipient = user(12L, "member-user", "member@test");
+        authenticate(actor, Set.of("MEMBER"));
+        when(projectRepository.findByIdAndDeletedAtIsNull(7L))
+                .thenReturn(Optional.of(org.mockito.Mockito.mock(ProjectEntity.class)));
+        when(projectMemberRepository.existsByProject_IdAndUser_IdAndProjectRoleAndStatus(
+                7L, 11L, ProjectRole.LEADER, ProjectMemberStatus.ACTIVE
+        )).thenReturn(true);
+        when(eventRepository.saveAndFlush(any(EventEntity.class))).thenAnswer(invocation -> {
+            EventEntity event = invocation.getArgument(0);
+            setId(event, 60L);
+            return event;
+        });
+        when(projectMemberRepository.findMembersForDisplay(7L, ProjectMemberStatus.ACTIVE))
+                .thenReturn(List.of(activeMember(actor), activeMember(recipient)));
+        when(permissionService.hasInactiveAssignedRole(recipient)).thenReturn(false);
+        when(permissionService.getEffectivePermissionCodes(recipient)).thenReturn(Set.of("PROJECT_READ"));
+        ArgumentCaptor<NotificationRelated> related = ArgumentCaptor.forClass(NotificationRelated.class);
+
+        service.create(inPersonCreate(7L, EventVisibility.PROJECT), EMAIL);
+
+        verify(notificationService).notify(
+                eq(12L),
+                eq("PROJECT_EVENT_CREATED"),
+                eq("A project event was created"),
+                related.capture(),
+                any(Instant.class)
+        );
+        assertThat(related.getValue()).isEqualTo(new NotificationRelated(
+                11L, "EVENT", 60L, "/admin/events?projectId=7"
+        ));
+        verify(notificationService, never()).notify(eq(11L), any(), any(), any(), any());
+    }
+
+    @Test
+    void projectEventCreateFiltersForeignInactiveUnreadableAndDuplicateRecipients() throws Exception {
+        UserEntity admin = user(11L, "admin-user", EMAIL);
+        UserEntity eligible = user(12L, "eligible-user", "eligible@test");
+        UserEntity inactive = user(13L, "inactive-user", "inactive@test");
+        inactive.setIsActive(false);
+        UserEntity inactiveRole = user(14L, "inactive-role", "inactive-role@test");
+        UserEntity noProjectRead = user(15L, "no-read", "no-read@test");
+        UserEntity foreignMember = user(16L, "foreign-user", "foreign@test");
+        authenticate(admin, Set.of("ADMIN"));
+        when(permissionService.getEffectivePermissionCodes(admin)).thenReturn(Set.of("PROJECT_MANAGE"));
+        when(projectRepository.findByIdAndDeletedAtIsNull(7L))
+                .thenReturn(Optional.of(org.mockito.Mockito.mock(ProjectEntity.class)));
+        when(eventRepository.saveAndFlush(any(EventEntity.class))).thenAnswer(invocation -> {
+            EventEntity event = invocation.getArgument(0);
+            setId(event, 61L);
+            return event;
+        });
+        when(projectMemberRepository.findMembersForDisplay(7L, ProjectMemberStatus.ACTIVE)).thenReturn(List.of(
+                activeMember(eligible),
+                activeMember(eligible),
+                activeMember(inactive),
+                activeMember(inactiveRole),
+                activeMember(noProjectRead)
+        ));
+        when(permissionService.hasInactiveAssignedRole(eligible)).thenReturn(false);
+        when(permissionService.getEffectivePermissionCodes(eligible)).thenReturn(Set.of("PROJECT_READ"));
+        when(permissionService.hasInactiveAssignedRole(inactiveRole)).thenReturn(true);
+        when(permissionService.hasInactiveAssignedRole(noProjectRead)).thenReturn(false);
+        when(permissionService.getEffectivePermissionCodes(noProjectRead)).thenReturn(Set.of());
+
+        service.create(inPersonCreate(7L, EventVisibility.PUBLIC), EMAIL);
+
+        verify(projectMemberRepository).findMembersForDisplay(7L, ProjectMemberStatus.ACTIVE);
+        verify(notificationService).notify(eq(12L), any(), any(), any(), any());
+        verify(notificationService, never()).notify(eq(13L), any(), any(), any(), any());
+        verify(notificationService, never()).notify(eq(14L), any(), any(), any(), any());
+        verify(notificationService, never()).notify(eq(15L), any(), any(), any(), any());
+        verify(notificationService, never()).notify(eq(16L), any(), any(), any(), any());
+        verifyNoMoreInteractions(notificationService);
+    }
+
+    @Test
+    void projectAssociatedLabAndPublicEventsNotifyOnlyProjectMembers() throws Exception {
+        UserEntity admin = user(11L, "admin-user", EMAIL);
+        UserEntity recipient = user(12L, "member-user", "member@test");
+        authenticate(admin, Set.of("ADMIN"));
+        when(permissionService.getEffectivePermissionCodes(admin)).thenReturn(Set.of("PROJECT_MANAGE"));
+        when(projectRepository.findByIdAndDeletedAtIsNull(7L))
+                .thenReturn(Optional.of(org.mockito.Mockito.mock(ProjectEntity.class)));
+        when(eventRepository.saveAndFlush(any(EventEntity.class))).thenAnswer(invocation -> {
+            EventEntity event = invocation.getArgument(0);
+            setId(event, event.getVisibility() == EventVisibility.LAB ? 62L : 63L);
+            return event;
+        });
+        when(projectMemberRepository.findMembersForDisplay(7L, ProjectMemberStatus.ACTIVE))
+                .thenReturn(List.of(activeMember(recipient)));
+        when(permissionService.hasInactiveAssignedRole(recipient)).thenReturn(false);
+        when(permissionService.getEffectivePermissionCodes(recipient)).thenReturn(Set.of("PROJECT_READ"));
+
+        service.create(inPersonCreate(7L, EventVisibility.LAB), EMAIL);
+        service.create(inPersonCreate(7L, EventVisibility.PUBLIC), EMAIL);
+
+        verify(notificationService, org.mockito.Mockito.times(2)).notify(
+                eq(12L), eq("PROJECT_EVENT_CREATED"), any(), any(), any(Instant.class)
+        );
+        verify(projectMemberRepository, org.mockito.Mockito.times(2))
+                .findMembersForDisplay(7L, ProjectMemberStatus.ACTIVE);
+    }
+
+    @Test
+    void publicAndLabEventsWithoutProjectDoNotNotifyOrBroadcast() throws Exception {
+        UserEntity admin = user(11L, "admin-user", EMAIL);
+        authenticate(admin, Set.of("ADMIN"));
+        when(permissionService.getEffectivePermissionCodes(admin)).thenReturn(Set.of("PROJECT_MANAGE"));
+        when(eventRepository.saveAndFlush(any(EventEntity.class))).thenAnswer(invocation -> {
+            EventEntity event = invocation.getArgument(0);
+            setId(event, 64L);
+            return event;
+        });
+
+        service.create(inPersonCreate(null, EventVisibility.LAB), EMAIL);
+        service.create(inPersonCreate(null, EventVisibility.PUBLIC), EMAIL);
+
+        verifyNoInteractions(notificationService);
+        verify(projectMemberRepository, never()).findMembersForDisplay(any(), any());
+    }
+
+    @Test
     void validatesAbsoluteHttpUrlTimeAndVisibilityInService() {
         UserEntity admin = user(11L, "admin-user", EMAIL);
         authenticate(admin, Set.of("ADMIN"));
@@ -361,6 +491,99 @@ class EventServiceImplTest {
         assertThat(response.getUpdatedAt()).isEqualTo(CREATED);
         verify(eventRepository, never()).saveAndFlush(any());
         verify(auditService, never()).log(any(), any(), any(), any(), any());
+        verifyNoInteractions(notificationService);
+    }
+
+    @Test
+    void realProjectEventUpdateSendsOneUpdatedNotification() {
+        UserEntity actor = user(11L, "admin-user", EMAIL);
+        UserEntity recipient = user(12L, "member-user", "member@test");
+        authenticate(actor, Set.of("ADMIN"));
+        when(permissionService.getEffectivePermissionCodes(actor)).thenReturn(Set.of("PROJECT_MANAGE"));
+        EventEntity event = projectEvent(4L, 7L, 21L);
+        when(eventRepository.findActiveByIdForUpdate(4L)).thenReturn(Optional.of(event));
+        when(projectRepository.findByIdAndDeletedAtIsNull(7L))
+                .thenReturn(Optional.of(org.mockito.Mockito.mock(ProjectEntity.class)));
+        when(eventRepository.saveAndFlush(event)).thenReturn(event);
+        when(projectMemberRepository.findMembersForDisplay(7L, ProjectMemberStatus.ACTIVE))
+                .thenReturn(List.of(activeMember(recipient)));
+        when(permissionService.hasInactiveAssignedRole(recipient)).thenReturn(false);
+        when(permissionService.getEffectivePermissionCodes(recipient)).thenReturn(Set.of("PROJECT_READ"));
+        when(userRepository.findById(21L)).thenReturn(Optional.of(user(21L, "creator", "creator@test")));
+        UpdateEventRequest request = new UpdateEventRequest();
+        request.setTitle("Updated project demo");
+
+        service.update(4L, request, EMAIL);
+
+        verify(notificationService).notify(
+                eq(12L),
+                eq("PROJECT_EVENT_UPDATED"),
+                eq("A project event was updated"),
+                eq(new NotificationRelated(11L, "EVENT", 4L, "/admin/events?projectId=7")),
+                any(Instant.class)
+        );
+    }
+
+    @Test
+    void cancellingProjectEventSendsOnlyCancelledNotificationWithExactRelatedData() {
+        UserEntity actor = user(11L, "admin-user", EMAIL);
+        UserEntity recipient = user(12L, "member-user", "member@test");
+        authenticate(actor, Set.of("ADMIN"));
+        when(permissionService.getEffectivePermissionCodes(actor)).thenReturn(Set.of("PROJECT_MANAGE"));
+        EventEntity event = projectEvent(4L, 7L, 21L);
+        when(eventRepository.findActiveByIdForUpdate(4L)).thenReturn(Optional.of(event));
+        when(projectRepository.findByIdAndDeletedAtIsNull(7L))
+                .thenReturn(Optional.of(org.mockito.Mockito.mock(ProjectEntity.class)));
+        when(eventRepository.saveAndFlush(event)).thenReturn(event);
+        when(projectMemberRepository.findMembersForDisplay(7L, ProjectMemberStatus.ACTIVE))
+                .thenReturn(List.of(activeMember(recipient)));
+        when(permissionService.hasInactiveAssignedRole(recipient)).thenReturn(false);
+        when(permissionService.getEffectivePermissionCodes(recipient)).thenReturn(Set.of("PROJECT_READ"));
+        when(userRepository.findById(21L)).thenReturn(Optional.of(user(21L, "creator", "creator@test")));
+        UpdateEventRequest request = new UpdateEventRequest();
+        request.setStatus(EventStatus.CANCELLED);
+
+        service.update(4L, request, EMAIL);
+
+        verify(notificationService).notify(
+                eq(12L),
+                eq("PROJECT_EVENT_CANCELLED"),
+                eq("A project event was cancelled"),
+                eq(new NotificationRelated(11L, "EVENT", 4L, "/admin/events?projectId=7")),
+                any(Instant.class)
+        );
+        verify(notificationService, never()).notify(
+                any(), eq("PROJECT_EVENT_UPDATED"), any(), any(), any()
+        );
+    }
+
+    @Test
+    void notificationFailurePropagatesAfterProjectEventCreateAudit() throws Exception {
+        UserEntity actor = user(11L, "leader-user", EMAIL);
+        UserEntity recipient = user(12L, "member-user", "member@test");
+        authenticate(actor, Set.of("MEMBER"));
+        when(projectRepository.findByIdAndDeletedAtIsNull(7L))
+                .thenReturn(Optional.of(org.mockito.Mockito.mock(ProjectEntity.class)));
+        when(projectMemberRepository.existsByProject_IdAndUser_IdAndProjectRoleAndStatus(
+                7L, 11L, ProjectRole.LEADER, ProjectMemberStatus.ACTIVE
+        )).thenReturn(true);
+        when(eventRepository.saveAndFlush(any(EventEntity.class))).thenAnswer(invocation -> {
+            EventEntity event = invocation.getArgument(0);
+            setId(event, 65L);
+            return event;
+        });
+        when(projectMemberRepository.findMembersForDisplay(7L, ProjectMemberStatus.ACTIVE))
+                .thenReturn(List.of(activeMember(recipient)));
+        when(permissionService.hasInactiveAssignedRole(recipient)).thenReturn(false);
+        when(permissionService.getEffectivePermissionCodes(recipient)).thenReturn(Set.of("PROJECT_READ"));
+        org.mockito.Mockito.doThrow(new IllegalStateException("notification failure"))
+                .when(notificationService).notify(any(), any(), any(), any(), any());
+
+        assertThatThrownBy(() -> service.create(inPersonCreate(7L, EventVisibility.PROJECT), EMAIL))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("notification failure");
+
+        verify(auditService).log(eq("EVENT_CREATED"), eq("EVENT"), eq("65"), eq(null), any(Map.class));
     }
 
     @Test
@@ -458,6 +681,7 @@ class EventServiceImplTest {
         assertThat(event.getDeletedAt()).isNotNull();
         assertThat(event.getUpdatedAt()).isEqualTo(event.getDeletedAt());
         verify(auditService).log(eq("EVENT_DELETED"), eq("EVENT"), eq("4"), any(Map.class), any(Map.class));
+        verifyNoInteractions(notificationService);
     }
 
     @Test
@@ -516,6 +740,10 @@ class EventServiceImplTest {
         );
         setId(event, id);
         return event;
+    }
+
+    private static ProjectMemberEntity activeMember(UserEntity user) {
+        return ProjectMemberEntity.createMember(org.mockito.Mockito.mock(ProjectEntity.class), user);
     }
 
     private static UserEntity user(Long id, String userId, String email) {

@@ -5,6 +5,7 @@ import com.smartlab.dto.request.UpdateEventRequest;
 import com.smartlab.dto.response.EventCreatorResponse;
 import com.smartlab.dto.response.EventResponse;
 import com.smartlab.entity.EventEntity;
+import com.smartlab.entity.ProjectMemberEntity;
 import com.smartlab.entity.UserEntity;
 import com.smartlab.enums.EventMode;
 import com.smartlab.enums.EventStatus;
@@ -17,6 +18,8 @@ import com.smartlab.repo.ProjectRepository;
 import com.smartlab.repo.UserRepository;
 import com.smartlab.service.AuditService;
 import com.smartlab.service.EventService;
+import com.smartlab.service.NotificationRelated;
+import com.smartlab.service.NotificationService;
 import com.smartlab.service.PermissionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -29,6 +32,7 @@ import java.net.URISyntaxException;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -45,6 +49,9 @@ public class EventServiceImpl implements EventService {
     private static final String EVENT_CREATED = "EVENT_CREATED";
     private static final String EVENT_UPDATED = "EVENT_UPDATED";
     private static final String EVENT_DELETED = "EVENT_DELETED";
+    private static final String PROJECT_EVENT_CREATED = "PROJECT_EVENT_CREATED";
+    private static final String PROJECT_EVENT_UPDATED = "PROJECT_EVENT_UPDATED";
+    private static final String PROJECT_EVENT_CANCELLED = "PROJECT_EVENT_CANCELLED";
     private static final int TITLE_MAX_LENGTH = 255;
     private static final int CONTENT_MAX_LENGTH = 20_000;
     private static final int LOCATION_MAX_LENGTH = 255;
@@ -56,6 +63,7 @@ public class EventServiceImpl implements EventService {
     private final UserRepository userRepository;
     private final PermissionService permissionService;
     private final AuditService auditService;
+    private final NotificationService notificationService;
 
     @Override
     @Transactional(readOnly = true)
@@ -165,6 +173,12 @@ public class EventServiceImpl implements EventService {
         );
         EventEntity saved = eventRepository.saveAndFlush(event);
         auditService.log(EVENT_CREATED, EVENT, saved.getId().toString(), null, snapshot(saved));
+        notifyEligibleProjectMembers(
+                saved,
+                creator,
+                PROJECT_EVENT_CREATED,
+                "A project event was created"
+        );
         return toResponse(saved, toCreatorResponse(creator));
     }
 
@@ -240,6 +254,7 @@ public class EventServiceImpl implements EventService {
             return toResponse(event, findCreator(event.getCreatedByUserId()));
         }
 
+        EventStatus previousStatus = event.getStatus();
         event.applyUpdate(
                 title,
                 content,
@@ -254,6 +269,14 @@ public class EventServiceImpl implements EventService {
         );
         EventEntity saved = eventRepository.saveAndFlush(event);
         auditService.log(EVENT_UPDATED, EVENT, saved.getId().toString(), before, snapshot(saved));
+        boolean wasCancelled = saved.getStatus() == EventStatus.CANCELLED
+                && previousStatus != EventStatus.CANCELLED;
+        notifyEligibleProjectMembers(
+                saved,
+                actor,
+                wasCancelled ? PROJECT_EVENT_CANCELLED : PROJECT_EVENT_UPDATED,
+                wasCancelled ? "A project event was cancelled" : "A project event was updated"
+        );
         return toResponse(saved, findCreator(saved.getCreatedByUserId()));
     }
 
@@ -306,6 +329,39 @@ public class EventServiceImpl implements EventService {
 
     private boolean hasProjectRead(UserEntity user) {
         return permissionService.getEffectivePermissionCodes(user).contains(PROJECT_READ);
+    }
+
+    private void notifyEligibleProjectMembers(
+            EventEntity event,
+            UserEntity actor,
+            String type,
+            String message
+    ) {
+        if (event.getProjectId() == null) {
+            return;
+        }
+
+        Set<Long> notifiedUserIds = new LinkedHashSet<>();
+        projectMemberRepository.findMembersForDisplay(event.getProjectId(), ProjectMemberStatus.ACTIVE).stream()
+                .map(ProjectMemberEntity::getUser)
+                .filter(Objects::nonNull)
+                .filter(member -> member.getId() != null && !Objects.equals(member.getId(), actor.getId()))
+                .filter(member -> notifiedUserIds.add(member.getId()))
+                .filter(member -> Boolean.TRUE.equals(member.getIsActive()))
+                .filter(member -> !permissionService.hasInactiveAssignedRole(member))
+                .filter(this::hasProjectRead)
+                .forEach(member -> notificationService.notify(
+                        member.getId(),
+                        type,
+                        message,
+                        new NotificationRelated(
+                                actor.getId(),
+                                EVENT,
+                                event.getId(),
+                                "/admin/events?projectId=" + event.getProjectId()
+                        ),
+                        Instant.now()
+                ));
     }
 
     private UserEntity requireCurrentUser(String email) {
