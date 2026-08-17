@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { Bell, CheckCheck } from 'lucide-react'
+import { Bell, CheckCheck, Trash2 } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../auth/authContext'
-import { listNotifications, markAllNotificationsRead, markNotificationRead } from '../api'
+import { deleteNotification, listNotifications, markAllNotificationsRead, markNotificationRead } from '../api'
 import type { Notification } from '../types'
 
-type PendingAction = `read:${number}` | 'read-all'
+type PendingAction = `read:${number}` | `delete:${number}` | 'read-all'
 type SafeTarget = { kind: 'internal' | 'external'; url: string }
 
 export function NotificationPopover() {
@@ -75,6 +75,20 @@ export function NotificationPopover() {
       setNotifications((current) => current.map((notification) => ({ ...notification, isRead: true })))
     } catch (value) {
       setError(value instanceof Error ? value.message : 'Không thể cập nhật thông báo.')
+    } finally {
+      setPending(null)
+    }
+  }
+
+  async function removeNotification(notification: Notification) {
+    if (!token || pending) return
+    setPending(`delete:${notification.id}`)
+    setError(null)
+    try {
+      await deleteNotification(token, notification.id)
+      setNotifications((current) => current.filter((item) => item.id !== notification.id))
+    } catch (value) {
+      setError(value instanceof Error ? value.message : 'Không thể xóa thông báo.')
     } finally {
       setPending(null)
     }
@@ -173,19 +187,35 @@ export function NotificationPopover() {
                     </span>
                   </>
                 )
-                return isInteractive ? (
-                  <button
+                return (
+                  <div
                     className={`notification-popover-row${notification.isRead ? '' : ' is-unread'}`}
-                    type="button"
-                    disabled={Boolean(pending)}
-                    aria-label={notification.message}
                     key={notification.id}
-                    onClick={() => void openNotification(notification)}
                   >
-                    {content}
-                  </button>
-                ) : (
-                  <div className="notification-popover-row" key={notification.id}>{content}</div>
+                    {isInteractive ? (
+                      <button
+                        className="notification-popover-main"
+                        type="button"
+                        disabled={Boolean(pending)}
+                        aria-label={notification.message}
+                        onClick={() => void openNotification(notification)}
+                      >
+                        {content}
+                      </button>
+                    ) : (
+                      <div className="notification-popover-main">{content}</div>
+                    )}
+                    <button
+                      className="notification-delete"
+                      type="button"
+                      disabled={Boolean(pending)}
+                      aria-label={`Xóa thông báo: ${notification.message}`}
+                      title="Xóa thông báo"
+                      onClick={() => void removeNotification(notification)}
+                    >
+                      <Trash2 aria-hidden="true" />
+                    </button>
+                  </div>
                 )
               })}
             </div>
