@@ -5,8 +5,11 @@ import { Logo } from '../../shared/components/Logo'
 import { accessPolicies, hasAllPermissions } from '../accessPolicy'
 
 export function AdminLayout() {
-  const { isAuthenticated, profile, logout } = useAuth()
+  const { isAuthenticated, isHydrating, profile, logout } = useAuth()
 
+  if (isHydrating) {
+    return <div className="empty">Đang tải không gian làm việc...</div>
+  }
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />
   }

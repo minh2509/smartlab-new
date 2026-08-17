@@ -8,49 +8,64 @@ const TOKEN_KEY = 'smartlab.token'
 const SESSION_KEY = 'smartlab.sessionId'
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY))
+  const tokenRef = useRef<string | null>(localStorage.getItem(TOKEN_KEY))
+  const [token, setToken] = useState<string | null>(() => tokenRef.current)
   const [sessionId, setSessionId] = useState<string | null>(() => localStorage.getItem(SESSION_KEY))
   const [profile, setProfile] = useState<AccountResponse | null>(null)
-  const profileRequestRef = useRef<Promise<AccountResponse | null> | null>(null)
+  const [isHydrating, setIsHydrating] = useState(() => Boolean(tokenRef.current))
+  const profileRequestRef = useRef<{ token: string; request: Promise<AccountResponse> } | null>(null)
 
-  const isAuthenticated = Boolean(token)
+  const isAuthenticated = Boolean(token && profile && !isHydrating)
 
   const persistAuth = useCallback((result: AuthResponse) => {
     profileRequestRef.current = null
     localStorage.setItem(TOKEN_KEY, result.token)
     localStorage.setItem(SESSION_KEY, result.sessionId)
+    tokenRef.current = result.token
     setToken(result.token)
     setSessionId(result.sessionId)
+    setProfile(null)
+    setIsHydrating(true)
   }, [])
 
   const clearAuth = useCallback(() => {
     profileRequestRef.current = null
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(SESSION_KEY)
+    tokenRef.current = null
     setToken(null)
     setSessionId(null)
     setProfile(null)
+    setIsHydrating(false)
   }, [])
 
-  const refreshProfile = useCallback(() => {
-    if (!token) return Promise.resolve(null)
-    if (profileRequestRef.current) return profileRequestRef.current
+  const hydrateProfile = useCallback((sessionToken: string) => {
+    if (profileRequestRef.current?.token === sessionToken) return profileRequestRef.current.request
 
-    const request = apiClient<AccountResponse>('/profile', { token })
+    setIsHydrating(true)
+    const request = apiClient<AccountResponse>('/profile', { token: sessionToken })
       .then((data) => {
-        setProfile(data)
+        if (tokenRef.current === sessionToken) setProfile(data)
         return data
       })
       .catch((error: unknown) => {
-        clearAuth()
+        if (tokenRef.current === sessionToken) clearAuth()
         throw error
       })
       .finally(() => {
-        if (profileRequestRef.current === request) profileRequestRef.current = null
+        if (profileRequestRef.current?.request === request) {
+          profileRequestRef.current = null
+          if (tokenRef.current === sessionToken) setIsHydrating(false)
+        }
       })
-    profileRequestRef.current = request
+    profileRequestRef.current = { token: sessionToken, request }
     return request
-  }, [clearAuth, token])
+  }, [clearAuth])
+
+  const refreshProfile = useCallback(() => {
+    if (!token) return Promise.resolve(null)
+    return hydrateProfile(token)
+  }, [hydrateProfile, token])
 
   const login = useCallback(
     async (email: string, password: string) => {
@@ -59,10 +74,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ email, password }),
       })
       persistAuth(result)
-      const account = await apiClient<AccountResponse>('/profile', { token: result.token })
-      setProfile(account)
+      await hydrateProfile(result.token)
     },
-    [persistAuth],
+    [hydrateProfile, persistAuth],
   )
 
   const logout = useCallback(async () => {
@@ -76,13 +90,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [clearAuth, token])
 
   useEffect(() => {
-    if (!token) return
-    void refreshProfile().catch(() => undefined)
-  }, [refreshProfile, token])
+    if (!token) {
+      setIsHydrating(false)
+      return
+    }
+    void hydrateProfile(token).catch(() => undefined)
+  }, [hydrateProfile, token])
 
   const value = useMemo(
-    () => ({ token, sessionId, profile, isAuthenticated, login, logout, clearAuth, refreshProfile }),
-    [clearAuth, isAuthenticated, login, logout, profile, refreshProfile, sessionId, token],
+    () => ({ token, sessionId, profile, isAuthenticated, isHydrating, login, logout, clearAuth, refreshProfile }),
+    [clearAuth, isAuthenticated, isHydrating, login, logout, profile, refreshProfile, sessionId, token],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

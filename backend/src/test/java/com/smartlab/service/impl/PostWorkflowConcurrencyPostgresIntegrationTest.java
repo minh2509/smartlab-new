@@ -70,6 +70,7 @@ class PostWorkflowConcurrencyPostgresIntegrationTest {
 
     private final Set<Long> postIds = new LinkedHashSet<>();
     private final Set<Long> userIds = new LinkedHashSet<>();
+    private final Set<Long> userRoleIds = new LinkedHashSet<>();
     private DatabaseCounts baselineCounts;
 
     @BeforeEach
@@ -83,8 +84,10 @@ class PostWorkflowConcurrencyPostgresIntegrationTest {
         assertThat(currentDatabase()).isEqualTo(TARGET_DATABASE);
         postIds.forEach(id -> jdbc.update("delete from audit_logs where target_type = 'POST' and target_id = ?", id.toString()));
         postIds.forEach(id -> jdbc.update("delete from posts where id = ?", id));
+        userRoleIds.forEach(id -> jdbc.update("delete from user_roles where id = ?", id));
         userIds.forEach(id -> jdbc.update("delete from tbl_user where id = ?", id));
         postIds.clear();
+        userRoleIds.clear();
         userIds.clear();
         assertThat(databaseCounts()).isEqualTo(baselineCounts);
     }
@@ -199,7 +202,7 @@ class PostWorkflowConcurrencyPostgresIntegrationTest {
 
     @Test
     void concurrentDirectPublishesSerializeToOneSuccessAndOnePublicationTimestamp() throws Exception {
-        UserFixture owner = insertUser("direct-direct-owner");
+        UserFixture owner = insertDirectPublisher("direct-direct-owner");
         PostFixture post = insertPost(owner.id(), PostStatus.DRAFT, "direct race", "direct-direct");
         when(userRepository.findByEmail(owner.email())).thenReturn(Optional.of(owner.entity()));
 
@@ -227,7 +230,7 @@ class PostWorkflowConcurrencyPostgresIntegrationTest {
 
     @Test
     void concurrentDirectPublishAndSubmitMatchExactlyOneSerializedWinner() throws Exception {
-        UserFixture owner = insertUser("direct-submit-owner");
+        UserFixture owner = insertDirectPublisher("direct-submit-owner");
         PostFixture post = insertPost(owner.id(), PostStatus.DRAFT, "direct submit race", "direct-submit");
         when(userRepository.findByEmail(owner.email())).thenReturn(Optional.of(owner.entity()));
 
@@ -259,7 +262,7 @@ class PostWorkflowConcurrencyPostgresIntegrationTest {
 
     @Test
     void concurrentDirectPublishAndPatchMatchAValidSerializedHistory() throws Exception {
-        UserFixture owner = insertUser("direct-patch-owner");
+        UserFixture owner = insertDirectPublisher("direct-patch-owner");
         String originalExcerpt = "original direct patch excerpt";
         String patchedExcerpt = "patched before direct publication";
         PostFixture post = insertPost(owner.id(), PostStatus.DRAFT, originalExcerpt, "direct-patch");
@@ -292,7 +295,7 @@ class PostWorkflowConcurrencyPostgresIntegrationTest {
 
     @Test
     void concurrentDirectPublishAndDeleteMatchExactlyOneSerializedWinner() throws Exception {
-        UserFixture owner = insertUser("direct-delete-owner");
+        UserFixture owner = insertDirectPublisher("direct-delete-owner");
         PostFixture post = insertPost(owner.id(), PostStatus.DRAFT, "direct delete race", "direct-delete");
         when(userRepository.findByEmail(owner.email())).thenReturn(Optional.of(owner.entity()));
 
@@ -530,6 +533,37 @@ class PostWorkflowConcurrencyPostgresIntegrationTest {
                 .build());
     }
 
+    private UserFixture insertDirectPublisher(String tag) {
+        UserFixture user = insertUser(tag);
+        Long userRoleId = jdbc.queryForObject("""
+                insert into user_roles (user_id, role_id, assigned_by)
+                select ?, r.id, 't11-fixture'
+                from roles r
+                where r.code = 'ADMIN'
+                returning id
+                """, Long.class, user.id());
+        assertThat(userRoleId).isNotNull();
+        userRoleIds.add(userRoleId);
+
+        assertThat(jdbc.queryForObject("""
+                select count(*)
+                from user_roles
+                where id = ? and user_id = ?
+                """, Long.class, userRoleId, user.id())).isEqualTo(1);
+        assertThat(jdbc.queryForObject("""
+                select count(*)
+                from user_roles ur
+                join roles r on r.id = ur.role_id
+                join role_permissions rp on rp.role_id = r.id
+                join permissions p on p.id = rp.permission_id
+                where ur.id = ?
+                  and ur.user_id = ?
+                  and r.code = 'ADMIN'
+                  and p.code = 'posts.publish.direct'
+                """, Long.class, userRoleId, user.id())).isEqualTo(1);
+        return user;
+    }
+
     private PostFixture insertPost(Long authorId, PostStatus targetStatus, String excerpt, String tag) {
         Instant createdAt = Instant.now().minusSeconds(90).truncatedTo(ChronoUnit.MICROS);
         Long id = inNewTransaction(() -> {
@@ -609,7 +643,8 @@ class PostWorkflowConcurrencyPostgresIntegrationTest {
                 jdbc.queryForObject("select count(*) from tbl_user", Long.class),
                 jdbc.queryForObject("select count(*) from posts", Long.class),
                 jdbc.queryForObject("select count(*) from post_reviews", Long.class),
-                jdbc.queryForObject("select count(*) from audit_logs", Long.class)
+                jdbc.queryForObject("select count(*) from audit_logs", Long.class),
+                jdbc.queryForObject("select count(*) from user_roles", Long.class)
         );
     }
 
@@ -649,7 +684,7 @@ class PostWorkflowConcurrencyPostgresIntegrationTest {
     ) {
     }
 
-    private record DatabaseCounts(long users, long posts, long reviews, long audits) {
+    private record DatabaseCounts(long users, long posts, long reviews, long audits, long userRoles) {
     }
 
     private record LockObservation(int gateBackendPid, Set<Integer> waitingBackendPids) {

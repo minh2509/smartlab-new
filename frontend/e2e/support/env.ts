@@ -15,6 +15,10 @@ function positiveInteger(name: string) {
 
 export const env = Object.freeze({
   apiBaseURL: (value('E2E_API_BASE_URL') ?? 'http://127.0.0.1:8080/api/v1.0').replace(/\/+$/, ''),
+  admin: {
+    email: value('E2E_ADMIN_EMAIL'),
+    password: value('E2E_ADMIN_PASSWORD'),
+  },
   member: {
     email: value('E2E_MEMBER_EMAIL'),
     password: value('E2E_MEMBER_PASSWORD'),

@@ -20,12 +20,28 @@ test.describe('MEMBER profile and file access', () => {
   })
 
   test('updates own profile and research fields, then restores the fixture', async ({ page }) => {
+    await page.goto('/profile')
+
     const bio = page.getByLabel('Giới thiệu')
     const originalBio = await bio.inputValue()
     const marker = `Member E2E ${Date.now()}`
-    const fieldCheckbox = env.member.researchFieldName
-      ? page.getByLabel(env.member.researchFieldName, { exact: true })
-      : page.locator('.field-options input[type="checkbox"]').first()
+    const configuredFieldName = env.member.researchFieldName
+    const fieldOption = configuredFieldName
+      ? page.locator('.field-options .field-option').filter({
+          has: page.locator('strong').filter({
+            hasText: new RegExp(`^${escapeRegex(configuredFieldName)}$`),
+          }),
+        })
+      : page.locator('.field-options .field-option').first()
+
+    if (configuredFieldName) {
+      await expect(
+        fieldOption,
+        `Expected exactly one research field option named "${configuredFieldName}".`,
+      ).toHaveCount(1)
+    }
+
+    const fieldCheckbox = fieldOption.locator('input[type="checkbox"]')
 
     await expect(fieldCheckbox, 'The fixture must expose at least one active research field.').toBeVisible()
     const originallyChecked = await fieldCheckbox.isChecked()
@@ -56,6 +72,8 @@ test.describe('MEMBER profile and file access', () => {
   })
 
   test('uploads an avatar and restores the original avatar', async ({ page, request }) => {
+    await page.goto('/profile')
+
     const token = await authToken(page)
     const original = await getMyProfile(request, token)
     let uploadedFileId: number | undefined
@@ -180,6 +198,10 @@ async function restoreProfile(request: APIRequestContext, token: string, profile
 
 function bearer(token: string) {
   return { authorization: `Bearer ${token}` }
+}
+
+function escapeRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 function onePixelPng() {
