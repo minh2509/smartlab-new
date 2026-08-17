@@ -140,6 +140,11 @@ class PostWorkflowControllerTest {
     }
 
     @Test
+    void reviewMappingRejectsBlankRevisionRequiredReasonBeforeServiceDelegation() throws Exception {
+        assertInvalidReviewBody("{\"decision\":\"REVISION_REQUIRED\",\"reason\":\"  \\t \\n  \"}");
+    }
+
+    @Test
     void reviewMappingRejectsReasonLongerThanOneThousandCharactersBeforeServiceDelegation() throws Exception {
         assertInvalidReviewBody("{\"decision\":\"APPROVED\",\"reason\":\"" + "a".repeat(1_001) + "\"}");
     }

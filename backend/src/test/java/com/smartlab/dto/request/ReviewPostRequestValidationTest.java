@@ -44,10 +44,14 @@ class ReviewPostRequestValidationTest {
     }
 
     @Test
+    void rejectsRevisionRequiredDecisionWithoutANonblankReason() {
+        assertInvalidFor(request(ReviewDecision.REVISION_REQUIRED, null), "requiredReasonValid");
+        assertInvalidFor(request(ReviewDecision.REVISION_REQUIRED, ""), "requiredReasonValid");
+        assertInvalidFor(request(ReviewDecision.REVISION_REQUIRED, " \t\n "), "requiredReasonValid");
+    }
+
+    @Test
     void acceptsRevisionRequiredReasonsAllowedByTheContract() {
-        assertValid(request(ReviewDecision.REVISION_REQUIRED, null));
-        assertValid(request(ReviewDecision.REVISION_REQUIRED, ""));
-        assertValid(request(ReviewDecision.REVISION_REQUIRED, " \t "));
         assertValid(request(ReviewDecision.REVISION_REQUIRED, "Please clarify the conclusion"));
         assertValid(request(ReviewDecision.REVISION_REQUIRED, "a".repeat(1_000)));
     }
@@ -59,9 +63,9 @@ class ReviewPostRequestValidationTest {
 
     @Test
     void rejectsRejectedDecisionWithoutANonblankReason() {
-        assertInvalidFor(request(ReviewDecision.REJECTED, null), "rejectedReasonValid");
-        assertInvalidFor(request(ReviewDecision.REJECTED, ""), "rejectedReasonValid");
-        assertInvalidFor(request(ReviewDecision.REJECTED, " \t\n "), "rejectedReasonValid");
+        assertInvalidFor(request(ReviewDecision.REJECTED, null), "requiredReasonValid");
+        assertInvalidFor(request(ReviewDecision.REJECTED, ""), "requiredReasonValid");
+        assertInvalidFor(request(ReviewDecision.REJECTED, " \t\n "), "requiredReasonValid");
     }
 
     @Test
