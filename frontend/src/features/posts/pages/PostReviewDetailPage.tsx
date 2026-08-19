@@ -5,7 +5,7 @@ import { useAuth } from '../../auth/authContext'
 import { getReviewablePost, reviewPost } from '../api'
 import { PostContent } from '../components/PostContent'
 import type { PostDetail, ReviewDecision } from '../types'
-import { Feedback } from '../../../shared/components/Feedback'
+import { useToast } from '../../../shared/toast/useToast'
 
 const DECISIONS: Array<{ value: ReviewDecision; label: string; description: string }> = [
   { value: 'APPROVED', label: 'Duyệt', description: 'Đạt yêu cầu và xuất bản ngay lên Bảng tin.' },
@@ -15,6 +15,7 @@ const DECISIONS: Array<{ value: ReviewDecision; label: string; description: stri
 
 export function PostReviewDetailPage() {
   const { token } = useAuth()
+  const toast = useToast()
   const { id } = useParams<{ id: string }>()
   const [post, setPost] = useState<PostDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -22,7 +23,6 @@ export function PostReviewDetailPage() {
   const [decision, setDecision] = useState<ReviewDecision | ''>('')
   const [reason, setReason] = useState('')
   const [formError, setFormError] = useState<string | null>(null)
-  const [mutationError, setMutationError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [reviewSucceeded, setReviewSucceeded] = useState(false)
 
@@ -38,7 +38,6 @@ export function PostReviewDetailPage() {
     setDecision('')
     setReason('')
     setFormError(null)
-    setMutationError(null)
     setReviewSucceeded(false)
 
     void getReviewablePost(token, id)
@@ -62,7 +61,6 @@ export function PostReviewDetailPage() {
     }
 
     setFormError(null)
-    setMutationError(null)
     setSubmitting(true)
 
     try {
@@ -72,8 +70,9 @@ export function PostReviewDetailPage() {
       })
       setPost(updated)
       setReviewSucceeded(true)
+      toast.success('Đã gửi quyết định duyệt bài')
     } catch (value) {
-      setMutationError(value instanceof Error ? value.message : 'Không thể gửi quyết định duyệt bài.')
+      toast.error('Không thể gửi quyết định duyệt bài', value instanceof Error ? value.message : 'Vui lòng thử lại.')
     } finally {
       setSubmitting(false)
     }
@@ -208,8 +207,6 @@ export function PostReviewDetailPage() {
                       </div>
                       {formError ? <span className="field-error">{formError}</span> : null}
                     </div>
-
-                    <Feedback error={mutationError ?? undefined} />
 
                     <div className="review-actions">
                       <button className="btn primary" type="submit" disabled={!decision || submitting}>

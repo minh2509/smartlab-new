@@ -2,6 +2,8 @@ import { CalendarDays, CheckCircle2, Clock3, LogIn, RefreshCw, Send, Undo2, User
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Feedback } from '../../../shared/components/Feedback'
+import { useToast } from '../../../shared/toast/useToast'
+import { ConfirmDialog } from '../../../shared/ui/ConfirmDialog'
 import { useAuth } from '../../auth/authContext'
 import {
   cancelMyProjectJoinRequest,
@@ -16,15 +18,16 @@ import {
 import type { Project, ProjectJoinRequest, ProjectMembershipHistory } from '../types'
 import './ProjectJoinRequestCard.css'
 
-export function ProjectJoinRequestCard({ project }: { project: Project }) {
+export function ProjectJoinRequestCard({ project, showWorkspaceActions = true }: { project: Project; showWorkspaceActions?: boolean }) {
   const { token, profile } = useAuth()
+  const toast = useToast()
   const [memberships, setMemberships] = useState<ProjectMembershipHistory[]>([])
   const [joinRequest, setJoinRequest] = useState<ProjectJoinRequest | null>(null)
   const [note, setNote] = useState('')
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
-  const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [isCancelConfirmationOpen, setCancelConfirmationOpen] = useState(false)
   const loadIdRef = useRef(0)
 
   const projectMemberships = useMemo(
@@ -51,7 +54,6 @@ export function ProjectJoinRequestCard({ project }: { project: Project }) {
     setMemberships([])
     setJoinRequest(null)
     setNote('')
-    setMessage('')
     setError('')
   }, [project.id])
 
@@ -85,7 +87,7 @@ export function ProjectJoinRequestCard({ project }: { project: Project }) {
       const created = await createProjectJoinRequest(token, project.id, note)
       setJoinRequest(created)
       setNote('')
-      setMessage('Yêu cầu tham gia đã được gửi tới leader dự án.')
+      toast.success('Đã gửi yêu cầu tham gia', 'Leader dự án sẽ xem xét yêu cầu của bạn.')
     } catch (reason: unknown) {
       setError(errorMessage(reason, 'Không thể gửi yêu cầu tham gia.'))
     } finally {
@@ -93,15 +95,20 @@ export function ProjectJoinRequestCard({ project }: { project: Project }) {
     }
   }
 
-  async function handleCancel() {
+  function handleCancel() {
     if (!token || busy || joinRequest?.status !== 'PENDING') return
-    if (!window.confirm('Hủy yêu cầu tham gia dự án này?')) return
+    setCancelConfirmationOpen(true)
+  }
+
+  async function handleCancelConfirmation(confirmed: boolean) {
+    setCancelConfirmationOpen(false)
+    if (!confirmed || !token || busy || joinRequest?.status !== 'PENDING') return
     setBusy(true)
     clearFeedback()
     try {
       await cancelMyProjectJoinRequest(token, project.id)
       setJoinRequest((current) => current ? { ...current, status: 'CANCELLED' } : null)
-      setMessage('Đã hủy yêu cầu tham gia.')
+      toast.success('Đã hủy yêu cầu tham gia')
     } catch (reason: unknown) {
       setError(errorMessage(reason, 'Không thể hủy yêu cầu tham gia.'))
     } finally {
@@ -123,22 +130,13 @@ export function ProjectJoinRequestCard({ project }: { project: Project }) {
   }
 
   function clearFeedback() {
-    setMessage('')
     setError('')
   }
 
   if (!token) return null
 
   if (profile?.roles.includes('ADMIN')) {
-    return (
-      <div className="project-join-card compact">
-        <div>
-          <span className="muted small">Tài khoản quản trị</span>
-          <strong>Quản lý dự án trong workspace</strong>
-        </div>
-        <Link className="btn" to="/admin/projects">Mở quản lý</Link>
-      </div>
-    )
+    return null
   }
 
   return (
@@ -160,7 +158,7 @@ export function ProjectJoinRequestCard({ project }: { project: Project }) {
         </button>
       </div>
 
-      <Feedback message={message} error={error} />
+      <Feedback error={error} />
 
       {loading ? <p className="muted small">Đang kiểm tra trạng thái tham gia...</p> : null}
 
@@ -171,10 +169,12 @@ export function ProjectJoinRequestCard({ project }: { project: Project }) {
             <strong>Bạn đang tham gia dự án này</strong>
             <p>Vai trò: {PROJECT_MEMBER_ROLE_LABELS[activeMembership.projectRole]} · tham gia {formatDateTime(activeMembership.joinedAt)}</p>
           </div>
-          <span className="project-join-actions">
-            <Link className="btn primary" to="/admin/projects"><LogIn aria-hidden="true" /> Mở workspace</Link>
-            <Link className="btn" to={`/admin/events?projectId=${project.id}`}><CalendarDays aria-hidden="true" /> Xem sự kiện</Link>
-          </span>
+          {showWorkspaceActions ? (
+            <span className="project-join-actions">
+              <Link className="btn primary" to="/admin/projects"><LogIn aria-hidden="true" /> Mở workspace</Link>
+              <Link className="btn" to={`/admin/events?projectId=${project.id}`}><CalendarDays aria-hidden="true" /> Xem sự kiện</Link>
+            </span>
+          ) : null}
         </div>
       ) : null}
 
@@ -185,7 +185,7 @@ export function ProjectJoinRequestCard({ project }: { project: Project }) {
             <strong>Yêu cầu đang chờ duyệt</strong>
             <p>Gửi lúc {formatDateTime(joinRequest.createdAt)}{joinRequest.message ? ` · “${joinRequest.message}”` : ''}</p>
           </div>
-          <button className="btn ghost danger-text" type="button" disabled={busy} onClick={() => void handleCancel()}>
+          <button className="btn ghost danger-text" type="button" disabled={busy} onClick={handleCancel}>
             <Undo2 aria-hidden="true" /> Hủy yêu cầu
           </button>
         </div>
@@ -235,6 +235,16 @@ export function ProjectJoinRequestCard({ project }: { project: Project }) {
             <Send aria-hidden="true" /> {busy ? 'Đang gửi...' : removedMembership ? 'Gửi yêu cầu tham gia lại' : 'Gửi yêu cầu tham gia'}
           </button>
         </div>
+      ) : null}
+      {isCancelConfirmationOpen ? (
+        <ConfirmDialog
+          title="Hủy yêu cầu tham gia?"
+          description="Yêu cầu tham gia dự án này sẽ được hủy. Bạn có thể gửi lại yêu cầu sau."
+          cancelLabel="Giữ yêu cầu"
+          confirmLabel="Hủy yêu cầu"
+          destructive
+          onClose={(confirmed) => void handleCancelConfirmation(confirmed)}
+        />
       ) : null}
     </section>
   )

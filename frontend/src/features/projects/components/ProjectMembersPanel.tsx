@@ -2,6 +2,9 @@ import { Check, Plus, RefreshCw, RotateCcw, Search, Trash2, UserCheck, UsersRoun
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { EmptyState } from '../../../shared/components/EmptyState'
 import { Feedback } from '../../../shared/components/Feedback'
+import { useToast } from '../../../shared/toast/useToast'
+import { confirmDialog } from '../../../shared/ui/projectConfirmDialog'
+import { PopupSelect } from '../../../shared/ui/PopupSelect'
 import { useAuth } from '../../auth/authContext'
 import {
   addProjectMember,
@@ -25,6 +28,7 @@ import type {
 
 export function ProjectMembersPanel({ project }: { project: Project | null }) {
   const { token, profile } = useAuth()
+  const toast = useToast()
   const projectId = project?.id ?? null
   const [members, setMembers] = useState<ProjectMember[]>([])
   const [filter, setFilter] = useState<ProjectMemberFilter>('ACTIVE')
@@ -36,7 +40,6 @@ export function ProjectMembersPanel({ project }: { project: Project | null }) {
   const [loadingRequests, setLoadingRequests] = useState(false)
   const [busyUserId, setBusyUserId] = useState<string | null>(null)
   const [busyRequestId, setBusyRequestId] = useState<number | null>(null)
-  const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const memberLoadIdRef = useRef(0)
   const joinRequestLoadIdRef = useRef(0)
@@ -69,7 +72,6 @@ export function ProjectMembersPanel({ project }: { project: Project | null }) {
     memberLoadIdRef.current += 1
     setQuery('')
     setCandidates([])
-    setMessage('')
     setError('')
     if (!projectId || !token) return
 
@@ -155,11 +157,13 @@ export function ProjectMembersPanel({ project }: { project: Project | null }) {
       setQuery('')
       setCandidates([])
       setFilter('ACTIVE')
-      setMessage(isReactivation
+      toast.success(isReactivation
         ? `Đã kích hoạt lại ${candidate.name} trong dự án.`
         : `Đã thêm ${candidate.name} vào dự án.`)
     } catch (reason: unknown) {
-      setError(errorMessage(reason, 'Không thể thêm thành viên.'))
+      const message = errorMessage(reason, 'Không thể thêm thành viên.')
+      setError(message)
+      toast.error('Không thể thêm thành viên', message)
     } finally {
       setBusyUserId(null)
     }
@@ -167,16 +171,18 @@ export function ProjectMembersPanel({ project }: { project: Project | null }) {
 
   async function handleRemove(member: ProjectMember) {
     if (!token || !project || !canManage || busyUserId || member.projectRole === 'LEADER') return
-    if (!window.confirm(`Gỡ “${member.name}” khỏi dự án? Membership sẽ được giữ lại ở trạng thái REMOVED.`)) return
+    if (!await confirmDialog({ title: 'Gỡ thành viên?', description: `Membership của ${member.name} sẽ được giữ lại ở trạng thái REMOVED để bảo toàn lịch sử tham gia.`, confirmLabel: 'Gỡ thành viên', destructive: true })) return
 
     setBusyUserId(member.userId)
     clearFeedback()
     try {
       await removeProjectMember(token, project.id, member.userId)
       await loadMembers()
-      setMessage(`Đã gỡ ${member.name}; lịch sử membership vẫn được giữ lại.`)
+      toast.success('Đã gỡ thành viên', `${member.name}; lịch sử membership vẫn được giữ lại.`)
     } catch (reason: unknown) {
-      setError(errorMessage(reason, 'Không thể gỡ thành viên.'))
+      const message = errorMessage(reason, 'Không thể gỡ thành viên.')
+      setError(message)
+      toast.error('Không thể gỡ thành viên', message)
     } finally {
       setBusyUserId(null)
     }
@@ -185,8 +191,8 @@ export function ProjectMembersPanel({ project }: { project: Project | null }) {
   async function handleReview(request: ProjectJoinRequest, decision: 'APPROVE' | 'REJECT') {
     if (!token || !project || !canManage || busyRequestId || busyUserId) return
     const actionLabel = decision === 'APPROVE' ? 'chấp nhận' : 'từ chối'
-    if (decision === 'APPROVE' && !window.confirm(`Chấp nhận “${request.requesterName}” vào dự án với vai trò thành viên?`)) return
-    if (decision === 'REJECT' && !window.confirm(`Từ chối yêu cầu của “${request.requesterName}”?`)) return
+    if (decision === 'APPROVE' && !await confirmDialog({ title: 'Chấp nhận yêu cầu?', description: `${request.requesterName} sẽ được thêm hoặc kích hoạt lại với vai trò thành viên.`, confirmLabel: 'Chấp nhận' })) return
+    if (decision === 'REJECT' && !await confirmDialog({ title: 'Từ chối yêu cầu?', description: `Yêu cầu tham gia của ${request.requesterName} sẽ bị từ chối.`, confirmLabel: 'Từ chối', destructive: true })) return
 
     setBusyRequestId(request.id)
     clearFeedback()
@@ -201,16 +207,17 @@ export function ProjectMembersPanel({ project }: { project: Project | null }) {
           setError(errorMessage(reason, 'Yêu cầu đã được chấp nhận nhưng chưa tải lại được danh sách thành viên.'))
         }
       }
-      setMessage(`Đã ${actionLabel} yêu cầu tham gia của ${request.requesterName}.`)
+      toast.success(`Đã ${actionLabel} yêu cầu tham gia`, request.requesterName)
     } catch (reason: unknown) {
-      setError(errorMessage(reason, `Không thể ${actionLabel} yêu cầu tham gia.`))
+      const message = errorMessage(reason, `Không thể ${actionLabel} yêu cầu tham gia.`)
+      setError(message)
+      toast.error(`Không thể ${actionLabel} yêu cầu`, message)
     } finally {
       setBusyRequestId(null)
     }
   }
 
   function clearFeedback() {
-    setMessage('')
     setError('')
   }
 
@@ -232,19 +239,10 @@ export function ProjectMembersPanel({ project }: { project: Project | null }) {
         <UsersRound size={20} />
       </div>
 
-      <Feedback message={message} error={error} />
+      <Feedback error={error} />
 
       <div className="form-actions" style={{ marginBottom: 16 }}>
-        <select
-          className="select dense"
-          aria-label="Lọc lịch sử thành viên"
-          value={filter}
-          onChange={(event) => setFilter(event.target.value as ProjectMemberFilter)}
-        >
-          <option value="ACTIVE">Đang tham gia</option>
-          <option value="REMOVED">Đã rời dự án</option>
-          <option value="ALL">Toàn bộ lịch sử</option>
-        </select>
+        <PopupSelect className="dense" ariaLabel="Lọc lịch sử thành viên" value={filter} onChange={(value) => setFilter(value as ProjectMemberFilter)} options={[{ value: 'ACTIVE', label: 'Đang tham gia' }, { value: 'REMOVED', label: 'Đã rời dự án' }, { value: 'ALL', label: 'Toàn bộ lịch sử' }]} />
         <button
           className="btn ghost table-btn"
           type="button"

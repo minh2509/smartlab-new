@@ -18,6 +18,7 @@ import {
 import type { AccountResponse, PaginatedResponse, Permission, Role } from '../../../shared/types/api'
 import { EmptyState } from '../../../shared/components/EmptyState'
 import { Feedback } from '../../../shared/components/Feedback'
+import { useToast } from '../../../shared/toast/useToast'
 
 const PAGE_SIZE = 10
 
@@ -43,6 +44,7 @@ const emptyPage: PaginatedResponse<AccountResponse> = {
 export function AdminAccountsPage() {
   const navigate = useNavigate()
   const { token, clearAuth } = useAuth()
+  const toast = useToast()
   const [roles, setRoles] = useState<Role[]>([])
   const [permissions, setPermissions] = useState<Permission[]>([])
   const [accountPage, setAccountPage] = useState<PaginatedResponse<AccountResponse>>(emptyPage)
@@ -54,7 +56,6 @@ export function AdminAccountsPage() {
   const [email, setEmail] = useState('')
   const [provisionRole, setProvisionRole] = useState('')
   const [resendEmail, setResendEmail] = useState('')
-  const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [isLoading, setLoading] = useState(false)
 
@@ -102,12 +103,10 @@ export function AdminAccountsPage() {
 
   function openDialog(dialog: Exclude<AccountDialog, null>) {
     setError('')
-    setMessage('')
     setActiveDialog(dialog)
   }
 
   function openEditDialog(account: AccountResponse) {
-    setMessage('')
     setError('')
     setEditingAccount(account)
     setEditDraft(createEditDraft(account, permissions))
@@ -120,7 +119,6 @@ export function AdminAccountsPage() {
   async function handleProvision(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!token) return
-    setMessage('')
     setError('')
     try {
       await provisionAccount(token, {
@@ -134,7 +132,7 @@ export function AdminAccountsPage() {
       setActiveDialog(null)
       setPage(0)
       await loadAccounts(0)
-      setMessage('Đã cấp tài khoản và gửi invite qua email.')
+      toast.success('Đã cấp tài khoản', 'Invite đã được gửi qua email.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không cấp được tài khoản')
     }
@@ -143,13 +141,12 @@ export function AdminAccountsPage() {
   async function handleResend(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!token) return
-    setMessage('')
     setError('')
     try {
       await resendInvitation(token, resendEmail.trim())
       setResendEmail('')
       setActiveDialog(null)
-      setMessage('Đã gửi lại invite qua email và cập nhật record cũ.')
+      toast.success('Đã gửi lại invite', 'Bản ghi trước đó đã được cập nhật.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không gửi lại được invite')
     }
@@ -158,14 +155,13 @@ export function AdminAccountsPage() {
   async function handleSaveAccount(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!token || !editingAccount || !editDraft.roleCode) return
-    setMessage('')
     setError('')
     try {
       await updateAccountRoles(token, editingAccount.userId, [editDraft.roleCode])
       await setAccountActive(token, editingAccount.userId, editDraft.activeValue === 'true')
       await loadAccounts()
       closeEditDialog()
-      setMessage('Đã cập nhật role và trạng thái thành viên.')
+      toast.success('Đã cập nhật thành viên', 'Role và trạng thái đã được lưu.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không cập nhật được thành viên')
     }
@@ -173,13 +169,12 @@ export function AdminAccountsPage() {
 
   async function handleSavePermissionOverride() {
     if (!token || !editingAccount || !editDraft.permissionCode) return
-    setMessage('')
     setError('')
     try {
       await setUserPermissionOverride(token, editingAccount.userId, editDraft.permissionCode, editDraft.permissionEffect)
       await loadAccounts()
       closeEditDialog()
-      setMessage('Đã cập nhật permission riêng cho thành viên.')
+      toast.success('Đã cập nhật permission riêng')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không cập nhật được permission riêng')
     }
@@ -187,13 +182,12 @@ export function AdminAccountsPage() {
 
   async function handleRemovePermissionOverride() {
     if (!token || !editingAccount || !editDraft.permissionCode) return
-    setMessage('')
     setError('')
     try {
       await removeUserPermissionOverride(token, editingAccount.userId, editDraft.permissionCode)
       await loadAccounts()
       closeEditDialog()
-      setMessage('Đã xoá override permission của thành viên.')
+      toast.success('Đã xóa permission override')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không xoá được override permission')
     }
@@ -206,13 +200,13 @@ export function AdminAccountsPage() {
           <h1>Quản trị tài khoản</h1>
           <p>Cấp tài khoản bởi Admin, gửi lại invite, sửa role và permission riêng theo từng thành viên.</p>
         </div>
-        <button className="btn" type="button" onClick={() => void loadCatalogs()} disabled={isLoading}>
-          <RefreshCw />
-          {isLoading ? 'Đang tải...' : 'Tải lại dữ liệu'}
+        <button className="btn ghost" type="button" onClick={() => void loadCatalogs()} disabled={isLoading}>
+          <RefreshCw aria-hidden="true" />
+          {isLoading ? 'Đang tải...' : 'Tải lại'}
         </button>
       </div>
 
-      <Feedback message={message} error={error} />
+      <Feedback error={error} />
 
       <div className="account-actions">
         <button className="btn primary" type="button" onClick={() => openDialog('provision')}>
@@ -336,10 +330,12 @@ function AccountsTable({
                 </div>
               </td>
               <td>
-                <span className={account.isActive ? 'badge success' : 'badge danger'}>{account.isActive ? 'Đang hoạt động' : 'Khoá đăng nhập'}</span>
-                <span className={account.isAccountVerified ? 'badge success account-verified' : 'badge info account-verified'}>
-                  {account.isAccountVerified ? 'Đã kích hoạt' : 'Chờ invite'}
-                </span>
+                <div className="inline-badges account-status-badges">
+                  <span className={account.isActive ? 'badge success' : 'badge danger'}>{account.isActive ? 'Đang hoạt động' : 'Khoá đăng nhập'}</span>
+                  <span className={account.isAccountVerified ? 'badge success' : 'badge info'}>
+                    {account.isAccountVerified ? 'Đã kích hoạt' : 'Chờ invite'}
+                  </span>
+                </div>
               </td>
               <td>
                 <strong>{account.permissions.length}</strong>

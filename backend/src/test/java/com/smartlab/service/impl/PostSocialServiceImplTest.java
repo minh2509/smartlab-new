@@ -4,11 +4,14 @@ import com.smartlab.dto.request.PostCommentRequest;
 import com.smartlab.dto.response.CursorPageResponse;
 import com.smartlab.dto.response.PostCommentResponse;
 import com.smartlab.dto.response.PostFeedResponse;
+import com.smartlab.dto.response.PostReactionUserResponse;
 import com.smartlab.entity.PostCommentEntity;
 import com.smartlab.entity.PostEntity;
 import com.smartlab.entity.PostReactionEntity;
 import com.smartlab.entity.UserEntity;
 import com.smartlab.enums.PostReactionType;
+import com.smartlab.enums.PostCommentScope;
+import com.smartlab.enums.PostCommentSort;
 import com.smartlab.enums.PostVisibility;
 import com.smartlab.repo.ContentCategoryRepository;
 import com.smartlab.repo.PostCommentRepository;
@@ -217,7 +220,7 @@ class PostSocialServiceImplTest {
         set(newest, "id", 10L);
         PostCommentEntity older = PostCommentEntity.create(20L, 72L, "Older", NOW.minusSeconds(1));
         set(older, "id", 9L);
-        when(comments.findActivePage(eq(20L), any(Instant.class), eq(Long.MAX_VALUE), any(Pageable.class)))
+        when(comments.findActiveCreatedDescendingPage(eq(20L), any(Instant.class), eq(Long.MAX_VALUE), any(Pageable.class)))
                 .thenReturn(List.of(newest, older));
         when(users.findAllById(any())).thenReturn(List.of(user(72L, "author-id", "Author")));
 
@@ -225,6 +228,62 @@ class PostSocialServiceImplTest {
 
         assertThat(page.items()).extracting(PostCommentResponse::content).containsExactly("Newest");
         assertThat(page.nextCursor()).isNotBlank();
+    }
+
+    @Test
+    void commentQueryUsesRequestedSortScopeAndCursorDirection() throws Exception {
+        readableViewer();
+        PostCommentEntity first = PostCommentEntity.create(20L, VIEWER_ID, "Mine", NOW);
+        set(first, "id", 10L);
+        when(comments.findMineActiveCreatedAscendingPage(eq(20L), eq(VIEWER_ID), any(Instant.class), eq(Long.MIN_VALUE), any(Pageable.class)))
+                .thenReturn(List.of(first));
+        when(comments.findActiveUpdatedDescendingPage(eq(20L), any(Instant.class), eq(Long.MAX_VALUE), any(Pageable.class)))
+                .thenReturn(List.of(first));
+        when(comments.findActiveUpdatedAscendingPage(eq(20L), any(Instant.class), eq(Long.MIN_VALUE), any(Pageable.class)))
+                .thenReturn(List.of(first));
+        when(users.findAllById(any())).thenReturn(List.of(user(VIEWER_ID, "viewer-id", "Viewer")));
+
+        assertThat(service.getComments(EMAIL, 20L, null, 20, PostCommentSort.OLDEST, PostCommentScope.MINE).items())
+                .extracting(PostCommentResponse::content).containsExactly("Mine");
+        service.getComments(EMAIL, 20L, null, 20, PostCommentSort.UPDATED_NEWEST, PostCommentScope.ALL);
+        service.getComments(EMAIL, 20L, null, 20, PostCommentSort.UPDATED_OLDEST, PostCommentScope.ALL);
+
+        verify(comments).findMineActiveCreatedAscendingPage(eq(20L), eq(VIEWER_ID), any(Instant.class), eq(Long.MIN_VALUE), any(Pageable.class));
+        verify(comments).findActiveUpdatedDescendingPage(eq(20L), any(Instant.class), eq(Long.MAX_VALUE), any(Pageable.class));
+        verify(comments).findActiveUpdatedAscendingPage(eq(20L), any(Instant.class), eq(Long.MIN_VALUE), any(Pageable.class));
+    }
+
+    @Test
+    void reactorListFiltersPaginatesAndBatchesUsers() throws Exception {
+        readableViewer();
+        PostReactionEntity newest = PostReactionEntity.create(20L, 72L, PostReactionType.LOVE, NOW);
+        PostReactionEntity older = PostReactionEntity.create(20L, 73L, PostReactionType.LOVE, NOW.minusSeconds(1));
+        set(newest, "id", 11L); set(older, "id", 10L);
+        when(reactions.findActivePageByReactionType(eq(20L), eq(PostReactionType.LOVE), any(Instant.class), eq(Long.MAX_VALUE), any(Pageable.class)))
+                .thenReturn(List.of(newest, older));
+        when(users.findAllById(any())).thenReturn(List.of(user(72L, "reactor-a", "Reactor A"), user(73L, "reactor-b", "Reactor B")));
+
+        CursorPageResponse<PostReactionUserResponse> page = service.getReactions(EMAIL, 20L, PostReactionType.LOVE, null, 1);
+
+        assertThat(page.items()).singleElement().satisfies(row -> {
+            assertThat(row.user().getName()).isEqualTo("Reactor A");
+            assertThat(row.reaction()).isEqualTo(PostReactionType.LOVE);
+            assertThat(row.reactedAt()).isEqualTo(NOW);
+        });
+        assertThat(page.nextCursor()).isNotBlank();
+        verify(users).findAllById(any());
+    }
+
+    @Test
+    void reactorListConcealsUnreadablePost() throws Exception {
+        UserEntity viewer = user(VIEWER_ID, "viewer-id", "Viewer");
+        active(viewer);
+        PostEntity projectPost = publishedPost(20L, 72L, "project", PostVisibility.PROJECT, 99L, NOW);
+        when(posts.findActiveById(20L)).thenReturn(Optional.of(projectPost));
+        when(memberships.findActiveProjectIdsByUserId(VIEWER_ID)).thenReturn(List.of());
+
+        assertNotFound(() -> service.getReactions(EMAIL, 20L, null, null, 20));
+        verify(reactions, never()).findActivePage(any(), any(), any(), any());
     }
 
     private UserEntity readableViewer() throws Exception {

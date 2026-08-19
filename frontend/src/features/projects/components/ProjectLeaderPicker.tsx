@@ -90,8 +90,8 @@ export function ProjectLeaderPicker({
   }
 
   return (
-    <div className="form-stack">
-      <div className="field">
+    <div className="form-stack project-leader-picker">
+      <div className="field project-leader-search">
         <label htmlFor={`${idPrefix}-search`}>Tìm thành viên</label>
         <div className="searchbar">
           <Search aria-hidden="true" />
@@ -133,7 +133,7 @@ export function ProjectLeaderPicker({
       </div>
 
       {visibleCandidates.length > 0 ? (
-        <div className="field-admin-list" aria-label="Kết quả tìm ứng viên leader">
+        <div className="field-admin-list project-leader-candidates" aria-label="Kết quả tìm ứng viên leader">
           {visibleCandidates.map((candidate) => (
             <button
               className="member-select-row"
@@ -154,10 +154,9 @@ export function ProjectLeaderPicker({
         </div>
       ) : null}
 
-      <div>
-        <span className="field-label">Nhóm leader đã chọn ({leaders.length})</span>
-        <div className="field-admin-list" role="radiogroup" aria-label="Chọn leader chính" style={{ marginTop: 10 }}>
-          <label className={`field-option ${primaryLeaderUserId === null ? 'selected' : ''}`}>
+      <div className="project-selected-leaders">
+        <span className="field-label">Leader đã chọn</span>
+        {leaders.length > 0 && primaryLeaderUserId === null ? <label className="project-leader-primary-note">
             <input
               type="radio"
               name={`${idPrefix}-primary`}
@@ -166,16 +165,17 @@ export function ProjectLeaderPicker({
               onChange={() => onPrimaryLeaderChange(null)}
             />
             <span>
-              <strong>Chưa chọn leader chính</strong>
-              <small>Nhóm vẫn có thể có nhiều leader mà chưa chỉ định người phụ trách chính.</small>
+              <strong>Chưa chỉ định leader chính</strong>
+              <small>Chọn một leader bên dưới để làm người phụ trách chính.</small>
             </span>
-          </label>
+          </label> : null}
+        <div className="field-admin-list project-leader-list" role="radiogroup" aria-label="Chọn leader chính">
 
           {leaders.map((leader) => {
             const isPrimary = primaryLeaderUserId === leader.userId
             return (
-              <div className="row gap-8" key={leader.userId}>
-                <label className={`field-option ${isPrimary ? 'selected' : ''}`} style={{ flex: 1 }}>
+              <div className="project-leader-row" key={leader.userId}>
+                <label className="project-leader-choice">
                   <input
                     type="radio"
                     name={`${idPrefix}-primary`}
@@ -187,17 +187,17 @@ export function ProjectLeaderPicker({
                     <strong>{leader.name}</strong>
                     <small>{leader.email || 'Thành viên hiện tại của dự án'}</small>
                   </span>
-                  {isPrimary ? <strong className="badge success">Leader chính</strong> : null}
+                  {isPrimary ? <strong className="project-leader-primary-label">Leader chính</strong> : null}
                 </label>
                 <button
-                  className="btn ghost table-btn danger-text"
+                  className="btn ghost table-btn danger-text project-leader-remove"
                   type="button"
                   disabled={disabled}
                   onClick={() => removeLeader(leader.userId)}
                   title={`Gỡ ${leader.name}`}
                   aria-label={`Gỡ ${leader.name} khỏi nhóm leader`}
                 >
-                  <Trash2 aria-hidden="true" />
+                  <Trash2 aria-hidden="true" /> <span>Gỡ</span>
                 </button>
               </div>
             )

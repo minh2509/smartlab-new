@@ -6,12 +6,15 @@ type FeedbackProps = {
 }
 
 export function Feedback({ message, error }: FeedbackProps) {
-  if (!message && !error) return null
+  const content = error || message || ''
+  const isError = Boolean(error)
+
+  if (!content) return null
 
   return (
-    <div className={error ? 'alert error' : 'alert'}>
-      {error ? <AlertCircle aria-hidden="true" /> : <CheckCircle2 aria-hidden="true" />}
-      <span>{error || message}</span>
+    <div className={isError ? 'alert error' : 'alert'} role={isError ? 'alert' : 'status'} aria-live={isError ? 'assertive' : 'polite'} aria-atomic="true">
+      {isError ? <AlertCircle aria-hidden="true" /> : <CheckCircle2 aria-hidden="true" />}
+      <span>{content}</span>
     </div>
   )
 }

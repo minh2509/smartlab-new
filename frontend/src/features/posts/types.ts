@@ -9,6 +9,8 @@ export type PostStatus =
 export type PostVisibility = 'PUBLIC' | 'LAB' | 'PROJECT'
 
 export type ReactionType = 'LIKE' | 'LOVE' | 'HAHA' | 'SAD' | 'ANGRY'
+export type CommentSort = 'NEWEST' | 'OLDEST' | 'UPDATED_NEWEST' | 'UPDATED_OLDEST'
+export type CommentScope = 'ALL' | 'MINE'
 
 export type ReviewDecision = 'APPROVED' | 'REVISION_REQUIRED' | 'REJECTED'
 
@@ -124,4 +126,10 @@ export type PostComment = {
   author: PostAuthor | null
   createdAt: string
   updatedAt: string
+}
+
+export type PostReactionUser = {
+  user: PostAuthor | null
+  reaction: ReactionType
+  reactedAt: string
 }

@@ -2,6 +2,7 @@ import { FlaskConical, RotateCcw, Save } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { EmptyState } from '../../../shared/components/EmptyState'
 import { Feedback } from '../../../shared/components/Feedback'
+import { useToast } from '../../../shared/toast/useToast'
 import type { ResearchField } from '../../../shared/types/api'
 import { useAuth } from '../../auth/authContext'
 import { getResearchFields } from '../../profile/api'
@@ -15,13 +16,13 @@ type ProjectResearchFieldsPanelProps = {
 
 export function ProjectResearchFieldsPanel({ project, onDirtyChange }: ProjectResearchFieldsPanelProps) {
   const { token, profile } = useAuth()
+  const toast = useToast()
   const projectId = project?.id ?? null
   const [catalog, setCatalog] = useState<ResearchField[]>([])
   const [assignedFields, setAssignedFields] = useState<ProjectResearchField[]>([])
   const [selectedFieldIds, setSelectedFieldIds] = useState<number[]>([])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
   const isAdmin = Boolean(profile?.roles.includes('ADMIN') && profile.permissions.includes('PROJECT_MANAGE'))
@@ -66,7 +67,6 @@ export function ProjectResearchFieldsPanel({ project, onDirtyChange }: ProjectRe
     setCatalog([])
     setAssignedFields([])
     setSelectedFieldIds([])
-    setMessage('')
     setError('')
     if (!projectId || !token) return
 
@@ -92,9 +92,11 @@ export function ProjectResearchFieldsPanel({ project, onDirtyChange }: ProjectRe
       const updated = await replaceProjectResearchFields(token, project.id, selectedFieldIds)
       setAssignedFields(updated)
       setSelectedFieldIds(updated.map((field) => field.id))
-      setMessage('Đã cập nhật lĩnh vực nghiên cứu của dự án.')
+      toast.success('Đã cập nhật lĩnh vực nghiên cứu', 'Các lĩnh vực của dự án đã được lưu.')
     } catch (reason: unknown) {
-      setError(errorMessage(reason, 'Không thể cập nhật lĩnh vực nghiên cứu.'))
+      const message = errorMessage(reason, 'Không thể cập nhật lĩnh vực nghiên cứu.')
+      setError(message)
+      toast.error('Không thể cập nhật lĩnh vực nghiên cứu', message)
     } finally {
       setSaving(false)
     }
@@ -114,7 +116,6 @@ export function ProjectResearchFieldsPanel({ project, onDirtyChange }: ProjectRe
   }
 
   function clearFeedback() {
-    setMessage('')
     setError('')
   }
 
@@ -136,7 +137,7 @@ export function ProjectResearchFieldsPanel({ project, onDirtyChange }: ProjectRe
         <FlaskConical size={20} />
       </div>
 
-      <Feedback message={message} error={error} />
+      <Feedback error={error} />
 
       {loading ? <div className="empty tight">Đang tải lĩnh vực...</div> : null}
       {!loading ? (

@@ -1,9 +1,10 @@
-import { Search, UsersRound } from 'lucide-react'
+import { ArrowRight, RotateCcw, Search, UsersRound } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { EmptyState } from '../../../shared/components/EmptyState'
 import { Feedback } from '../../../shared/components/Feedback'
 import type { ResearchField } from '../../../shared/types/api'
+import { PopupSelect } from '../../../shared/ui/PopupSelect'
 import { useAuth } from '../../auth/authContext'
 import { getResearchFields } from '../../profile/api'
 import { PublicPageHead } from '../../public/components/PublicPageHead'
@@ -16,6 +17,7 @@ import {
   PROJECT_TYPE_LABELS,
 } from '../types'
 import type { Project, ProjectStatus, ProjectType } from '../types'
+import './ProjectListPage.css'
 
 type TypeFilter = ProjectType | 'ALL'
 type StatusFilter = ProjectStatus | 'ALL'
@@ -108,6 +110,35 @@ export function ProjectListPage() {
     || statusFilter !== 'ALL'
     || researchFieldFilter !== 'ALL'
 
+  const typeOptions = [
+    { value: 'ALL', label: 'Tất cả loại dự án' },
+    ...PROJECT_TYPES.map((type) => ({ value: type, label: PROJECT_TYPE_LABELS[type] })),
+  ]
+  const statusOptions = [
+    { value: 'ALL', label: 'Tất cả trạng thái' },
+    ...PROJECT_STATUSES.map((status) => ({ value: status, label: PROJECT_STATUS_LABELS[status] })),
+  ]
+  const researchFieldOptions = [
+    {
+      value: 'ALL',
+      label: fieldsLoading
+        ? 'Đang tải lĩnh vực...'
+        : fieldsError
+          ? 'Không tải được lĩnh vực'
+          : 'Tất cả lĩnh vực',
+    },
+    ...(!fieldsLoading && !fieldsError
+      ? researchFields.map((field) => ({ value: String(field.id), label: field.name }))
+      : []),
+  ]
+
+  function resetFilters() {
+    setQuery('')
+    setTypeFilter('ALL')
+    setStatusFilter('ALL')
+    setResearchFieldFilter('ALL')
+  }
+
   return (
     <>
       <PublicPageHead
@@ -115,10 +146,11 @@ export function ProjectListPage() {
         description="Các dự án nghiên cứu và sản phẩm đang được phát triển tại Smart Lab."
       />
 
-      <section className="section">
+      <section className="section project-directory-section">
         <div className="wrap">
-          <div className="toolbar">
-            <div className="searchbar" style={{ flex: 1, minWidth: 240 }}>
+          <div className="project-directory-toolbar">
+            <label className="project-directory-search">
+              <span className="sr-only">Tìm kiếm dự án</span>
               <Search aria-hidden="true" />
               <input
                 className="input"
@@ -126,96 +158,91 @@ export function ProjectListPage() {
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Tìm theo mã, tên, mô tả hoặc leader..."
-                aria-label="Tìm kiếm dự án"
               />
-            </div>
+            </label>
 
-            <select
-              className="select"
+            <PopupSelect
               value={typeFilter}
-              onChange={(event) => setTypeFilter(event.target.value as TypeFilter)}
-              aria-label="Lọc theo loại dự án"
-            >
-              <option value="ALL">Tất cả loại dự án</option>
-              {PROJECT_TYPES.map((type) => (
-                <option value={type} key={type}>{PROJECT_TYPE_LABELS[type]}</option>
-              ))}
-            </select>
+              options={typeOptions}
+              onChange={(value) => setTypeFilter(value as TypeFilter)}
+              ariaLabel="Lọc theo loại dự án"
+              className="project-directory-filter"
+            />
 
-            <select
-              className="select"
-              value={researchFieldFilter}
+            <PopupSelect
+              value={String(researchFieldFilter)}
+              options={researchFieldOptions}
               disabled={fieldsLoading || Boolean(fieldsError)}
-              onChange={(event) => setResearchFieldFilter(
-                event.target.value === 'ALL' ? 'ALL' : Number(event.target.value),
-              )}
-              aria-label="Lọc theo lĩnh vực nghiên cứu"
-            >
-              <option value="ALL">
-                {fieldsLoading ? 'Đang tải lĩnh vực...' : fieldsError ? 'Không tải được lĩnh vực' : 'Tất cả lĩnh vực'}
-              </option>
-              {researchFields.map((field) => <option value={field.id} key={field.id}>{field.name}</option>)}
-            </select>
+              onChange={(value) => setResearchFieldFilter(value === 'ALL' ? 'ALL' : Number(value))}
+              ariaLabel="Lọc theo lĩnh vực nghiên cứu"
+              className="project-directory-filter"
+            />
 
-            <select
-              className="select"
+            <PopupSelect
               value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
-              aria-label="Lọc theo trạng thái dự án"
-            >
-              <option value="ALL">Tất cả trạng thái</option>
-              {PROJECT_STATUSES.map((status) => (
-                <option value={status} key={status}>{PROJECT_STATUS_LABELS[status]}</option>
-              ))}
-            </select>
+              options={statusOptions}
+              onChange={(value) => setStatusFilter(value as StatusFilter)}
+              ariaLabel="Lọc theo trạng thái dự án"
+              className="project-directory-filter"
+            />
 
             {hasActiveFilters ? (
               <button
-                className="btn ghost"
+                className="project-directory-reset"
                 type="button"
-                onClick={() => {
-                  setQuery('')
-                  setTypeFilter('ALL')
-                  setStatusFilter('ALL')
-                  setResearchFieldFilter('ALL')
-                }}
+                onClick={resetFilters}
               >
-                Xóa bộ lọc
+                <RotateCcw size={15} aria-hidden="true" />
+                Đặt lại
               </button>
             ) : null}
           </div>
 
           {error ? (
-            <>
+            <div className="project-directory-request-state">
               <Feedback error={error} />
               <button className="btn" type="button" onClick={() => setReloadKey((value) => value + 1)}>
                 Thử tải lại
               </button>
-            </>
+            </div>
           ) : null}
 
           {loading ? (
-            <div className="public-empty empty tight">Đang tải danh sách dự án...</div>
+            <div className="public-empty empty tight project-directory-request-state">Đang tải danh sách dự án...</div>
           ) : null}
 
           {!loading && !error && visibleProjects.length > 0 ? (
             <>
-              <p className="muted small">Hiển thị {visibleProjects.length} / {projects.length} dự án.</p>
-              <div className="grid c3">
+              <p className="project-directory-summary" aria-live="polite">
+                {hasActiveFilters
+                  ? `${visibleProjects.length} kết quả${visibleProjects.length !== projects.length ? ` trong ${projects.length} dự án` : ''}`
+                  : `${projects.length} dự án`}
+              </p>
+              <div className="project-directory-grid">
                 {visibleProjects.map((project) => <ProjectCard project={project} key={project.id} />)}
               </div>
             </>
           ) : null}
 
           {!loading && !error && visibleProjects.length === 0 ? (
-            <EmptyState
-              title={projects.length === 0 ? 'Chưa có dự án bạn có thể xem' : 'Không tìm thấy dự án'}
-              description={
-                projects.length === 0
-                  ? 'Dự án công khai và dự án nội bộ bạn được phép xem sẽ xuất hiện tại đây.'
-                  : 'Hãy thay đổi từ khóa hoặc bộ lọc để xem kết quả khác.'
-              }
-            />
+            <>
+              <EmptyState
+                title={projects.length === 0 ? 'Chưa có dự án bạn có thể xem' : 'Không tìm thấy dự án phù hợp'}
+                description={
+                  projects.length === 0
+                    ? 'Dự án công khai và dự án nội bộ bạn được phép xem sẽ xuất hiện tại đây.'
+                    : 'Thử thay đổi từ khóa hoặc bộ lọc.'
+                }
+              />
+              {hasActiveFilters ? (
+                <div className="project-directory-empty-action">
+                  <button className="project-directory-reset" type="button" onClick={resetFilters}>
+                    <RotateCcw size={15} aria-hidden="true" />
+                    Đặt lại
+                  </button>
+                </div>
+              ) : null}
+            </>
           ) : null}
         </div>
       </section>
@@ -228,27 +255,30 @@ function ProjectCard({ project }: { project: Project }) {
   const remainingLeaderCount = project.leaders.length - shownLeaders.length
 
   return (
-    <Link className="card hover projcard" to={`/du-an/${project.id}`}>
-      <div className="body">
-        <div className="row gap-6 wrapf">
-          <span className={`lbl badge ${PROJECT_STATUS_BADGES[project.status]}`}>
+    <Link className="project-directory-card" to={`/du-an/${project.id}`}>
+      <div className="project-directory-card-body">
+        <div className="project-directory-card-topline">
+          <span className="project-directory-card-code">{project.code}</span>
+          {project.isFeatured ? <span className="project-directory-card-featured">Nổi bật</span> : null}
+        </div>
+
+        <div className="project-directory-card-badges">
+          <span className={`badge ${PROJECT_STATUS_BADGES[project.status]}`}>
             <span className="dot" />
             {PROJECT_STATUS_LABELS[project.status]}
           </span>
-          <span className="chip accent">{PROJECT_TYPE_LABELS[project.projectType]}</span>
-          {!project.isPublic ? <span className="chip">Nội bộ</span> : null}
-          {project.isFeatured ? <span className="chip">Nổi bật</span> : null}
+          <span className="project-directory-card-type">{PROJECT_TYPE_LABELS[project.projectType]}</span>
+          {!project.isPublic ? <span className="project-directory-card-internal">Nội bộ</span> : null}
         </div>
 
-        <div>
-          <span className="muted small">{project.code}</span>
-          <h3>{project.name}</h3>
-        </div>
-        <p>{project.description || 'Dự án chưa có mô tả.'}</p>
+        <h3 className="project-directory-card-title">{project.name}</h3>
+        <p className={`project-directory-card-description${project.description ? '' : ' is-fallback'}`}>
+          {project.description || 'Dự án chưa có mô tả.'}
+        </p>
 
-        <div className="foot">
+        <div className="project-directory-card-footer">
           {shownLeaders.length > 0 ? (
-            <span className="ava-stack" aria-label={`${project.leaders.length} leader`}>
+            <span className="project-directory-card-leaders" aria-label={`${project.leaders.length} leader`}>
               {shownLeaders.map((leader) => (
                 <span className="ava xs" title={leader.name} key={leader.userId}>
                   {initialsOf(leader.name)}
@@ -257,9 +287,9 @@ function ProjectCard({ project }: { project: Project }) {
               {remainingLeaderCount > 0 ? <span className="ava xs">+{remainingLeaderCount}</span> : null}
             </span>
           ) : (
-            <span className="muted small"><UsersRound size={14} /> Chưa phân công leader</span>
+            <span className="project-directory-card-no-leader"><UsersRound size={15} aria-hidden="true" /> Chưa phân công leader</span>
           )}
-          <span className="muted-link">Xem chi tiết</span>
+          <span className="project-directory-card-detail">Xem chi tiết <ArrowRight size={16} aria-hidden="true" /></span>
         </div>
       </div>
     </Link>

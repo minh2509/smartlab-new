@@ -27,12 +27,61 @@ public interface PostCommentRepository extends JpaRepository<PostCommentEntity, 
               )
             order by c.createdAt desc, c.id desc
             """)
-    List<PostCommentEntity> findActivePage(
+    List<PostCommentEntity> findActiveCreatedDescendingPage(
             @Param("postId") Long postId,
             @Param("cursorCreatedAt") Instant cursorCreatedAt,
             @Param("cursorId") Long cursorId,
             Pageable pageable
     );
+
+    @Query("""
+            select c from PostCommentEntity c where c.postId = :postId and c.authorUserId = :authorUserId and c.deletedAt is null
+              and (c.createdAt < :cursorTimestamp or (c.createdAt = :cursorTimestamp and c.id < :cursorId))
+            order by c.createdAt desc, c.id desc
+            """)
+    List<PostCommentEntity> findMineActiveCreatedDescendingPage(@Param("postId") Long postId, @Param("authorUserId") Long authorUserId, @Param("cursorTimestamp") Instant cursorTimestamp, @Param("cursorId") Long cursorId, Pageable pageable);
+
+    @Query("""
+            select c from PostCommentEntity c where c.postId = :postId and c.deletedAt is null
+              and (c.createdAt > :cursorTimestamp or (c.createdAt = :cursorTimestamp and c.id > :cursorId))
+            order by c.createdAt asc, c.id asc
+            """)
+    List<PostCommentEntity> findActiveCreatedAscendingPage(@Param("postId") Long postId, @Param("cursorTimestamp") Instant cursorTimestamp, @Param("cursorId") Long cursorId, Pageable pageable);
+
+    @Query("""
+            select c from PostCommentEntity c where c.postId = :postId and c.authorUserId = :authorUserId and c.deletedAt is null
+              and (c.createdAt > :cursorTimestamp or (c.createdAt = :cursorTimestamp and c.id > :cursorId))
+            order by c.createdAt asc, c.id asc
+            """)
+    List<PostCommentEntity> findMineActiveCreatedAscendingPage(@Param("postId") Long postId, @Param("authorUserId") Long authorUserId, @Param("cursorTimestamp") Instant cursorTimestamp, @Param("cursorId") Long cursorId, Pageable pageable);
+
+    @Query("""
+            select c from PostCommentEntity c where c.postId = :postId and c.deletedAt is null
+              and (c.updatedAt < :cursorTimestamp or (c.updatedAt = :cursorTimestamp and c.id < :cursorId))
+            order by c.updatedAt desc, c.id desc
+            """)
+    List<PostCommentEntity> findActiveUpdatedDescendingPage(@Param("postId") Long postId, @Param("cursorTimestamp") Instant cursorTimestamp, @Param("cursorId") Long cursorId, Pageable pageable);
+
+    @Query("""
+            select c from PostCommentEntity c where c.postId = :postId and c.authorUserId = :authorUserId and c.deletedAt is null
+              and (c.updatedAt < :cursorTimestamp or (c.updatedAt = :cursorTimestamp and c.id < :cursorId))
+            order by c.updatedAt desc, c.id desc
+            """)
+    List<PostCommentEntity> findMineActiveUpdatedDescendingPage(@Param("postId") Long postId, @Param("authorUserId") Long authorUserId, @Param("cursorTimestamp") Instant cursorTimestamp, @Param("cursorId") Long cursorId, Pageable pageable);
+
+    @Query("""
+            select c from PostCommentEntity c where c.postId = :postId and c.deletedAt is null
+              and (c.updatedAt > :cursorTimestamp or (c.updatedAt = :cursorTimestamp and c.id > :cursorId))
+            order by c.updatedAt asc, c.id asc
+            """)
+    List<PostCommentEntity> findActiveUpdatedAscendingPage(@Param("postId") Long postId, @Param("cursorTimestamp") Instant cursorTimestamp, @Param("cursorId") Long cursorId, Pageable pageable);
+
+    @Query("""
+            select c from PostCommentEntity c where c.postId = :postId and c.authorUserId = :authorUserId and c.deletedAt is null
+              and (c.updatedAt > :cursorTimestamp or (c.updatedAt = :cursorTimestamp and c.id > :cursorId))
+            order by c.updatedAt asc, c.id asc
+            """)
+    List<PostCommentEntity> findMineActiveUpdatedAscendingPage(@Param("postId") Long postId, @Param("authorUserId") Long authorUserId, @Param("cursorTimestamp") Instant cursorTimestamp, @Param("cursorId") Long cursorId, Pageable pageable);
 
     @Query("""
             select c from PostCommentEntity c

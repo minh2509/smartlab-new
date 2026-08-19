@@ -1,10 +1,9 @@
-import { ClipboardCheck, ChevronDown, LogIn, LogOut, Newspaper } from 'lucide-react'
+import { ChevronDown, LogIn, LogOut, Newspaper } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../../features/auth/authContext'
 import { NotificationPopover } from '../../features/notifications/components/NotificationPopover'
 import { Logo } from './Logo'
-import { accessPolicies, hasAllPermissions } from '../../app/accessPolicy'
 
 const publicLinks = [
   { to: '/du-an', label: 'Dự án' },
@@ -23,9 +22,7 @@ const aboutLinks = [
 export function AppHeader() {
   const { isAuthenticated, logout, profile } = useAuth()
   const role = resolveHeaderRole(profile?.roles)
-  const canReviewPosts = profile?.permissions.includes('posts.review') ?? false
   const canReadNotifications = profile?.permissions.includes('notifications.read_own') ?? false
-  const canAccessAccounts = hasAllPermissions(profile?.permissions, accessPolicies.accounts)
 
   return (
     <header className="site-nav">
@@ -49,15 +46,11 @@ export function AppHeader() {
           {isAuthenticated ? (
             <>
               <li>
-                <NavLink to="/profile">Hồ sơ</NavLink>
+                <NavLink to="/profile">Workspace</NavLink>
               </li>
               {role ? (
                 <li>
-                  {role === 'Admin' && canAccessAccounts ? (
-                    <NavLink to="/admin/accounts">Admin</NavLink>
-                  ) : (
-                    <span className="nav-role-label">{role}</span>
-                  )}
+                  <span className="nav-role-label">{role}</span>
                 </li>
               ) : null}
             </>
@@ -75,15 +68,6 @@ export function AppHeader() {
                 <Newspaper size={15} aria-hidden="true" />
                 Bảng tin
               </NavLink>
-              {canReviewPosts ? (
-                <NavLink
-                  className={({ isActive }) => `nav-private-link${isActive ? ' is-active' : ''}`}
-                  to="/posts/review-queue"
-                >
-                  <ClipboardCheck size={15} aria-hidden="true" />
-                  Duyệt bài
-                </NavLink>
-              ) : null}
               {canReadNotifications ? (
                 <NotificationPopover />
               ) : null}

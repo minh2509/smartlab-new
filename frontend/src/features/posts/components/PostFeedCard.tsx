@@ -1,15 +1,18 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { LogIn, MessageCircle } from 'lucide-react'
+import { FolderKanban, LogIn, MessageCircle } from 'lucide-react'
 import { PostReactionPicker } from './PostReactionPicker'
 import { PostContent } from './PostContent'
 import { parsePostContent } from '../postContent'
-import { reactionPresentation } from '../reactions'
+import { representativeReactions } from '../reactions'
 import { exactDateTime, relativeTime } from '../relativeTime'
 import type { PostFeedItem, ReactionState, ReactionType } from '../types'
+import type { Project } from '../../projects/types'
 
 type Props = {
   post: PostFeedItem
+  project?: Project
+  projectCatalogLoading: boolean
   token?: string | null
   reactionPending: boolean
   canInteract: boolean
@@ -23,6 +26,8 @@ const VISIBILITY = { PUBLIC: 'Công khai', LAB: 'Nội bộ Lab', PROJECT: 'Theo
 
 export function PostFeedCard({
   post,
+  project,
+  projectCatalogLoading,
   token,
   reactionPending,
   canInteract,
@@ -36,9 +41,7 @@ export function PostFeedCard({
   const hasRenderableContent = Boolean(content && (content.body || content.files?.length))
   const [expanded, setExpanded] = useState(false)
   const long = Boolean(body && (body.length > 520 || body.split('\n').length > 7))
-  const reactionIcons = (Object.entries(post.reactionCounts) as Array<[ReactionType, number]>)
-    .filter(([, count]) => count > 0)
-    .slice(0, 3)
+  const reactionIcons = representativeReactions(post.reactionCounts)
 
   return (
     <article className="social-post-card">
@@ -51,7 +54,12 @@ export function PostFeedCard({
               {post.publishedAt ? relativeTime(post.publishedAt) : ''}
             </time>
             <span aria-hidden="true">·</span>
-            <span>{VISIBILITY[post.visibility]}{post.category ? `, ${post.category.name}` : ''}</span>
+            {post.visibility === 'PROJECT' && post.projectId !== null ? <span className="social-project-context">
+              <FolderKanban aria-hidden="true" />
+              Theo dự án · {project
+                ? `${project.code} — ${project.name}`
+                : projectCatalogLoading ? 'Đang tải thông tin dự án…' : 'Không còn truy cập thông tin dự án'}
+            </span> : <span>{VISIBILITY[post.visibility]}{post.category ? `, ${post.category.name}` : ''}</span>}
           </div>
         </div>
       </header>
@@ -75,7 +83,7 @@ export function PostFeedCard({
 
       <div className="social-summary">
         <span aria-label={`${post.reactionCount} cảm xúc`}>
-          {reactionIcons.map(([type]) => <span key={type} aria-hidden="true">{reactionPresentation(type).emoji}</span>)}
+          {reactionIcons.map((reaction) => <span key={reaction.type} aria-hidden="true"><reaction.Icon /></span>)}
           {post.reactionCount > 0 ? <strong>{post.reactionCount}</strong> : null}
         </span>
         <button type="button" onClick={canInteract ? onComments : onRequireLogin}>{post.commentCount} bình luận</button>

@@ -3,12 +3,15 @@ import type {
   ContentCategory,
   CreatePostRequest,
   CursorPage,
+  CommentScope,
+  CommentSort,
   PostComment,
   PostDetail,
   PostFeedItem,
   PostSummary,
   ReactionState,
   ReactionType,
+  PostReactionUser,
   ReviewPostRequest,
   UpdatePostRequest,
 } from './types'
@@ -31,9 +34,25 @@ export function removePostReaction(token: string, postId: number) {
   return apiClient<ReactionState>(`/posts/${postId}/reaction`, { method: 'DELETE', token })
 }
 
-export function listPostComments(token: string, postId: number, cursor?: string, limit = 20) {
+export type ListPostCommentsOptions = {
+  cursor?: string | null
+  limit?: number
+  sort?: CommentSort
+  scope?: CommentScope
+}
+
+export function listPostComments(token: string, postId: number, options: ListPostCommentsOptions = {}) {
+  const { cursor, limit = 20, sort = 'NEWEST', scope = 'ALL' } = options
   return apiClient<CursorPage<PostComment>>(
-    `/posts/${postId}/comments${toQuery({ cursor, limit })}`,
+    `/posts/${postId}/comments${toQuery({ cursor: cursor ?? undefined, limit, sort, scope })}`,
+    { token },
+  )
+}
+
+export function listPostReactions(token: string, postId: number, options: { reaction?: ReactionType | null; cursor?: string | null; limit?: number } = {}) {
+  const { reaction, cursor, limit = 30 } = options
+  return apiClient<CursorPage<PostReactionUser>>(
+    `/posts/${postId}/reactions${toQuery({ reaction: reaction ?? undefined, cursor: cursor ?? undefined, limit })}`,
     { token },
   )
 }

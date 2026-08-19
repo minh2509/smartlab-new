@@ -13,6 +13,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { EmptyState } from '../../../shared/components/EmptyState'
 import { Feedback } from '../../../shared/components/Feedback'
+import { useToast } from '../../../shared/toast/useToast'
+import { confirmDialog } from '../../../shared/ui/projectConfirmDialog'
+import { PopupSelect } from '../../../shared/ui/PopupSelect'
 import { useAuth } from '../../auth/authContext'
 import { downloadFile } from '../../files/api'
 import type { Project } from '../../projects/types'
@@ -86,6 +89,7 @@ const EMPTY_CREATE_FORM: CreateDocumentForm = {
 
 export function ProjectDocumentsPanel({ project, onDirtyChange, onBusyChange }: ProjectDocumentsPanelProps) {
   const { token, profile } = useAuth()
+  const toast = useToast()
   const projectId = project?.id ?? null
   const createFileInputRef = useRef<HTMLInputElement>(null)
   const versionFileInputRef = useRef<HTMLInputElement>(null)
@@ -102,7 +106,6 @@ export function ProjectDocumentsPanel({ project, onDirtyChange, onBusyChange }: 
   const [loading, setLoading] = useState(false)
   const [loadingVersions, setLoadingVersions] = useState(false)
   const [busyAction, setBusyAction] = useState<string | null>(null)
-  const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
   const isAdminManager = Boolean(
@@ -153,7 +156,6 @@ export function ProjectDocumentsPanel({ project, onDirtyChange, onBusyChange }: 
     setExpandedDocumentId(null)
     setCreateForm(EMPTY_CREATE_FORM)
     setVersionForm({ accessScope: 'PROJECT', note: '', file: null })
-    setMessage('')
     setError('')
     setLoadingVersions(false)
     if (createFileInputRef.current) createFileInputRef.current.value = ''
@@ -191,7 +193,6 @@ export function ProjectDocumentsPanel({ project, onDirtyChange, onBusyChange }: 
     const validationError = validateDocumentForm(createForm)
     if (validationError) {
       setError(validationError)
-      setMessage('')
       return
     }
 
@@ -208,9 +209,11 @@ export function ProjectDocumentsPanel({ project, onDirtyChange, onBusyChange }: 
       setDocuments((current) => [created, ...current.filter((item) => item.id !== created.id)])
       setCreateForm(EMPTY_CREATE_FORM)
       if (createFileInputRef.current) createFileInputRef.current.value = ''
-      setMessage(`Đã tạo tài liệu “${created.title}” với phiên bản đầu tiên.`)
+      toast.success('Đã tạo tài liệu', `“${created.title}” đã có phiên bản đầu tiên.`)
     } catch (reason: unknown) {
-      setError(errorMessage(reason, 'Không thể tạo tài liệu.'))
+      const message = errorMessage(reason, 'Không thể tạo tài liệu.')
+      setError(message)
+      toast.error('Không thể tạo tài liệu', message)
     } finally {
       setBusyAction(null)
     }
@@ -221,7 +224,7 @@ export function ProjectDocumentsPanel({ project, onDirtyChange, onBusyChange }: 
     if (
       expandedDocumentId !== null
       && versionDirty
-      && !window.confirm('Bỏ các thay đổi phiên bản chưa lưu?')
+      && !await confirmDialog({ title: 'Bỏ thay đổi phiên bản?', description: 'Thông tin và file phiên bản mới chưa được lưu sẽ bị bỏ.', confirmLabel: 'Bỏ thay đổi' })
     ) return
 
     versionsRequestIdRef.current += 1
@@ -259,7 +262,6 @@ export function ProjectDocumentsPanel({ project, onDirtyChange, onBusyChange }: 
     const fileError = validateFile(versionForm.file)
     if (fileError) {
       setError(fileError)
-      setMessage('')
       return
     }
 
@@ -285,9 +287,11 @@ export function ProjectDocumentsPanel({ project, onDirtyChange, onBusyChange }: 
         : item))
       setVersionForm({ accessScope: created.file.accessScope as DocumentAccessScope, note: '', file: null })
       if (versionFileInputRef.current) versionFileInputRef.current.value = ''
-      setMessage(`Đã tải lên phiên bản ${created.versionNo} của “${document.title}”.`)
+      toast.success('Đã tải lên phiên bản mới', `Phiên bản ${created.versionNo} của “${document.title}” đã được lưu.`)
     } catch (reason: unknown) {
-      setError(errorMessage(reason, 'Không thể tạo phiên bản mới.'))
+      const message = errorMessage(reason, 'Không thể tạo phiên bản mới.')
+      setError(message)
+      toast.error('Không thể tạo phiên bản mới', message)
     } finally {
       setBusyAction(null)
     }
@@ -301,7 +305,9 @@ export function ProjectDocumentsPanel({ project, onDirtyChange, onBusyChange }: 
       const downloaded = await downloadDocument(token, document.id)
       saveBlob(downloaded.blob, downloaded.filename || document.currentFile.originalName)
     } catch (reason: unknown) {
-      setError(errorMessage(reason, 'Không thể tải tài liệu xuống.'))
+      const message = errorMessage(reason, 'Không thể tải tài liệu xuống.')
+      setError(message)
+      toast.error('Không thể tải tài liệu xuống', message)
     } finally {
       setBusyAction(null)
     }
@@ -315,7 +321,9 @@ export function ProjectDocumentsPanel({ project, onDirtyChange, onBusyChange }: 
       const blob = await downloadFile(token, version.file.id)
       saveBlob(blob, version.file.originalName)
     } catch (reason: unknown) {
-      setError(errorMessage(reason, `Không thể tải phiên bản ${version.versionNo}.`))
+      const message = errorMessage(reason, `Không thể tải phiên bản ${version.versionNo}.`)
+      setError(message)
+      toast.error('Không thể tải phiên bản', message)
     } finally {
       setBusyAction(null)
     }
@@ -326,8 +334,8 @@ export function ProjectDocumentsPanel({ project, onDirtyChange, onBusyChange }: 
       !token
       || !canManage
       || busyAction
-      || !window.confirm(`Xóa tài liệu “${document.title}”? Tài liệu sẽ được xóa mềm và giữ lại lịch sử trong database.`)
     ) return
+    if (!await confirmDialog({ title: 'Xóa tài liệu?', description: `Tài liệu “${document.title}” sẽ được xóa mềm. Lịch sử trong cơ sở dữ liệu vẫn được giữ lại.`, confirmLabel: 'Xóa tài liệu', destructive: true })) return
 
     setBusyAction(`delete:${document.id}`)
     clearFeedback()
@@ -341,9 +349,11 @@ export function ProjectDocumentsPanel({ project, onDirtyChange, onBusyChange }: 
         setLoadingVersions(false)
         resetVersionForm()
       }
-      setMessage(`Đã xóa mềm tài liệu “${document.title}”.`)
+      toast.success('Đã xóa mềm tài liệu', `“${document.title}” vẫn được giữ trong lịch sử.`)
     } catch (reason: unknown) {
-      setError(errorMessage(reason, 'Không thể xóa tài liệu.'))
+      const message = errorMessage(reason, 'Không thể xóa tài liệu.')
+      setError(message)
+      toast.error('Không thể xóa tài liệu', message)
     } finally {
       setBusyAction(null)
     }
@@ -355,7 +365,6 @@ export function ProjectDocumentsPanel({ project, onDirtyChange, onBusyChange }: 
   }
 
   function clearFeedback() {
-    setMessage('')
     setError('')
   }
 
@@ -393,7 +402,7 @@ export function ProjectDocumentsPanel({ project, onDirtyChange, onBusyChange }: 
         </div>
       </div>
 
-      <Feedback message={message} error={error} />
+      <Feedback error={error} />
 
       <div className={`project-documents-layout ${canManage ? '' : 'read-only'}`}>
         <div className="project-document-list">
@@ -526,19 +535,7 @@ export function ProjectDocumentsPanel({ project, onDirtyChange, onBusyChange }: 
                       </label>
                       <label className="field">
                         <span>Phạm vi truy cập</span>
-                        <select
-                          className="select"
-                          value={versionForm.accessScope}
-                          disabled={Boolean(busyAction)}
-                          onChange={(event) => setVersionForm((current) => ({
-                            ...current,
-                            accessScope: event.target.value as DocumentAccessScope,
-                          }))}
-                        >
-                          {ACCESS_SCOPE_OPTIONS.map((option) => (
-                            <option value={option.value} key={option.value}>{option.label}</option>
-                          ))}
-                        </select>
+                        <PopupSelect value={versionForm.accessScope} disabled={Boolean(busyAction)} ariaLabel="Phạm vi truy cập phiên bản" options={ACCESS_SCOPE_OPTIONS} onChange={(value) => setVersionForm((current) => ({ ...current, accessScope: value as DocumentAccessScope }))} />
                         <small className="project-document-scope-help">{scopeDescription(versionForm.accessScope)}</small>
                       </label>
                       <label className="field">
@@ -623,19 +620,7 @@ export function ProjectDocumentsPanel({ project, onDirtyChange, onBusyChange }: 
             </label>
             <label className="field">
               <span>Phạm vi truy cập</span>
-              <select
-                className="select"
-                value={createForm.accessScope}
-                disabled={Boolean(busyAction)}
-                onChange={(event) => setCreateForm((current) => ({
-                  ...current,
-                  accessScope: event.target.value as DocumentAccessScope,
-                }))}
-              >
-                {ACCESS_SCOPE_OPTIONS.map((option) => (
-                  <option value={option.value} key={option.value}>{option.label}</option>
-                ))}
-              </select>
+              <PopupSelect value={createForm.accessScope} disabled={Boolean(busyAction)} ariaLabel="Phạm vi truy cập tài liệu" options={ACCESS_SCOPE_OPTIONS} onChange={(value) => setCreateForm((current) => ({ ...current, accessScope: value as DocumentAccessScope }))} />
               <small className="project-document-scope-help">{scopeDescription(createForm.accessScope)}</small>
             </label>
             <label className="field">

@@ -7,12 +7,15 @@ import com.smartlab.dto.response.PostCategoryResponse;
 import com.smartlab.dto.response.PostCommentResponse;
 import com.smartlab.dto.response.PostFeedResponse;
 import com.smartlab.dto.response.PostReactionResponse;
+import com.smartlab.dto.response.PostReactionUserResponse;
 import com.smartlab.entity.ContentCategoryEntity;
 import com.smartlab.entity.PostCommentEntity;
 import com.smartlab.entity.PostEntity;
 import com.smartlab.entity.PostReactionEntity;
 import com.smartlab.entity.UserEntity;
 import com.smartlab.enums.PostReactionType;
+import com.smartlab.enums.PostCommentScope;
+import com.smartlab.enums.PostCommentSort;
 import com.smartlab.enums.PostStatus;
 import com.smartlab.enums.PostVisibility;
 import com.smartlab.repo.ContentCategoryRepository;
@@ -24,6 +27,7 @@ import com.smartlab.repo.UserRepository;
 import com.smartlab.service.PostSocialService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,6 +50,9 @@ public class PostSocialServiceImpl implements PostSocialService {
     private static final int MAX_LIMIT = 50;
     private static final CursorKey FIRST_PAGE = new CursorKey(
             Instant.parse("9999-12-31T23:59:59.999Z"), Long.MAX_VALUE
+    );
+    private static final CursorKey FIRST_ASCENDING_PAGE = new CursorKey(
+            Instant.parse("0001-01-01T00:00:00Z"), Long.MIN_VALUE
     );
 
     private final UserRepository userRepository;
@@ -136,18 +143,16 @@ public class PostSocialServiceImpl implements PostSocialService {
     @Override
     @Transactional(readOnly = true)
     public CursorPageResponse<PostCommentResponse> getComments(
-            String authenticatedEmail, Long postId, String cursor, int requestedLimit
+            String authenticatedEmail, Long postId, String cursor, int requestedLimit,
+            PostCommentSort sort, PostCommentScope scope
     ) {
         UserEntity viewer = resolveActiveUser(authenticatedEmail);
         requireReadablePublishedPost(postId, viewer.getId());
         int limit = validatedLimit(requestedLimit);
-        CursorKey cursorKey = cursor == null || cursor.isBlank() ? FIRST_PAGE : decodeCursor(cursor);
-        List<PostCommentEntity> fetched = postCommentRepository.findActivePage(
-                postId,
-                cursorKey.instant(),
-                cursorKey.id(),
-                PageRequest.of(0, limit + 1)
-        );
+        CursorKey cursorKey = cursor == null || cursor.isBlank()
+                ? (isAscending(sort) ? FIRST_ASCENDING_PAGE : FIRST_PAGE)
+                : decodeCursor(cursor);
+        List<PostCommentEntity> fetched = findCommentPage(postId, viewer.getId(), cursorKey, limit, sort, scope);
         boolean hasMore = fetched.size() > limit;
         List<PostCommentEntity> comments = hasMore ? fetched.subList(0, limit) : fetched;
         Map<Long, PostAuthorResponse> authors = findAuthorsForComments(comments);
@@ -155,8 +160,31 @@ public class PostSocialServiceImpl implements PostSocialService {
                 .map(comment -> toCommentResponse(comment, authors.get(comment.getAuthorUserId())))
                 .toList();
         String nextCursor = hasMore
-                ? encodeCursor(comments.getLast().getCreatedAt(), comments.getLast().getId())
+                ? encodeCursor(commentTimestamp(comments.getLast(), sort), comments.getLast().getId())
                 : null;
+        return new CursorPageResponse<>(items, nextCursor);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CursorPageResponse<PostReactionUserResponse> getReactions(
+            String authenticatedEmail, Long postId, PostReactionType reactionType, String cursor, int requestedLimit
+    ) {
+        UserEntity viewer = resolveActiveUser(authenticatedEmail);
+        requireReadablePublishedPost(postId, viewer.getId());
+        int limit = validatedLimit(requestedLimit);
+        CursorKey cursorKey = cursor == null || cursor.isBlank() ? FIRST_PAGE : decodeCursor(cursor);
+        List<PostReactionEntity> fetched = reactionType == null
+                ? postReactionRepository.findActivePage(postId, cursorKey.instant(), cursorKey.id(), PageRequest.of(0, limit + 1))
+                : postReactionRepository.findActivePageByReactionType(postId, reactionType, cursorKey.instant(), cursorKey.id(), PageRequest.of(0, limit + 1));
+        boolean hasMore = fetched.size() > limit;
+        List<PostReactionEntity> reactions = hasMore ? fetched.subList(0, limit) : fetched;
+        Map<Long, PostAuthorResponse> authors = findAuthors(reactions.stream()
+                .map(PostReactionEntity::getUserId).collect(Collectors.toSet()));
+        List<PostReactionUserResponse> items = reactions.stream()
+                .map(item -> new PostReactionUserResponse(authors.get(item.getUserId()), item.getReactionType(), item.getUpdatedAt()))
+                .toList();
+        String nextCursor = hasMore ? encodeCursor(reactions.getLast().getUpdatedAt(), reactions.getLast().getId()) : null;
         return new CursorPageResponse<>(items, nextCursor);
     }
 
@@ -255,6 +283,35 @@ public class PostSocialServiceImpl implements PostSocialService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Comment content must contain 1 to 5000 characters");
         }
         return normalized;
+    }
+
+    private List<PostCommentEntity> findCommentPage(
+            Long postId, Long viewerId, CursorKey cursor, int limit, PostCommentSort sort, PostCommentScope scope
+    ) {
+        Pageable page = PageRequest.of(0, limit + 1);
+        return switch (sort) {
+            case NEWEST -> scope == PostCommentScope.MINE
+                    ? postCommentRepository.findMineActiveCreatedDescendingPage(postId, viewerId, cursor.instant(), cursor.id(), page)
+                    : postCommentRepository.findActiveCreatedDescendingPage(postId, cursor.instant(), cursor.id(), page);
+            case OLDEST -> scope == PostCommentScope.MINE
+                    ? postCommentRepository.findMineActiveCreatedAscendingPage(postId, viewerId, cursor.instant(), cursor.id(), page)
+                    : postCommentRepository.findActiveCreatedAscendingPage(postId, cursor.instant(), cursor.id(), page);
+            case UPDATED_NEWEST -> scope == PostCommentScope.MINE
+                    ? postCommentRepository.findMineActiveUpdatedDescendingPage(postId, viewerId, cursor.instant(), cursor.id(), page)
+                    : postCommentRepository.findActiveUpdatedDescendingPage(postId, cursor.instant(), cursor.id(), page);
+            case UPDATED_OLDEST -> scope == PostCommentScope.MINE
+                    ? postCommentRepository.findMineActiveUpdatedAscendingPage(postId, viewerId, cursor.instant(), cursor.id(), page)
+                    : postCommentRepository.findActiveUpdatedAscendingPage(postId, cursor.instant(), cursor.id(), page);
+        };
+    }
+
+    private boolean isAscending(PostCommentSort sort) {
+        return sort == PostCommentSort.OLDEST || sort == PostCommentSort.UPDATED_OLDEST;
+    }
+
+    private Instant commentTimestamp(PostCommentEntity comment, PostCommentSort sort) {
+        return sort == PostCommentSort.UPDATED_NEWEST || sort == PostCommentSort.UPDATED_OLDEST
+                ? comment.getUpdatedAt() : comment.getCreatedAt();
     }
 
     private CursorKey decodeCursor(String cursor) {

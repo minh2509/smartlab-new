@@ -1,5 +1,7 @@
-import { Check, Download, FileText, FolderOpen, Trash2, Upload, X } from 'lucide-react'
+import { AlertCircle, Check, ChevronDown, Download, FileText, FolderOpen, Globe2, LockKeyhole, Trash2, Upload, UsersRound } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { Feedback } from '../../../shared/components/Feedback'
+import { useToast } from '../../../shared/toast/useToast'
 import { useAuth } from '../../auth/authContext'
 import type { FileResponse } from '../../../shared/types/api'
 import { D2_UPLOAD_ACCEPT, deleteFile, downloadFile, listOwnFiles, uploadFile } from '../api'
@@ -14,7 +16,11 @@ const scopeOptions: Array<{ value: FileAccessScope; label: string; description: 
 
 export function FilesPage() {
   const { token, profile } = useAuth()
+  const toast = useToast()
   const inputRef = useRef<HTMLInputElement>(null)
+  const scopeSelectorRef = useRef<HTMLDivElement>(null)
+  const scopeTriggerRef = useRef<HTMLButtonElement>(null)
+  const scopeListboxRef = useRef<HTMLUListElement>(null)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [accessScope, setAccessScope] = useState<FileAccessScope>('PRIVATE')
   const [description, setDescription] = useState('')
@@ -23,10 +29,14 @@ export function FilesPage() {
   const [dragging, setDragging] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [busyFileId, setBusyFileId] = useState<number | null>(null)
-  const [message, setMessage] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [validationError, setValidationError] = useState<string | null>(null)
+  const [scopeSelectorOpen, setScopeSelectorOpen] = useState(false)
+  const [focusedScopeIndex, setFocusedScopeIndex] = useState(0)
 
   const canDelete = profile?.permissions.includes('FILE_DELETE') ?? false
+  const selectedScope = scopeOptions.find((option) => option.value === accessScope)
+  const selectedScopeIndex = scopeOptions.findIndex((option) => option.value === accessScope)
 
   useEffect(() => {
     let cancelled = false
@@ -42,7 +52,7 @@ export function FilesPage() {
         if (!cancelled) setUploadedFiles(files)
       })
       .catch((reason: unknown) => {
-        if (!cancelled) setError(reason instanceof Error ? reason.message : 'Không thể tải danh sách file.')
+        if (!cancelled) setLoadError(reason instanceof Error ? reason.message : 'Không thể tải danh sách file.')
       })
       .finally(() => {
         if (!cancelled) setLoadingFiles(false)
@@ -51,20 +61,65 @@ export function FilesPage() {
     return () => { cancelled = true }
   }, [token])
 
+  useEffect(() => {
+    if (!scopeSelectorOpen) return
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!scopeSelectorRef.current?.contains(event.target as Node)) setScopeSelectorOpen(false)
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+    scopeListboxRef.current?.focus()
+    return () => document.removeEventListener('mousedown', handlePointerDown)
+  }, [scopeSelectorOpen])
+
+  const openScopeSelector = (index = selectedScopeIndex) => {
+    setFocusedScopeIndex(index)
+    setScopeSelectorOpen(true)
+  }
+
+  const selectScope = (option: typeof scopeOptions[number]) => {
+    setAccessScope(option.value)
+    setScopeSelectorOpen(false)
+    requestAnimationFrame(() => scopeTriggerRef.current?.focus())
+  }
+
+  const handleScopeListKeyDown = (event: React.KeyboardEvent<HTMLUListElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      setScopeSelectorOpen(false)
+      requestAnimationFrame(() => scopeTriggerRef.current?.focus())
+      return
+    }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      setFocusedScopeIndex((index) => (index + 1) % scopeOptions.length)
+      return
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      setFocusedScopeIndex((index) => (index - 1 + scopeOptions.length) % scopeOptions.length)
+      return
+    }
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      selectScope(scopeOptions[focusedScopeIndex])
+    }
+  }
+
   const chooseFile = (file?: File) => {
-    setMessage(null)
-    setError(null)
+    setValidationError(null)
     if (!file) {
       setSelectedFile(null)
       return
     }
     if (file.size === 0) {
-      setError('File không được để trống.')
+      setValidationError('File không được để trống.')
       setSelectedFile(null)
       return
     }
     if (file.size > MAX_FILE_SIZE) {
-      setError('File vượt quá giới hạn 25 MB.')
+      setValidationError('File vượt quá giới hạn 25 MB.')
       setSelectedFile(null)
       return
     }
@@ -74,22 +129,21 @@ export function FilesPage() {
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!token || !selectedFile) {
-      setError('Vui lòng chọn file cần tải lên.')
+      setValidationError('Vui lòng chọn file cần tải lên.')
       return
     }
 
     setUploading(true)
-    setMessage(null)
-    setError(null)
+    setValidationError(null)
     try {
       const uploaded = await uploadFile(token, selectedFile, accessScope, description)
       setUploadedFiles((current) => [uploaded, ...current.filter((file) => file.id !== uploaded.id)])
       setSelectedFile(null)
       setDescription('')
       if (inputRef.current) inputRef.current.value = ''
-      setMessage(`Đã tải lên “${uploaded.originalName}”.`)
+      toast.success('Đã tải file lên', `“${uploaded.originalName}” đã được thêm vào kho lưu trữ.`)
     } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : 'Không thể tải file lên.')
+      toast.error('Không thể tải file lên', reason instanceof Error ? reason.message : 'Vui lòng thử lại.')
     } finally {
       setUploading(false)
     }
@@ -98,7 +152,6 @@ export function FilesPage() {
   const handleDownload = async (file: FileResponse) => {
     if (!token) return
     setBusyFileId(file.id)
-    setError(null)
     try {
       const blob = await downloadFile(token, file.id)
       const url = URL.createObjectURL(blob)
@@ -108,7 +161,7 @@ export function FilesPage() {
       anchor.click()
       URL.revokeObjectURL(url)
     } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : 'Không thể tải file xuống.')
+      toast.error('Không thể tải file xuống', reason instanceof Error ? reason.message : 'Vui lòng thử lại.')
     } finally {
       setBusyFileId(null)
     }
@@ -117,14 +170,12 @@ export function FilesPage() {
   const handleDelete = async (file: FileResponse) => {
     if (!token || !canDelete || !window.confirm(`Chuyển “${file.originalName}” vào thùng rác?`)) return
     setBusyFileId(file.id)
-    setMessage(null)
-    setError(null)
     try {
       await deleteFile(token, file.id)
       setUploadedFiles((current) => current.filter((item) => item.id !== file.id))
-      setMessage(`Đã chuyển “${file.originalName}” vào thùng rác.`)
+      toast.success('Đã chuyển file vào thùng rác', `“${file.originalName}” đã được gỡ khỏi danh sách.`)
     } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : 'Không thể xóa file.')
+      toast.error('Không thể xóa file', reason instanceof Error ? reason.message : 'Vui lòng thử lại.')
     } finally {
       setBusyFileId(null)
     }
@@ -132,107 +183,158 @@ export function FilesPage() {
 
   return (
     <div className="files-page">
-      <div className="page-title">
+      <div className="files-page-intro">
         <div>
-          <span className="eyebrow">Google Drive storage</span>
+          <span className="files-product-label">Google Drive Storage</span>
           <h1>Tệp của tôi</h1>
-          <p>Tải tài liệu lên kho lưu trữ của Smart Lab và kiểm soát phạm vi truy cập.</p>
+          <p>Lưu trữ và quản lý các file cá nhân trong không gian làm việc SmartLab.</p>
         </div>
-        <span className="badge info">Tối đa 25 MB / file</span>
       </div>
 
-      {error && <div className="alert error"><X />{error}</div>}
-      {message && <div className="alert"><Check />{message}</div>}
+      <Feedback error={loadError ?? undefined} />
 
-      <div className="panel-grid files-grid">
-        <form className="panel" onSubmit={handleSubmit}>
-          <div className="panel-head">
-            <div><h2>Tải file mới</h2><p>Hỗ trợ ảnh, PDF, văn bản, ZIP và tài liệu Office.</p></div>
-            <Upload size={20} />
+      <form className="files-upload-surface" onSubmit={handleSubmit}>
+        <div className="files-surface-head">
+          <div>
+            <h2>Tải file lên</h2>
+            <p>Hình ảnh, PDF, tài liệu Office và ZIP.</p>
           </div>
+          <span>Max 25 MB</span>
+        </div>
 
-          <div className="form-stack">
-            <div
-              className={`file-dropzone ${dragging ? 'dragging' : ''} ${selectedFile ? 'has-file' : ''}`}
-              role="button"
-              tabIndex={0}
-              onClick={() => inputRef.current?.click()}
+        <div
+          className={`file-dropzone ${dragging ? 'dragging' : ''} ${selectedFile ? 'has-file' : ''}`}
+          role="button"
+          tabIndex={0}
+          aria-describedby={validationError ? 'file-selection-error' : 'file-selection-help'}
+          onClick={() => inputRef.current?.click()}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault()
+              inputRef.current?.click()
+            }
+          }}
+          onDragEnter={(event) => { event.preventDefault(); setDragging(true) }}
+          onDragOver={(event) => event.preventDefault()}
+          onDragLeave={(event) => { event.preventDefault(); setDragging(false) }}
+          onDrop={(event) => {
+            event.preventDefault()
+            setDragging(false)
+            chooseFile(event.dataTransfer.files[0])
+          }}
+        >
+          <input
+            ref={inputRef}
+            type="file"
+            accept={D2_UPLOAD_ACCEPT}
+            onChange={(event) => chooseFile(event.target.files?.[0])}
+          />
+          <span className="file-dropzone-icon" aria-hidden="true">{selectedFile ? <FileText /> : <Upload />}</span>
+          <span className="file-dropzone-copy">
+            <strong title={selectedFile?.name}>{selectedFile?.name ?? 'Kéo thả file vào đây hoặc chọn từ máy tính'}</strong>
+            <small id="file-selection-help">{selectedFile ? `${formatBytes(selectedFile.size)} - Nhấn để chọn file khác` : 'Hỗ trợ ảnh, PDF, Office và ZIP. Tối đa 25 MB.'}</small>
+          </span>
+        </div>
+        {validationError && <p className="file-selection-error" id="file-selection-error" role="alert"><AlertCircle aria-hidden="true" />{validationError}</p>}
+
+        <div className="files-upload-fields">
+          <div className="field files-scope-field" ref={scopeSelectorRef}>
+            <span id="files-scope-label">Phạm vi truy cập</span>
+            <button
+              className={`scope-selector-trigger ${scopeSelectorOpen ? 'is-open' : ''}`}
+              ref={scopeTriggerRef}
+              type="button"
+              aria-labelledby="files-scope-label files-scope-current"
+              aria-haspopup="listbox"
+              aria-expanded={scopeSelectorOpen}
+              onClick={() => scopeSelectorOpen ? setScopeSelectorOpen(false) : openScopeSelector()}
               onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') inputRef.current?.click()
-              }}
-              onDragEnter={(event) => { event.preventDefault(); setDragging(true) }}
-              onDragOver={(event) => event.preventDefault()}
-              onDragLeave={(event) => { event.preventDefault(); setDragging(false) }}
-              onDrop={(event) => {
-                event.preventDefault()
-                setDragging(false)
-                chooseFile(event.dataTransfer.files[0])
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  if (scopeSelectorOpen) setScopeSelectorOpen(false)
+                  else openScopeSelector()
+                } else if (event.key === 'ArrowDown') {
+                  event.preventDefault()
+                  openScopeSelector((selectedScopeIndex + 1) % scopeOptions.length)
+                } else if (event.key === 'ArrowUp') {
+                  event.preventDefault()
+                  openScopeSelector((selectedScopeIndex - 1 + scopeOptions.length) % scopeOptions.length)
+                } else if (event.key === 'Escape' && scopeSelectorOpen) {
+                  event.preventDefault()
+                  setScopeSelectorOpen(false)
+                }
               }}
             >
-              <input
-                ref={inputRef}
-                type="file"
-                accept={D2_UPLOAD_ACCEPT}
-                onChange={(event) => chooseFile(event.target.files?.[0])}
-              />
-              {selectedFile ? (
-                <>
-                  <span className="file-dropzone-icon"><FileText /></span>
-                  <strong>{selectedFile.name}</strong>
-                  <small>{formatBytes(selectedFile.size)} · Nhấn để chọn file khác</small>
-                </>
-              ) : (
-                <>
-                  <span className="file-dropzone-icon"><Upload /></span>
-                  <strong>Kéo thả file vào đây</strong>
-                  <small>hoặc nhấn để chọn từ máy tính</small>
-                </>
-              )}
-            </div>
-
-            <label className="field">
-              <span>Phạm vi truy cập</span>
-              <select className="select" value={accessScope} onChange={(event) => setAccessScope(event.target.value as FileAccessScope)}>
-                {scopeOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
-              </select>
-              <small className="muted">{scopeOptions.find((option) => option.value === accessScope)?.description}</small>
-            </label>
-
-            <label className="field">
-              <span>Mô tả</span>
-              <textarea className="textarea" rows={4} maxLength={5000} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Nội dung hoặc mục đích sử dụng của file..." />
-            </label>
-
-            <button className="btn primary" type="submit" disabled={uploading || !selectedFile}>
-              <Upload size={16} />{uploading ? 'Đang tải lên Drive...' : 'Tải file lên'}
+              <ScopeIcon scope={accessScope} />
+              <span id="files-scope-current">{selectedScope?.label}</span>
+              <ChevronDown aria-hidden="true" />
             </button>
+            {scopeSelectorOpen && <ul
+              className="scope-selector-listbox"
+              ref={scopeListboxRef}
+              role="listbox"
+              tabIndex={-1}
+              aria-labelledby="files-scope-label"
+              aria-activedescendant={`files-scope-option-${focusedScopeIndex}`}
+              onKeyDown={handleScopeListKeyDown}
+            >
+              {scopeOptions.map((option, index) => (
+                <li
+                  className={`scope-selector-option ${index === focusedScopeIndex ? 'is-focused' : ''}`}
+                  id={`files-scope-option-${index}`}
+                  key={option.value}
+                  role="option"
+                  aria-selected={option.value === accessScope}
+                  onMouseMove={() => setFocusedScopeIndex(index)}
+                  onClick={() => selectScope(option)}
+                >
+                  <span className="scope-selector-option-check" aria-hidden="true">{option.value === accessScope && <Check />}</span>
+                  <span><strong>{option.label}</strong><small>{option.description}</small></span>
+                </li>
+              ))}
+            </ul>}
+            <small className="muted">{selectedScope?.description}</small>
           </div>
-        </form>
 
-        <section className="panel">
-          <div className="panel-head">
-            <div><h2>File đã tải lên</h2><p>Tất cả file bạn đã tải lên Google Drive của Smart Lab.</p></div>
-            <FolderOpen size={20} />
+          <label className="field files-description-field">
+            <span>Mô tả <small>(không bắt buộc)</small></span>
+            <textarea className="textarea" rows={2} maxLength={5000} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Nội dung hoặc mục đích sử dụng của file..." />
+          </label>
+        </div>
+
+        <div className="files-upload-actions">
+          <button className="btn primary" type="submit" disabled={uploading || !selectedFile}>
+            <Upload size={16} aria-hidden="true" />{uploading ? 'Đang tải lên...' : 'Tải file lên'}
+          </button>
+        </div>
+      </form>
+
+      <section className="files-list-surface" aria-labelledby="files-list-heading">
+        <div className="files-list-head">
+          <div>
+            <h2 id="files-list-heading">File của bạn</h2>
+            <p>Tất cả file bạn đã tải lên Google Drive của SmartLab.</p>
           </div>
+          <span>{uploadedFiles.length} {uploadedFiles.length === 1 ? 'file' : 'files'}</span>
+        </div>
 
-          {loadingFiles ? <div className="empty tight"><FolderOpen /><strong>Đang tải danh sách file...</strong></div> : uploadedFiles.length ? <div className="uploaded-file-list">
-            {uploadedFiles.map((file) => (
-              <article className="uploaded-file-row" key={file.id}>
-                <span className="uploaded-file-icon"><FileText /></span>
-                <div className="uploaded-file-info">
-                  <strong>{file.originalName}</strong>
-                  <small>{formatBytes(file.sizeBytes)} · {scopeLabel(file.accessScope)}{file.createdAt ? ` · ${formatDate(file.createdAt)}` : ''}</small>
-                  {file.description && <p>{file.description}</p>}
-                </div>
-                <div className="uploaded-file-actions">
-                  <button className="btn ghost table-btn" type="button" disabled={busyFileId === file.id} onClick={() => void handleDownload(file)} title="Tải xuống"><Download /></button>
-                  {canDelete && <button className="btn ghost table-btn danger-text" type="button" disabled={busyFileId === file.id} onClick={() => void handleDelete(file)} title="Xóa file"><Trash2 /></button>}
-                </div>
-              </article>
-            ))}
-          </div> : <div className="empty tight"><FolderOpen /><strong>Chưa có file đã tải lên</strong><span>File tải lên thành công sẽ xuất hiện tại đây.</span></div>}
-        </section>
-      </div>
+        {loadingFiles ? <div className="files-list-loading" role="status"><FolderOpen aria-hidden="true" /><span>Đang tải danh sách file...</span></div> : uploadedFiles.length ? <div className="uploaded-file-list">
+          {uploadedFiles.map((file) => (
+            <article className="uploaded-file-row" key={file.id}>
+              <span className="uploaded-file-icon" aria-hidden="true"><FileText /></span>
+              <div className="uploaded-file-info">
+                <strong title={file.originalName}>{file.originalName}</strong>
+                <small>{fileType(file.originalName)} - {formatBytes(file.sizeBytes)} - {scopeLabel(file.accessScope)}{file.createdAt ? ` - ${formatDate(file.createdAt)}` : ''}</small>
+                {file.description && <p>{file.description}</p>}
+              </div>
+              <div className="uploaded-file-actions">
+                <button className="btn ghost table-btn" type="button" disabled={busyFileId === file.id} onClick={() => void handleDownload(file)} title="Tải xuống" aria-label={`Tải xuống ${file.originalName}`}><Download aria-hidden="true" /></button>
+                {canDelete && <button className="btn ghost table-btn danger-text" type="button" disabled={busyFileId === file.id} onClick={() => void handleDelete(file)} title="Xóa file" aria-label={`Xóa ${file.originalName}`}><Trash2 aria-hidden="true" /></button>}
+              </div>
+            </article>
+          ))}
+        </div> : <div className="files-list-empty"><FolderOpen aria-hidden="true" /><strong>Chưa có file đã tải lên</strong><span>File tải lên thành công sẽ xuất hiện tại đây.</span></div>}
+      </section>
     </div>
   )
 }
@@ -245,6 +347,17 @@ function formatBytes(bytes: number) {
 
 function scopeLabel(scope: string) {
   return scopeOptions.find((option) => option.value === scope)?.label ?? scope
+}
+
+function ScopeIcon({ scope }: { scope: FileAccessScope }) {
+  if (scope === 'LAB') return <UsersRound aria-hidden="true" />
+  if (scope === 'PUBLIC') return <Globe2 aria-hidden="true" />
+  return <LockKeyhole aria-hidden="true" />
+}
+
+function fileType(originalName: string) {
+  const extension = originalName.split('.').pop()?.trim()
+  return extension ? extension.toUpperCase() : 'FILE'
 }
 
 function formatDate(value: string) {

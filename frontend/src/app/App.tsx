@@ -27,12 +27,15 @@ import { ProjectListPage } from '../features/projects/pages/ProjectListPage'
 import { ProjectDetailPage } from '../features/projects/pages/ProjectDetailPage'
 import { ProjectManagementPage } from '../features/projects/pages/ProjectManagementPage'
 import { EventManagementPage } from '../features/events/pages/EventManagementPage'
+import { PublicEventsPage } from '../features/events/pages/PublicEventsPage'
 import { MyEvaluationsPage } from '../features/evaluations/pages/MyEvaluationsPage'
 import { TasksPage } from '../features/tasks/pages/TasksPage'
 import { accessPolicies } from './accessPolicy'
+import { ToastProvider } from '../shared/toast/ToastProvider'
 
 export function App() {
   return (
+    <ToastProvider>
     <Routes>
       <Route element={<PublicLayout />}>
         <Route index element={<HomePage />} />
@@ -97,16 +100,7 @@ export function App() {
             />
           }
         />
-        <Route
-          path="/su-kien"
-          element={
-            <StaticPublicPage
-              kind="events"
-              title="Sự kiện"
-              description="Workshop, demo, seminar và các buổi đánh giá tiến độ của Smart Lab."
-            />
-          }
-        />
+        <Route path="/su-kien" element={<PublicEventsPage />} />
         <Route
           path="/thu-vien-anh"
           element={
@@ -163,5 +157,6 @@ export function App() {
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </ToastProvider>
   )
 }

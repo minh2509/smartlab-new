@@ -16,6 +16,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { EmptyState } from '../../../shared/components/EmptyState'
 import { Feedback } from '../../../shared/components/Feedback'
+import { useToast } from '../../../shared/toast/useToast'
+import { confirmDialog } from '../../../shared/ui/projectConfirmDialog'
+import { OverlayPortalHost } from '../../../shared/ui/OverlayPortalHost'
+import { PopupSelect } from '../../../shared/ui/PopupSelect'
 import { useAuth } from '../../auth/authContext'
 import type { Project } from '../../projects/types'
 import { createEvent, deleteEvent, listEvents, updateEvent } from '../api'
@@ -59,6 +63,7 @@ const EVENT_PAGE_SIZE = 10
 
 export function EventManagementPanel({ project }: { project: Project | null }) {
   const { token, profile } = useAuth()
+  const toast = useToast()
   const projectId = project?.id ?? null
   const scope: EventScope = project ? 'PROJECT' : 'LAB'
   const [events, setEvents] = useState<LabEvent[]>([])
@@ -72,7 +77,6 @@ export function EventManagementPanel({ project }: { project: Project | null }) {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState<number | null>(null)
-  const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [dialogError, setDialogError] = useState('')
   const dialogRef = useRef<HTMLDialogElement>(null)
@@ -171,7 +175,6 @@ export function EventManagementPanel({ project }: { project: Project | null }) {
     setDialogEvent(null)
     setForm(emptyEventForm(projectId ? 'PROJECT' : 'LAB'))
     setDialogError('')
-    setMessage('')
     setEventPage(0)
   }, [projectId])
 
@@ -206,7 +209,7 @@ export function EventManagementPanel({ project }: { project: Project | null }) {
     dialogTriggerRef.current = trigger
     setDialogEvent(event)
     setForm(toEventForm(event))
-    setDialogMode(canManageEvent(event) ? 'edit' : 'view')
+    setDialogMode('view')
     setDialogError('')
   }
 
@@ -224,10 +227,23 @@ export function EventManagementPanel({ project }: { project: Project | null }) {
     })
   }
 
-  function requestCloseDialog() {
+  async function requestCloseDialog() {
     if (isBusy) return
-    if (dialogDirty && !window.confirm('Đóng cửa sổ và bỏ các thay đổi sự kiện chưa lưu?')) return
+    if (dialogDirty && !await confirmDialog({
+      title: 'Bỏ thay đổi?',
+      description: 'Các thay đổi chưa lưu của sự kiện sẽ bị mất.',
+      cancelLabel: 'Tiếp tục chỉnh sửa',
+      confirmLabel: 'Bỏ thay đổi',
+    })) return
     finishClosingDialog()
+  }
+
+  function startEditing() {
+    if (!dialogEvent || !canManageEvent(dialogEvent) || isBusy) return
+    setDialogMode('edit')
+    window.requestAnimationFrame(() => {
+      dialogRef.current?.querySelector<HTMLElement>('[data-event-dialog-initial]')?.focus()
+    })
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -261,13 +277,13 @@ export function EventManagementPanel({ project }: { project: Project | null }) {
         }
         saved = await createEvent(token, payload)
         setEvents((current) => [saved, ...current.filter((item) => item.id !== saved.id)])
-        setMessage(`Đã tạo sự kiện “${saved.title}”.`)
+        toast.success('Đã tạo sự kiện', `“${saved.title}” đã được thêm vào lịch.`)
       } else {
         if (!dialogEvent || !canManageEvent(dialogEvent)) return
         const payload: UpdateEventPayload = toUpdatePayload(form, dialogEvent)
         saved = await updateEvent(token, dialogEvent.id, payload)
         setEvents((current) => current.map((item) => (item.id === saved.id ? saved : item)))
-        setMessage(`Đã cập nhật sự kiện “${saved.title}”.`)
+        toast.success('Đã cập nhật sự kiện', `“${saved.title}” đã được lưu.`)
       }
       setError('')
       setSaving(false)
@@ -291,8 +307,13 @@ export function EventManagementPanel({ project }: { project: Project | null }) {
       || !dialogEvent
       || !canManageEvent(dialogEvent)
       || isBusy
-      || !window.confirm(`Xóa mềm sự kiện “${dialogEvent.title}”?`)
     ) return
+    if (!await confirmDialog({
+      title: 'Xóa sự kiện?',
+      description: 'Sự kiện sẽ không còn xuất hiện trong lịch hoạt động. Dữ liệu lịch sử vẫn được giữ lại.',
+      confirmLabel: 'Xóa sự kiện',
+      destructive: true,
+    })) return
 
     const deletedEvent = dialogEvent
     setDeletingId(deletedEvent.id)
@@ -300,7 +321,7 @@ export function EventManagementPanel({ project }: { project: Project | null }) {
     try {
       await deleteEvent(token, deletedEvent.id)
       setEvents((current) => current.filter((item) => item.id !== deletedEvent.id))
-      setMessage(`Đã xóa mềm sự kiện “${deletedEvent.title}”.`)
+      toast.success('Đã xóa mềm sự kiện', `“${deletedEvent.title}” đã được gỡ khỏi lịch hoạt động.`)
       setError('')
       setDeletingId(null)
       finishClosingDialog()
@@ -342,8 +363,11 @@ export function EventManagementPanel({ project }: { project: Project | null }) {
       <section className="panel event-list-panel">
         <div className="panel-head event-list-head">
           <div>
-            <h2 ref={listHeadingRef} tabIndex={-1}>Danh sách sự kiện</h2>
-            <p>Lọc nhanh, sau đó mở từng sự kiện trong một cửa sổ riêng.</p>
+            <div className="event-list-title-row">
+              <h2 ref={listHeadingRef} tabIndex={-1}>Danh sách sự kiện</h2>
+              <span className="event-list-count">{filteredEvents.length} sự kiện</span>
+            </div>
+            <p>Tìm, lọc và xem chi tiết các hoạt động.</p>
           </div>
           {canManage ? (
             <button
@@ -357,7 +381,7 @@ export function EventManagementPanel({ project }: { project: Project | null }) {
           ) : <CalendarDays size={22} aria-hidden="true" />}
         </div>
 
-        <Feedback message={message} error={error} />
+        <Feedback error={error} />
 
         <div className="event-filter-grid">
           <label className="field event-search-field">
@@ -373,31 +397,24 @@ export function EventManagementPanel({ project }: { project: Project | null }) {
               />
             </span>
           </label>
-          <label className="field">
+          <div className="field">
             <span>Trạng thái</span>
-            <select
-              className="select"
+            <PopupSelect
               value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value as EventStatusFilter)}
-            >
-              <option value="ALL">Tất cả trạng thái</option>
-              {EVENT_STATUSES.map((status) => (
-                <option value={status} key={status}>{EVENT_STATUS_LABELS[status]}</option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
+              onChange={(value) => setStatusFilter(value as EventStatusFilter)}
+              ariaLabel="Lọc theo trạng thái sự kiện"
+              options={[{ value: 'ALL', label: 'Tất cả trạng thái' }, ...EVENT_STATUSES.map((status) => ({ value: status, label: EVENT_STATUS_LABELS[status] }))]}
+            />
+          </div>
+          <div className="field">
             <span>Thời gian</span>
-            <select
-              className="select"
+            <PopupSelect
               value={timeFilter}
-              onChange={(event) => setTimeFilter(event.target.value as EventTimeFilter)}
-            >
-              <option value="ALL">Tất cả thời gian</option>
-              <option value="UPCOMING">Sắp diễn ra</option>
-              <option value="PAST">Đã bắt đầu</option>
-            </select>
-          </label>
+              onChange={(value) => setTimeFilter(value as EventTimeFilter)}
+              ariaLabel="Lọc theo thời gian sự kiện"
+              options={[{ value: 'ALL', label: 'Tất cả thời gian' }, { value: 'UPCOMING', label: 'Sắp diễn ra' }, { value: 'PAST', label: 'Đã bắt đầu' }]}
+            />
+          </div>
           <div className="event-filter-actions">
             <button className="btn ghost table-btn" type="button" disabled={loading || isBusy} onClick={() => void refreshEvents()}>
               <RefreshCw aria-hidden="true" /> Tải lại
@@ -409,10 +426,9 @@ export function EventManagementPanel({ project }: { project: Project | null }) {
         </div>
 
         <div className="event-list-summary">
-          <span className="badge info">{project ? `Dự án: ${project.code}` : 'Sự kiện cấp Lab'}</span>
           <span>
-            {filteredEvents.length} sự kiện
-            {filteredEvents.length !== events.length ? ` trong ${events.length} kết quả đã tải` : ''}
+            {project ? `Trong phạm vi ${project.code}. ` : 'Trong phạm vi cấp Lab. '}
+            {filteredEvents.length !== events.length ? `Đang hiển thị ${filteredEvents.length} trong ${events.length} kết quả đã tải.` : ''}
           </span>
         </div>
 
@@ -420,7 +436,6 @@ export function EventManagementPanel({ project }: { project: Project | null }) {
         {!loading && pagedEvents.length ? (
           <div className="field-admin-list event-list">
             {pagedEvents.map((event) => {
-              const editable = canManageEvent(event)
               return (
                 <article className="field-admin-row event-row" key={event.id}>
                   <span className="event-date-tile" aria-hidden="true">
@@ -446,11 +461,12 @@ export function EventManagementPanel({ project }: { project: Project | null }) {
                       className="btn ghost table-btn"
                       type="button"
                       disabled={isBusy}
-                      aria-label={`${editable ? 'Chỉnh sửa' : 'Xem'} sự kiện ${event.title}`}
+                      aria-label={`Chi tiết sự kiện ${event.title}`}
+                      title={`Chi tiết sự kiện ${event.title}`}
                       onClick={(clickEvent) => openEventDialog(event, clickEvent.currentTarget)}
                     >
-                      {editable ? <Edit3 aria-hidden="true" /> : <Eye aria-hidden="true" />}
-                      {editable ? 'Chỉnh sửa' : 'Xem'}
+                      <Eye aria-hidden="true" />
+                      Chi tiết
                     </button>
                   </div>
                 </article>
@@ -498,38 +514,46 @@ export function EventManagementPanel({ project }: { project: Project | null }) {
           aria-describedby="event-dialog-description"
           onCancel={(event) => {
             event.preventDefault()
-            requestCloseDialog()
+            void requestCloseDialog()
           }}
           onClick={(event) => {
-            if (event.target === event.currentTarget) requestCloseDialog()
+            if (event.target === event.currentTarget) void requestCloseDialog()
           }}
         >
+          <OverlayPortalHost />
           <div className="event-dialog-shell">
             <header className="event-dialog-head">
               <div className="event-dialog-heading">
-                <span className="event-dialog-icon" aria-hidden="true"><CalendarDays /></span>
                 <div>
-                  <span className="eyebrow">
-                    {dialogMode === 'create' ? 'Tạo mới' : dialogMode === 'edit' ? 'Chỉnh sửa' : 'Chi tiết'}
+                  <span className="event-dialog-kicker">
+                    {dialogMode === 'create' ? 'Tạo sự kiện' : dialogMode === 'edit' ? 'Chỉnh sửa sự kiện' : 'Chi tiết sự kiện'}
                   </span>
                   <h2 id="event-dialog-title">
                     {dialogMode === 'create' ? 'Tạo sự kiện' : dialogEvent?.title}
                   </h2>
                   <p id="event-dialog-description">
-                    {scope === 'PROJECT' ? `Thuộc dự án ${project?.code ?? ''}` : 'Sự kiện cấp Lab'}
+                    {scope === 'PROJECT' ? `${project?.code ?? ''} · ${project?.name ?? ''}` : 'Sự kiện cấp Lab'}
                   </p>
                 </div>
               </div>
-              <button
-                className="event-dialog-close"
-                type="button"
-                aria-label="Đóng cửa sổ sự kiện"
-                disabled={isBusy}
-                data-event-dialog-initial={dialogMode === 'view' ? true : undefined}
-                onClick={requestCloseDialog}
-              >
-                <X aria-hidden="true" />
-              </button>
+              <div className="event-dialog-header-actions">
+                {dialogMode === 'view' && dialogEvent && canManageEvent(dialogEvent) ? (
+                  <button className="btn ghost table-btn" type="button" onClick={startEditing} disabled={isBusy}>
+                    <Edit3 aria-hidden="true" /> Chỉnh sửa
+                  </button>
+                ) : null}
+                {dialogMode === 'view' && dialogEvent ? <span className={`badge ${EVENT_STATUS_BADGES[dialogEvent.status]}`}>{EVENT_STATUS_LABELS[dialogEvent.status]}</span> : null}
+                <button
+                  className="event-dialog-close"
+                  type="button"
+                  aria-label="Đóng cửa sổ sự kiện"
+                  disabled={isBusy}
+                  data-event-dialog-initial={dialogMode === 'view' ? true : undefined}
+                  onClick={() => void requestCloseDialog()}
+                >
+                  <X aria-hidden="true" />
+                </button>
+              </div>
             </header>
 
             <div className="event-dialog-body">
@@ -554,7 +578,7 @@ export function EventManagementPanel({ project }: { project: Project | null }) {
                 <div className="event-danger-zone">
                   <div>
                     <strong>Xóa sự kiện</strong>
-                    <p>Sự kiện sẽ biến mất khỏi lịch đang hoạt động nhưng dữ liệu vẫn được giữ lại.</p>
+                    <p>Sự kiện sẽ không còn xuất hiện trong lịch hoạt động. Dữ liệu lịch sử vẫn được giữ lại.</p>
                   </div>
                   <button className="btn danger-text" type="button" disabled={isBusy} onClick={() => void handleDelete()}>
                     <Trash2 aria-hidden="true" />
@@ -567,11 +591,11 @@ export function EventManagementPanel({ project }: { project: Project | null }) {
             <footer className="event-dialog-footer">
               <span className="muted small" aria-live="polite">
                 {dialogMode === 'view'
-                  ? 'Chế độ chỉ xem.'
+                  ? ''
                   : dialogDirty ? 'Có thay đổi chưa lưu.' : 'Chưa có thay đổi.'}
               </span>
               <div className="event-dialog-footer-actions">
-                <button className="btn ghost" type="button" disabled={isBusy} onClick={requestCloseDialog}>
+                <button className="btn ghost" type="button" disabled={isBusy} onClick={() => void requestCloseDialog()}>
                   {dialogMode === 'view' ? 'Đóng' : 'Hủy'}
                 </button>
                 {dialogMode !== 'view' ? (
@@ -606,7 +630,10 @@ function EventFormFields({
   onChange: (next: Partial<EventForm>) => void
 }) {
   return (
-    <div className="event-form-grid">
+    <div className="event-form-layout">
+      <section className="event-form-section">
+        <h3>Thông tin sự kiện</h3>
+        <div className="event-form-grid">
       <label className="field event-form-wide">
         <span>Tiêu đề</span>
         <input
@@ -632,18 +659,20 @@ function EventFormFields({
           onChange={(event) => onChange({ content: event.target.value })}
         />
       </label>
+        </div>
+      </section>
+      <section className="event-form-section">
+        <h3>Tổ chức</h3>
+        <div className="event-form-grid">
       <label className="field">
         <span>Hình thức</span>
-        <select
-          className="select"
+        <PopupSelect
           value={form.mode}
           disabled={disabled}
-          onChange={(event) => onChange({ mode: event.target.value as EventMode })}
-        >
-          {EVENT_MODES.map((mode) => (
-            <option value={mode} key={mode}>{EVENT_MODE_LABELS[mode]}</option>
-          ))}
-        </select>
+          ariaLabel="Hình thức sự kiện"
+          onChange={(value) => onChange({ mode: value as EventMode })}
+          options={EVENT_MODES.map((mode) => ({ value: mode, label: EVENT_MODE_LABELS[mode] }))}
+        />
       </label>
       {form.mode === 'IN_PERSON' ? (
         <label className="field">
@@ -671,6 +700,11 @@ function EventFormFields({
           />
         </label>
       )}
+        </div>
+      </section>
+      <section className="event-form-section">
+        <h3>Thời gian</h3>
+        <div className="event-form-grid">
       <label className="field">
         <span>Bắt đầu</span>
         <input
@@ -692,73 +726,72 @@ function EventFormFields({
           onChange={(event) => onChange({ endAt: event.target.value })}
         />
       </label>
+        </div>
+      </section>
+      <section className="event-form-section">
+        <h3>Phân loại</h3>
+        <div className="event-form-grid">
       <label className="field">
         <span>Trạng thái</span>
-        <select
-          className="select"
+        <PopupSelect
           value={form.status}
           disabled={disabled}
-          onChange={(event) => onChange({ status: event.target.value as EventStatus })}
-        >
-          {EVENT_STATUSES.map((status) => (
-            <option value={status} key={status}>{EVENT_STATUS_LABELS[status]}</option>
-          ))}
-        </select>
+          ariaLabel="Trạng thái sự kiện"
+          onChange={(value) => onChange({ status: value as EventStatus })}
+          options={EVENT_STATUSES.map((status) => ({ value: status, label: EVENT_STATUS_LABELS[status] }))}
+        />
       </label>
       <label className="field">
         <span>Phạm vi xem</span>
-        <select
-          className="select"
+        <PopupSelect
           value={form.visibility}
           disabled={disabled}
-          onChange={(event) => onChange({ visibility: event.target.value as EventVisibility })}
-        >
-          {availableVisibilities.map((visibility) => (
-            <option value={visibility} key={visibility}>{EVENT_VISIBILITY_LABELS[visibility]}</option>
-          ))}
-        </select>
+          ariaLabel="Phạm vi xem sự kiện"
+          onChange={(value) => onChange({ visibility: value as EventVisibility })}
+          options={availableVisibilities.map((visibility) => ({ value: visibility, label: EVENT_VISIBILITY_LABELS[visibility] }))}
+        />
       </label>
+        </div>
+      </section>
     </div>
   )
 }
 
 function EventDetails({ event, project }: { event: LabEvent; project: Project | null }) {
   return (
-    <div className="event-details-grid">
-      <div className="event-detail event-detail-wide">
-        <span>Nội dung</span>
-        <strong className="event-detail-content">{event.content || 'Chưa có nội dung mô tả.'}</strong>
-      </div>
-      <div className="event-detail">
-        <span>Thời gian</span>
-        <strong>{formatEventTime(event)}</strong>
-      </div>
-      <div className="event-detail">
-        <span>Hình thức</span>
-        <strong>{EVENT_MODE_LABELS[event.mode]} · {eventLocation(event)}</strong>
-      </div>
-      <div className="event-detail">
-        <span>Trạng thái</span>
-        <strong>{EVENT_STATUS_LABELS[event.status]}</strong>
-      </div>
-      <div className="event-detail">
-        <span>Phạm vi xem</span>
-        <strong>{EVENT_VISIBILITY_LABELS[event.visibility]}</strong>
-      </div>
-      <div className="event-detail">
-        <span>Thuộc phạm vi</span>
-        <strong>{event.projectId ? project?.name ?? `Dự án #${event.projectId}` : 'Toàn Lab'}</strong>
-      </div>
-      <div className="event-detail">
-        <span>Người tạo</span>
-        <strong>{event.creator?.name ?? 'Tài khoản không còn tồn tại'}</strong>
-      </div>
-      <div className="event-detail">
-        <span>Cập nhật gần nhất</span>
-        <strong>{formatDateTime(event.updatedAt)}</strong>
-      </div>
+    <div className="event-details">
+      <section className="event-detail-section">
+        <h3>Thông tin</h3>
+        <div className="event-detail-content">{event.content || 'Chưa có nội dung mô tả.'}</div>
+      </section>
+      <section className="event-detail-section">
+        <h3>Thời gian & tổ chức</h3>
+        <div className="event-details-grid">
+          <DetailItem label="Thời gian" value={formatEventTime(event)} />
+          <DetailItem label="Hình thức" value={`${EVENT_MODE_LABELS[event.mode]} · ${eventLocation(event)}`} />
+        </div>
+      </section>
+      <section className="event-detail-section">
+        <h3>Phạm vi & trạng thái</h3>
+        <div className="event-details-grid event-details-grid-three">
+          <DetailItem label="Trạng thái" value={EVENT_STATUS_LABELS[event.status]} />
+          <DetailItem label="Phạm vi xem" value={EVENT_VISIBILITY_LABELS[event.visibility]} />
+          <DetailItem label="Thuộc phạm vi" value={event.projectId ? project?.name ?? `Dự án #${event.projectId}` : 'Toàn Lab'} />
+        </div>
+      </section>
+      <section className="event-detail-section">
+        <h3>Metadata</h3>
+        <div className="event-details-grid">
+          <DetailItem label="Người tạo" value={event.creator?.name ?? 'Tài khoản không còn tồn tại'} />
+          <DetailItem label="Cập nhật gần nhất" value={formatDateTime(event.updatedAt)} />
+        </div>
+      </section>
     </div>
   )
+}
+
+function DetailItem({ label, value }: { label: string; value: string }) {
+  return <div className="event-detail"><span>{label}</span><strong>{value}</strong></div>
 }
 
 function emptyEventForm(scope: EventScope): EventForm {

@@ -20,11 +20,15 @@ import {
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../auth/authContext'
 import { ProjectDocumentsPanel } from '../../documents/components/ProjectDocumentsPanel'
 import { EmptyState } from '../../../shared/components/EmptyState'
 import { Feedback } from '../../../shared/components/Feedback'
+import { useToast } from '../../../shared/toast/useToast'
+import { PopupSelect } from '../../../shared/ui/PopupSelect'
+import { confirmDialog } from '../../../shared/ui/projectConfirmDialog'
+import { OverlayPortalHost } from '../../../shared/ui/OverlayPortalHost'
 import {
   createProject,
   deleteProject,
@@ -93,6 +97,8 @@ const PROJECT_PAGE_SIZE = 10
 
 export function ProjectManagementPage() {
   const { token, profile } = useAuth()
+  const toast = useToast()
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const [projects, setProjects] = useState<Project[]>([])
   const [membershipHistory, setMembershipHistory] = useState<ProjectMembershipHistory[]>([])
@@ -113,7 +119,6 @@ export function ProjectManagementPage() {
   const [documentsBusy, setDocumentsBusy] = useState(false)
   const [loading, setLoading] = useState(true)
   const [busyAction, setBusyAction] = useState<BusyAction>(null)
-  const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const createDialogRef = useRef<HTMLDialogElement>(null)
   const createTriggerRef = useRef<HTMLButtonElement>(null)
@@ -252,7 +257,7 @@ export function ProjectManagementPage() {
     projectDialogTriggerRef.current = null
     setSelectedId(requestedProject.id)
     setEditForm(toCoreForm(requestedProject))
-    setActiveTab(requestedProjectTab ?? 'members')
+    setActiveTab(requestedProjectTab ?? 'overview')
     setIsEditingCore(false)
     setLeadershipDirty(false)
     setResearchFieldsDirty(false)
@@ -301,9 +306,9 @@ export function ProjectManagementPage() {
     restoreProjectDialogFocus()
   }
 
-  function requestCloseProjectDialog() {
+  async function requestCloseProjectDialog() {
     if (isBusy) return
-    if (selectedProjectDirty && !window.confirm('Đóng cửa sổ dự án và bỏ các thay đổi chưa lưu?')) return
+    if (selectedProjectDirty && !await confirmDialog({ title: 'Bỏ thay đổi chưa lưu?', description: 'Dự án có thay đổi chưa lưu. Tiếp tục sẽ loại bỏ các thay đổi này.', confirmLabel: 'Bỏ thay đổi' })) return
     finishClosingProjectDialog()
     clearFeedback()
   }
@@ -314,7 +319,7 @@ export function ProjectManagementPage() {
     setSelectedId(project.id)
     setEditForm(toCoreForm(project))
     setActiveTab('overview')
-    setIsEditingCore(canEditProject(project))
+    setIsEditingCore(false)
     setLeadershipDirty(false)
     setResearchFieldsDirty(false)
     setDocumentsDirty(false)
@@ -322,8 +327,8 @@ export function ProjectManagementPage() {
     clearFeedback()
   }
 
-  function startCreating() {
-    if (selectedProjectDirty && !window.confirm('Bạn có thay đổi dự án chưa lưu. Mở cửa sổ tạo mới và bỏ các thay đổi này?')) return
+  async function startCreating() {
+    if (selectedProjectDirty && !await confirmDialog({ title: 'Bỏ thay đổi chưa lưu?', description: 'Mở biểu mẫu tạo dự án sẽ loại bỏ các thay đổi trong dự án hiện tại.', confirmLabel: 'Tiếp tục' })) return
     if (selectedProjectDirty) {
       setIsEditingCore(false)
       setLeadershipDirty(false)
@@ -334,24 +339,23 @@ export function ProjectManagementPage() {
     clearFeedback()
   }
 
-  function cancelCreating() {
+  async function cancelCreating() {
     if (isBusy) return
-    if (createDirty && !window.confirm('Hủy tạo dự án và bỏ toàn bộ thông tin đã nhập?')) return
+    if (createDirty && !await confirmDialog({ title: 'Hủy tạo dự án?', description: 'Thông tin bạn đã nhập sẽ không được lưu.', confirmLabel: 'Bỏ thông tin' })) return
     setCreateForm(emptyCreateForm)
     setIsCreating(false)
     clearFeedback()
     window.requestAnimationFrame(() => createTriggerRef.current?.focus())
   }
 
-  function cancelCoreEditing() {
-    if (editDirty && !window.confirm('Hủy chỉnh sửa và bỏ các thay đổi chưa lưu?')) return
+  async function cancelCoreEditing() {
+    if (editDirty && !await confirmDialog({ title: 'Bỏ thay đổi chưa lưu?', description: 'Các chỉnh sửa trong phần tổng quan sẽ không được lưu.', confirmLabel: 'Bỏ thay đổi' })) return
     if (selectedProject) setEditForm(toCoreForm(selectedProject))
     setIsEditingCore(false)
     clearFeedback()
   }
 
   function clearFeedback() {
-    setMessage('')
     setError('')
   }
 
@@ -374,7 +378,7 @@ export function ProjectManagementPage() {
   }
 
   async function refreshProjects() {
-    if (selectedProjectDirty && !window.confirm('Tải lại danh sách và bỏ các thay đổi dự án chưa lưu?')) return
+    if (selectedProjectDirty && !await confirmDialog({ title: 'Tải lại danh sách?', description: 'Các thay đổi chưa lưu trong dự án đang mở sẽ bị bỏ.', confirmLabel: 'Tải lại' })) return
     setLoading(true)
     clearFeedback()
     try {
@@ -413,10 +417,12 @@ export function ProjectManagementPage() {
       resetProjectFilters()
       setActiveTab('overview')
       setIsEditingCore(true)
-      setMessage(`Đã tạo dự án ${created.code}.`)
+      toast.success('Đã tạo dự án', `“${created.name}” đã được tạo.`)
       window.requestAnimationFrame(() => document.getElementById('project-tab-overview')?.focus())
     } catch (reason: unknown) {
-      setError(errorMessage(reason, 'Không thể tạo dự án.'))
+      const message = errorMessage(reason, 'Không thể tạo dự án.')
+      setError(message)
+      toast.error('Không thể tạo dự án', message)
     } finally {
       setBusyAction(null)
     }
@@ -439,9 +445,11 @@ export function ProjectManagementPage() {
       const updated = await updateProject(token, selectedProject.id, payload)
       mergeProject(updated)
       setIsEditingCore(false)
-      setMessage(`Đã cập nhật dự án ${updated.code}.`)
+      toast.success('Đã lưu thay đổi', 'Thông tin dự án đã được cập nhật.')
     } catch (reason: unknown) {
-      setError(errorMessage(reason, 'Không thể cập nhật dự án.'))
+      const message = errorMessage(reason, 'Không thể cập nhật dự án.')
+      setError(message)
+      toast.error('Không thể lưu thay đổi', message)
     } finally {
       setBusyAction(null)
     }
@@ -450,7 +458,7 @@ export function ProjectManagementPage() {
   async function handleDelete() {
     if (!token || !selectedProject || !canAdminManageProject || isBusy) return
     const draftWarning = selectedProjectDirty ? ' Các thay đổi chưa lưu cũng sẽ bị bỏ.' : ''
-    if (!window.confirm(`Xóa mềm dự án “${selectedProject.name}” (${selectedProject.code})? Dự án sẽ không còn xuất hiện trong danh sách.${draftWarning}`)) return
+    if (!await confirmDialog({ title: 'Xóa dự án?', description: `Dự án sẽ không còn xuất hiện trong danh sách đang hoạt động. Dữ liệu lịch sử vẫn được giữ lại.${draftWarning}`, confirmLabel: 'Xóa dự án', destructive: true })) return
 
     setBusyAction('delete')
     clearFeedback()
@@ -459,7 +467,7 @@ export function ProjectManagementPage() {
       await deleteProject(token, selectedProject.id)
       await loadProjects()
       finishClosingProjectDialog()
-      setMessage(`Đã xóa mềm dự án ${deletedCode}.`)
+      toast.success('Đã xóa mềm dự án', deletedCode)
     } catch (reason: unknown) {
       setError(errorMessage(reason, 'Không thể xóa dự án.'))
     } finally {
@@ -498,7 +506,7 @@ export function ProjectManagementPage() {
               className="btn primary"
               type="button"
               aria-expanded={isCreating}
-              onClick={startCreating}
+                  onClick={() => void startCreating()}
               disabled={isCreating || isBusy}
             >
               <Plus /> Tạo dự án
@@ -511,7 +519,7 @@ export function ProjectManagementPage() {
         </div>
       </div>
 
-      <Feedback message={message} error={error} />
+      <Feedback error={error} />
 
       {loading ? (
         <div className="empty">Đang tải dự án...</div>
@@ -538,38 +546,9 @@ export function ProjectManagementPage() {
                     aria-label="Tìm dự án theo tên hoặc mã"
                   />
                 </label>
-                <select
-                  className="select project-list-filter"
-                  value={projectTypeFilter}
-                  onChange={(event) => setProjectTypeFilter(event.target.value as ProjectTypeFilter)}
-                  aria-label="Lọc theo loại dự án"
-                >
-                  <option value="ALL">Tất cả loại</option>
-                  {PROJECT_TYPES.map((type) => (
-                    <option key={type} value={type}>{PROJECT_TYPE_LABELS[type]}</option>
-                  ))}
-                </select>
-                <select
-                  className="select project-list-filter"
-                  value={projectStatusFilter}
-                  onChange={(event) => setProjectStatusFilter(event.target.value as ProjectStatusFilter)}
-                  aria-label="Lọc theo trạng thái dự án"
-                >
-                  <option value="ALL">Tất cả trạng thái</option>
-                  {PROJECT_STATUSES.map((status) => (
-                    <option key={status} value={status}>{PROJECT_STATUS_LABELS[status]}</option>
-                  ))}
-                </select>
-                <select
-                  className="select project-list-filter"
-                  value={projectSort}
-                  onChange={(event) => setProjectSort(event.target.value as ProjectSort)}
-                  aria-label="Sắp xếp dự án"
-                >
-                  <option value="NEWEST">Mới nhất</option>
-                  <option value="NAME_ASC">Tên A–Z</option>
-                  <option value="CODE_ASC">Mã A–Z</option>
-                </select>
+                <PopupSelect className="project-list-filter" value={projectTypeFilter} onChange={(value) => setProjectTypeFilter(value as ProjectTypeFilter)} ariaLabel="Lọc theo loại dự án" options={[{ value: 'ALL', label: 'Tất cả loại' }, ...PROJECT_TYPES.map((value) => ({ value, label: PROJECT_TYPE_LABELS[value] }))]} />
+                <PopupSelect className="project-list-filter" value={projectStatusFilter} onChange={(value) => setProjectStatusFilter(value as ProjectStatusFilter)} ariaLabel="Lọc theo trạng thái dự án" options={[{ value: 'ALL', label: 'Tất cả trạng thái' }, ...PROJECT_STATUSES.map((value) => ({ value, label: PROJECT_STATUS_LABELS[value] }))]} />
+                <PopupSelect className="project-list-filter" value={projectSort} onChange={(value) => setProjectSort(value as ProjectSort)} ariaLabel="Sắp xếp dự án" options={[{ value: 'NEWEST', label: 'Mới nhất' }, { value: 'NAME_ASC', label: 'Tên A–Z' }, { value: 'CODE_ASC', label: 'Mã A–Z' }]} />
                 {hasProjectFilters ? (
                   <button className="btn ghost table-btn" type="button" onClick={resetProjectFilters}>
                     <RotateCcw aria-hidden="true" /> Đặt lại
@@ -589,7 +568,6 @@ export function ProjectManagementPage() {
               {pagedProjects.length ? (
                 <div className="field-admin-list project-management-list">
                   {pagedProjects.map((project) => {
-                    const canEdit = canEditProject(project)
                     const membership = membershipByProjectId.get(project.id)
                     return (
                     <article className="member-select-row project-management-row" key={project.id}>
@@ -611,11 +589,11 @@ export function ProjectManagementPage() {
                           className="btn ghost table-btn"
                           type="button"
                           disabled={isBusy}
-                          aria-label={`${canEdit ? 'Chỉnh sửa' : 'Xem'} dự án ${project.name}`}
+                          aria-label={`Chi tiết dự án ${project.name}`}
                           onClick={(event) => openProjectDialog(project, event.currentTarget)}
                         >
-                          {canEdit ? <Pencil aria-hidden="true" /> : <Eye aria-hidden="true" />}
-                          {canEdit ? 'Chỉnh sửa' : 'Xem'}
+                          <Eye aria-hidden="true" />
+                          Chi tiết
                         </button>
                       </span>
                     </article>
@@ -681,10 +659,10 @@ export function ProjectManagementPage() {
           aria-describedby="project-create-description"
           onCancel={(event) => {
             event.preventDefault()
-            cancelCreating()
+            void cancelCreating()
           }}
           onClick={(event) => {
-            if (event.target === event.currentTarget) cancelCreating()
+            if (event.target === event.currentTarget) void cancelCreating()
           }}
         >
           <form className="project-create-dialog-form" onSubmit={handleCreate} noValidate>
@@ -700,7 +678,7 @@ export function ProjectManagementPage() {
                 className="project-close-button"
                 type="button"
                 aria-label="Đóng cửa sổ tạo dự án"
-                onClick={cancelCreating}
+                onClick={() => void cancelCreating()}
                 disabled={isBusy}
               >
                 <X aria-hidden="true" />
@@ -737,15 +715,7 @@ export function ProjectManagementPage() {
               </label>
               <label className="field">
                 <span>Loại dự án</span>
-                <select
-                  className="select"
-                  value={createForm.projectType}
-                  onChange={(event) => setCreateForm({ ...createForm, projectType: event.target.value as ProjectType })}
-                >
-                  {PROJECT_TYPES.map((type) => (
-                    <option key={type} value={type}>{PROJECT_TYPE_LABELS[type]}</option>
-                  ))}
-                </select>
+                <PopupSelect value={createForm.projectType} onChange={(value) => setCreateForm({ ...createForm, projectType: value as ProjectType })} ariaLabel="Loại dự án" options={PROJECT_TYPES.map((value) => ({ value, label: PROJECT_TYPE_LABELS[value] }))} />
               </label>
               <div className="project-create-dialog-note">
                 {isAdmin
@@ -756,7 +726,7 @@ export function ProjectManagementPage() {
 
             <footer className="project-create-dialog-actions">
               {createDirty ? <span className="muted small">Có thông tin chưa lưu.</span> : <span />}
-              <button className="btn ghost" type="button" disabled={isBusy} onClick={cancelCreating}>
+              <button className="btn ghost" type="button" disabled={isBusy} onClick={() => void cancelCreating()}>
                 Hủy
               </button>
               <button className="btn primary" type="submit" disabled={isBusy}>
@@ -776,12 +746,13 @@ export function ProjectManagementPage() {
           aria-describedby="project-editor-description"
           onCancel={(event) => {
             event.preventDefault()
-            requestCloseProjectDialog()
+            void requestCloseProjectDialog()
           }}
           onClick={(event) => {
-            if (event.target === event.currentTarget) requestCloseProjectDialog()
+            if (event.target === event.currentTarget) void requestCloseProjectDialog()
           }}
         >
+          <OverlayPortalHost />
           <div className="project-editor-dialog-shell">
             <header className="project-editor-dialog-head">
               <div className="project-editor-dialog-heading">
@@ -810,8 +781,9 @@ export function ProjectManagementPage() {
                       event.preventDefault()
                       return
                     }
-                    if (selectedProjectDirty && !window.confirm('Mở trang Sự kiện và bỏ các thay đổi dự án chưa lưu?')) {
+                    if (selectedProjectDirty) {
                       event.preventDefault()
+                      void confirmDialog({ title: 'Mở trang Sự kiện?', description: 'Các thay đổi chưa lưu trong dự án sẽ bị bỏ.', confirmLabel: 'Mở Sự kiện' }).then((confirmed) => { if (confirmed) navigate(`/admin/events?projectId=${selectedProject.id}`) })
                     }
                   }}
                 >
@@ -894,7 +866,7 @@ export function ProjectManagementPage() {
 
             <div className="project-editor-dialog-body">
               <div className="project-editor-dialog-feedback" role="status" aria-live="polite">
-                <Feedback message={message} error={error} />
+                <Feedback error={error} />
               </div>
 
               <section
@@ -907,8 +879,8 @@ export function ProjectManagementPage() {
               >
               <div className="panel-head">
                 <div>
-                  <h2>{isEditingCore ? 'Chỉnh sửa thông tin dự án' : 'Tổng quan dự án'}</h2>
-                  <p>{isEditingCore ? 'Kiểm tra thông tin trước khi lưu.' : 'Thông tin cốt lõi và trạng thái hiện tại.'}</p>
+                  <h2>Tổng quan dự án</h2>
+                  <p>Thông tin cốt lõi và trạng thái hiện tại.</p>
                 </div>
                 {canEditSelected && !isEditingCore ? (
                   <button className="btn ghost table-btn" type="button" disabled={isBusy} onClick={() => setIsEditingCore(true)}>
@@ -918,47 +890,50 @@ export function ProjectManagementPage() {
               </div>
 
               {isEditingCore && canEditSelected && editForm ? (
-                <form onSubmit={handleUpdate} noValidate>
+                <form className="project-overview-editor" onSubmit={handleUpdate} noValidate>
                   <ProjectCoreFields form={editForm} onChange={setEditForm} />
-                  <div className="form-actions project-form-actions">
-                    <button className="btn primary" type="submit" disabled={isBusy || !editDirty}>
-                      <Save aria-hidden="true" />
-                      {busyAction === 'update' ? 'Đang lưu...' : 'Lưu thay đổi'}
-                    </button>
-                    <button className="btn ghost" type="button" disabled={isBusy} onClick={cancelCoreEditing}>
-                      Hủy
-                    </button>
+                  <div className="project-overview-action-footer">
                     <span className="muted small" aria-live="polite">
                       {editDirty ? 'Có thay đổi chưa lưu.' : 'Chưa có thay đổi.'}
                     </span>
+                    <div className="form-actions">
+                      <button className="btn ghost" type="button" disabled={isBusy} onClick={() => void cancelCoreEditing()}>Hủy</button>
+                      <button className="btn primary" type="submit" disabled={isBusy || !editDirty}><Save aria-hidden="true" />{busyAction === 'update' ? 'Đang lưu...' : 'Lưu thay đổi'}</button>
+                    </div>
                   </div>
                 </form>
               ) : (
-                <div className="project-overview-grid">
-                  <div className="project-overview-item project-overview-wide">
-                    <span>Mô tả</span>
-                    <strong>{selectedProject.description || 'Chưa có mô tả.'}</strong>
-                  </div>
-                  <div className="project-overview-item project-overview-wide">
-                    <span>Mục tiêu</span>
-                    <strong>{selectedProject.goal || 'Chưa cập nhật.'}</strong>
-                  </div>
-                  <div className="project-overview-item">
-                    <span>Thời gian</span>
-                    <strong>{formatProjectDates(selectedProject)}</strong>
-                  </div>
-                  <div className="project-overview-item">
-                    <span>Leader chính</span>
-                    <strong>{selectedProject.primaryLeader?.name ?? 'Chưa chọn'}</strong>
-                  </div>
-                  <div className="project-overview-item">
-                    <span>Nhóm leader</span>
-                    <strong>{selectedProject.leaders.length} người</strong>
-                  </div>
-                  <div className="project-overview-item">
-                    <span>Hiển thị</span>
-                    <strong>{selectedProject.isFeatured ? 'Nổi bật' : 'Thông thường'} · {selectedProject.isPublic ? 'Công khai' : 'Nội bộ'}</strong>
-                  </div>
+                <div className="project-overview-read">
+                  <section className="project-overview-read-section project-overview-wide">
+                    <h3>Thông tin cơ bản</h3>
+                    <div className="project-overview-item">
+                      <span>Mô tả</span>
+                      <strong>{selectedProject.description || 'Chưa có mô tả.'}</strong>
+                    </div>
+                    <div className="project-overview-item">
+                      <span>Mục tiêu</span>
+                      <strong>{selectedProject.goal || 'Chưa cập nhật.'}</strong>
+                    </div>
+                  </section>
+                  <section className="project-overview-read-section project-overview-wide">
+                    <h3>Thông tin dự án</h3>
+                    <div className="project-overview-metadata-grid">
+                      <div className="project-overview-item"><span>Loại dự án</span><strong>{PROJECT_TYPE_LABELS[selectedProject.projectType]}</strong></div>
+                      <div className="project-overview-item"><span>Trạng thái</span><strong>{PROJECT_STATUS_LABELS[selectedProject.status]}</strong></div>
+                      <div className="project-overview-item"><span>Leader chính</span><strong>{selectedProject.primaryLeader?.name ?? 'Chưa chọn'}</strong></div>
+                      <div className="project-overview-item"><span>Mã dự án</span><strong>{selectedProject.code}</strong></div>
+                      <div className="project-overview-item"><span>Nhóm leader</span><strong>{selectedProject.leaders.length} người</strong></div>
+                      <div className="project-overview-item"><span>Hiển thị</span><strong>{selectedProject.isFeatured ? 'Nổi bật' : 'Thông thường'} · {selectedProject.isPublic ? 'Công khai' : 'Nội bộ'}</strong></div>
+                    </div>
+                  </section>
+                  <section className="project-overview-read-section project-overview-wide">
+                    <h3>Tiến độ thời gian</h3>
+                    <div className="project-overview-metadata-grid project-overview-timeline-read">
+                      <div className="project-overview-item"><span>Ngày bắt đầu</span><strong>{selectedProject.startDate || 'Chưa cập nhật'}</strong></div>
+                      <div className="project-overview-item"><span>Kết thúc dự kiến</span><strong>{selectedProject.expectedEndDate || 'Chưa cập nhật'}</strong></div>
+                      <div className="project-overview-item"><span>Kết thúc thực tế</span><strong>{selectedProject.actualEndDate || 'Chưa cập nhật'}</strong></div>
+                    </div>
+                  </section>
                 </div>
               )}
 
@@ -990,12 +965,12 @@ export function ProjectManagementPage() {
                   token={token}
                   disabled={isBusy}
                   onClearFeedback={clearFeedback}
-                  onError={setError}
+                  onError={(message) => { setError(message); toast.error('Không thể cập nhật nhóm leader', message) }}
                   onSavingChange={(saving) => setBusyAction(saving ? 'leadership' : null)}
                   onDirtyChange={setLeadershipDirty}
                   onSaved={(updated) => {
                     mergeProject(updated)
-                    setMessage(`Đã cập nhật nhóm leader của ${updated.code}.`)
+                    toast.success('Đã cập nhật nhóm leader', 'Thay đổi leader đã được lưu.')
                   }}
                 />
               ) : (
@@ -1061,7 +1036,7 @@ export function ProjectManagementPage() {
               <span className="muted small" aria-live="polite">
                 {selectedProjectDirty ? 'Có thay đổi chưa lưu trong cửa sổ này.' : 'Mọi thay đổi đã được đồng bộ.'}
               </span>
-              <button className="btn ghost" type="button" disabled={isBusy} onClick={requestCloseProjectDialog}>
+              <button className="btn ghost" type="button" disabled={isBusy} onClick={() => void requestCloseProjectDialog()}>
                 Đóng
               </button>
             </footer>
@@ -1134,55 +1109,44 @@ function ProjectCoreFields<T extends ProjectCoreForm>({
   }
 
   return (
-    <div className="form-stack project-core-fields">
-      <label className="field">
+    <div className="project-core-fields">
+      <section className="project-overview-section project-basic-information"><h3>Thông tin cơ bản</h3><div className="project-basic-grid"><label className="field">
         <span>Code</span>
         <input className="input" required maxLength={60} value={form.code} onChange={(event) => patch({ code: event.target.value })} placeholder="SL-AI-2026" />
-      </label>
-      <label className="field">
+      </label><label className="field">
         <span>Tên dự án</span>
         <input className="input" required maxLength={200} value={form.name} onChange={(event) => patch({ name: event.target.value })} />
-      </label>
-      <label className="field project-core-field-wide">
+      </label><label className="field project-core-field-wide">
         <span>Mô tả</span>
         <textarea className="textarea" rows={4} value={form.description} onChange={(event) => patch({ description: event.target.value })} />
-      </label>
-      <label className="field project-core-field-wide">
+      </label><label className="field project-core-field-wide">
         <span>Mục tiêu</span>
         <textarea className="textarea" rows={3} value={form.goal} onChange={(event) => patch({ goal: event.target.value })} />
-      </label>
-      <label className="field">
+      </label></div></section>
+      <section className="project-overview-section"><h3>Phân loại</h3><div className="project-basic-grid"><label className="field">
         <span>Loại dự án</span>
-        <select className="select" value={form.projectType} onChange={(event) => patch({ projectType: event.target.value as ProjectType })}>
-          {PROJECT_TYPES.map((type) => <option key={type} value={type}>{PROJECT_TYPE_LABELS[type]}</option>)}
-        </select>
-      </label>
-      <label className="field">
+        <PopupSelect value={form.projectType} onChange={(value) => patch({ projectType: value as ProjectType })} ariaLabel="Loại dự án" options={PROJECT_TYPES.map((value) => ({ value, label: PROJECT_TYPE_LABELS[value] }))} />
+      </label><label className="field">
         <span>Trạng thái</span>
-        <select className="select" value={form.status} onChange={(event) => patch({ status: event.target.value as ProjectStatus })}>
-          {PROJECT_STATUSES.map((status) => <option key={status} value={status}>{PROJECT_STATUS_LABELS[status]}</option>)}
-        </select>
-      </label>
-      <label className="field">
+        <PopupSelect value={form.status} onChange={(value) => patch({ status: value as ProjectStatus })} ariaLabel="Trạng thái dự án" options={PROJECT_STATUSES.map((value) => ({ value, label: PROJECT_STATUS_LABELS[value] }))} />
+      </label></div></section>
+      <section className="project-overview-section"><h3>Tiến độ thời gian</h3><div className="project-timeline-grid"><label className="field">
         <span>Ngày bắt đầu</span>
         <input className="input" type="date" value={form.startDate} onChange={(event) => patch({ startDate: event.target.value })} />
-      </label>
-      <label className="field">
+      </label><label className="field">
         <span>Ngày kết thúc dự kiến</span>
         <input className="input" type="date" value={form.expectedEndDate} onChange={(event) => patch({ expectedEndDate: event.target.value })} />
-      </label>
-      <label className="field">
+      </label><label className="field">
         <span>Ngày kết thúc thực tế</span>
         <input className="input" type="date" value={form.actualEndDate} onChange={(event) => patch({ actualEndDate: event.target.value })} />
-      </label>
-      <label className={`field-option ${form.isPublic ? 'selected' : ''}`}>
+      </label></div></section>
+      <section className="project-overview-section"><h3>Hiển thị</h3><div className="project-visibility-settings"><label className="project-visibility-row">
         <input type="checkbox" checked={form.isPublic} onChange={(event) => patch({ isPublic: event.target.checked })} />
         <span><strong>Công khai</strong><small>Khách không đăng nhập có thể xem dự án.</small></span>
-      </label>
-      <label className={`field-option ${form.isFeatured ? 'selected' : ''}`}>
+      </label><label className="project-visibility-row">
         <input type="checkbox" checked={form.isFeatured} onChange={(event) => patch({ isFeatured: event.target.checked })} />
-        <span><strong>Nổi bật</strong><small>Đánh dấu dự án để giao diện công khai ưu tiên hiển thị sau này.</small></span>
-      </label>
+        <span><strong>Nổi bật</strong><small>Ưu tiên dự án trên giao diện công khai.</small></span>
+      </label></div></section>
     </div>
   )
 }
@@ -1296,15 +1260,6 @@ function formatDateTime(value: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   return new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' }).format(date)
-}
-
-function formatProjectDates(project: Project) {
-  if (!project.startDate && !project.expectedEndDate && !project.actualEndDate) return 'Chưa cập nhật.'
-  return [
-    project.startDate ? `bắt đầu ${project.startDate}` : null,
-    project.expectedEndDate ? `dự kiến ${project.expectedEndDate}` : null,
-    project.actualEndDate ? `thực tế ${project.actualEndDate}` : null,
-  ].filter(Boolean).join(' · ')
 }
 
 function errorMessage(reason: unknown, fallback: string) {
