@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { AlertTriangle, ClipboardCheck, FileText, Newspaper, Plus } from 'lucide-react'
 import { useAuth } from '../../auth/authContext'
+import { listProjects } from '../../projects/api'
 import { listPosts, removePostReaction, setPostReaction } from '../api'
 import { PostCommentsDialog } from '../components/PostCommentsDialog'
 import { PostFeedCard } from '../components/PostFeedCard'
 import type { PostFeedItem, ReactionState, ReactionType } from '../types'
+import type { Project } from '../../projects/types'
 
 const SKELETON_KEYS = ['feed-1', 'feed-2', 'feed-3']
 
@@ -13,6 +15,8 @@ export function PostFeedPage() {
   const { token, profile } = useAuth()
   const navigate = useNavigate()
   const [posts, setPosts] = useState<PostFeedItem[]>([])
+  const [projects, setProjects] = useState<Project[]>([])
+  const [projectCatalogLoading, setProjectCatalogLoading] = useState(true)
   const [cursor, setCursor] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -25,11 +29,27 @@ export function PostFeedPage() {
     setError(null)
     setPosts([])
     setCursor(null)
+    setProjects([])
+    setProjectCatalogLoading(true)
     void listPosts(token)
       .then((page) => { setPosts(page.items); setCursor(page.nextCursor) })
       .catch((value: unknown) => setError(messageOf(value, 'Không thể tải bảng tin.')))
       .finally(() => setLoading(false))
   }, [token])
+
+  const hasProjectPost = posts.some((post) => post.visibility === 'PROJECT' && post.projectId !== null)
+
+  useEffect(() => {
+    if (!token || !hasProjectPost) return
+
+    let cancelled = false
+    void listProjects(token)
+      .then((catalog) => { if (!cancelled) { setProjects(catalog); setProjectCatalogLoading(false) } })
+      .catch(() => { if (!cancelled) { setProjects([]); setProjectCatalogLoading(false) } })
+    return () => { cancelled = true }
+  }, [token, hasProjectPost])
+
+  const projectsById = useMemo(() => new Map(projects.map((project) => [project.id, project])), [projects])
 
   const closeComments = useCallback(() => setCommentsPostId(null), [])
 
@@ -118,6 +138,8 @@ export function PostFeedPage() {
               {posts.map((post) => <PostFeedCard
                 key={post.id}
                 post={post}
+                project={post.projectId !== null ? projectsById.get(post.projectId) : undefined}
+                projectCatalogLoading={projectCatalogLoading}
                 token={token}
                 reactionPending={reactionPending === post.id}
                 canInteract={Boolean(token)}

@@ -10,7 +10,11 @@ import com.smartlab.dto.response.CursorPageResponse;
 import com.smartlab.dto.response.PostCommentResponse;
 import com.smartlab.dto.response.PostFeedResponse;
 import com.smartlab.dto.response.PostReactionResponse;
+import com.smartlab.dto.response.PostReactionUserResponse;
 import com.smartlab.dto.response.PostSummaryResponse;
+import com.smartlab.enums.PostCommentScope;
+import com.smartlab.enums.PostCommentSort;
+import com.smartlab.enums.PostReactionType;
 import com.smartlab.service.PostService;
 import com.smartlab.service.PostSocialService;
 import jakarta.validation.Valid;
@@ -119,14 +123,27 @@ public class PostController {
         return postSocialService.removeReaction(authentication.getName(), id);
     }
 
+    @GetMapping("/{id}/reactions")
+    public CursorPageResponse<PostReactionUserResponse> getReactions(
+            Authentication authentication,
+            @PathVariable Long id,
+            @RequestParam(required = false) PostReactionType reaction,
+            @RequestParam(required = false) String cursor,
+            @RequestParam(defaultValue = "30") int limit
+    ) {
+        return postSocialService.getReactions(authentication.getName(), id, reaction, cursor, limit);
+    }
+
     @GetMapping("/{id}/comments")
     public CursorPageResponse<PostCommentResponse> getComments(
             Authentication authentication,
             @PathVariable Long id,
             @RequestParam(required = false) String cursor,
-            @RequestParam(defaultValue = "20") int limit
+            @RequestParam(defaultValue = "20") int limit,
+            @RequestParam(defaultValue = "NEWEST") PostCommentSort sort,
+            @RequestParam(defaultValue = "ALL") PostCommentScope scope
     ) {
-        return postSocialService.getComments(authentication.getName(), id, cursor, limit);
+        return postSocialService.getComments(authentication.getName(), id, cursor, limit, sort, scope);
     }
 
     @PostMapping("/{id}/comments")

@@ -1,11 +1,14 @@
-import { Check, FlaskConical, Plus, Save, Trash2 } from 'lucide-react'
+import { FlaskConical, Plus, Save, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
+import { Feedback } from '../../../shared/components/Feedback'
+import { useToast } from '../../../shared/toast/useToast'
 import { useAuth } from '../../auth/authContext'
 import { apiClient } from '../../../lib/apiClient'
 import type { ResearchField } from '../../../shared/types/api'
 
 export function ResearchFieldsPage() {
   const { token } = useAuth()
+  const toast = useToast()
   const [fields, setFields] = useState<ResearchField[]>([])
   const [code, setCode] = useState('')
   const [name, setName] = useState('')
@@ -13,8 +16,8 @@ export function ResearchFieldsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState<number | null>(null)
-  const [message, setMessage] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [validationError, setValidationError] = useState<string | null>(null)
 
   const loadFields = useCallback(() => {
     if (!token) return Promise.resolve()
@@ -23,7 +26,7 @@ export function ResearchFieldsPage() {
 
   useEffect(() => {
     loadFields()
-      .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Không tải được lĩnh vực.'))
+      .catch((reason: unknown) => setLoadError(reason instanceof Error ? reason.message : 'Không tải được lĩnh vực.'))
       .finally(() => setLoading(false))
   }, [loadFields])
 
@@ -31,8 +34,7 @@ export function ResearchFieldsPage() {
     event.preventDefault()
     if (!token) return
     setSaving(true)
-    setMessage(null)
-    setError(null)
+    setValidationError(null)
     try {
       const normalizedCode = code
         .trim()
@@ -40,7 +42,7 @@ export function ResearchFieldsPage() {
         .replace(/[^A-Z0-9]+/g, '_')
         .replace(/^_+|_+$/g, '')
       if (!/^[A-Z][A-Z0-9_]{0,79}$/.test(normalizedCode)) {
-        setError('Code phải bắt đầu bằng chữ cái và chỉ gồm chữ, số hoặc dấu gạch dưới.')
+        setValidationError('Code phải bắt đầu bằng chữ cái và chỉ gồm chữ, số hoặc dấu gạch dưới.')
         return
       }
       await apiClient<ResearchField>('/admin/research-fields', {
@@ -52,9 +54,9 @@ export function ResearchFieldsPage() {
       setName('')
       setDescription('')
       await loadFields()
-      setMessage('Đã tạo lĩnh vực nghiên cứu.')
+      toast.success('Đã tạo lĩnh vực nghiên cứu')
     } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : 'Không thể tạo lĩnh vực.')
+      toast.error('Không thể tạo lĩnh vực', reason instanceof Error ? reason.message : 'Vui lòng thử lại.')
     } finally {
       setSaving(false)
     }
@@ -62,7 +64,6 @@ export function ResearchFieldsPage() {
 
   const toggleField = async (field: ResearchField) => {
     if (!token) return
-    setError(null)
     try {
       await apiClient<ResearchField>(`/admin/research-fields/${field.id}`, {
         method: 'PATCH',
@@ -71,24 +72,22 @@ export function ResearchFieldsPage() {
       })
       await loadFields()
     } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : 'Không thể cập nhật lĩnh vực.')
+      toast.error('Không thể cập nhật lĩnh vực', reason instanceof Error ? reason.message : 'Vui lòng thử lại.')
     }
   }
 
   const deleteField = async (field: ResearchField) => {
     if (!token || !window.confirm(`Tắt lĩnh vực “${field.name}”?`)) return
     setDeletingId(field.id)
-    setMessage(null)
-    setError(null)
     try {
       await apiClient<void>(`/admin/research-fields/${field.id}`, {
         method: 'DELETE',
         token,
       })
       await loadFields()
-      setMessage(`Đã tắt lĩnh vực “${field.name}”.`)
+      toast.success('Đã tắt lĩnh vực', `“${field.name}” không còn được sử dụng.`)
     } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : 'Không thể tắt lĩnh vực.')
+      toast.error('Không thể tắt lĩnh vực', reason instanceof Error ? reason.message : 'Vui lòng thử lại.')
     } finally {
       setDeletingId(null)
     }
@@ -99,8 +98,8 @@ export function ResearchFieldsPage() {
       <div className="page-title">
         <div><span className="eyebrow">Research fields</span><h1>Lĩnh vực nghiên cứu</h1><p>Quản lý các lĩnh vực để thành viên và dự án có thể gắn nhãn.</p></div>
       </div>
-      {error && <div className="alert error">{error}</div>}
-      {message && <div className="alert"><Check />{message}</div>}
+      <Feedback error={loadError ?? undefined} />
+      <Feedback error={validationError ?? undefined} />
       <div className="panel-grid">
         <form className="panel" onSubmit={createField}>
           <div className="panel-head"><div><h2>Thêm lĩnh vực</h2><p>Code sẽ được chuẩn hóa thành chữ hoa.</p></div><Plus size={20} /></div>

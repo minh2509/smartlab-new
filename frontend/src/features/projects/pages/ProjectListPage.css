@@ -1,0 +1,312 @@
+.project-directory-section {
+  padding: 56px 0 72px;
+}
+
+.project-directory-toolbar {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) repeat(3, minmax(160px, 184px)) auto;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 28px;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+}
+
+.project-directory-search {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.project-directory-search svg {
+  position: absolute;
+  left: 13px;
+  width: 17px;
+  height: 17px;
+  color: var(--text-3);
+  pointer-events: none;
+}
+
+.project-directory-search .input {
+  width: 100%;
+  min-height: 40px;
+  padding-left: 40px;
+}
+
+.project-directory-filter {
+  min-width: 0;
+}
+
+.project-directory-reset {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 8px 11px;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.project-directory-reset:hover {
+  border-color: var(--line);
+  background: var(--surface-2);
+  color: var(--text-1);
+}
+
+.project-directory-reset:active {
+  transform: translateY(1px);
+}
+
+.project-directory-request-state {
+  display: grid;
+  gap: 14px;
+  justify-items: start;
+}
+
+.project-directory-summary {
+  margin: 0 0 14px;
+  color: var(--text-2);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.project-directory-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.project-directory-card {
+  display: flex;
+  min-width: 0;
+  height: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  color: inherit;
+  overflow: hidden;
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+
+.project-directory-card:hover {
+  border-color: var(--line-2);
+  box-shadow: var(--sh-2);
+  text-decoration: none;
+  transform: translateY(-2px);
+}
+
+.project-directory-card:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 34%, transparent);
+  outline-offset: 3px;
+}
+
+.project-directory-card-body {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  padding: 20px;
+}
+
+.project-directory-card-topline,
+.project-directory-card-badges,
+.project-directory-card-footer {
+  display: flex;
+  align-items: center;
+}
+
+.project-directory-card-topline {
+  min-height: 20px;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.project-directory-card-code {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .045em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-directory-card-featured {
+  flex: none;
+  color: var(--accent-ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.project-directory-card-badges {
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.project-directory-card-type,
+.project-directory-card-internal {
+  display: inline-flex;
+  align-items: center;
+  min-height: 25px;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-xs);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.project-directory-card-internal {
+  border-color: color-mix(in srgb, var(--brand-2) 20%, var(--line));
+  background: color-mix(in srgb, var(--brand-3) 58%, var(--surface));
+  color: var(--brand-2);
+}
+
+.project-directory-card-title {
+  display: -webkit-box;
+  margin: 16px 0 0;
+  overflow: hidden;
+  color: var(--brand-1);
+  font-size: 18px;
+  font-weight: 750;
+  letter-spacing: -.018em;
+  line-height: 1.38;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.project-directory-card-description {
+  display: -webkit-box;
+  margin: 10px 0 20px;
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.project-directory-card-description.is-fallback {
+  color: var(--text-3);
+}
+
+.project-directory-card-footer {
+  min-height: 36px;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.project-directory-card-leaders {
+  display: flex;
+  min-width: 0;
+}
+
+.project-directory-card-leaders .ava {
+  margin-left: -8px;
+  border: 2px solid var(--surface);
+}
+
+.project-directory-card-leaders .ava:first-child {
+  margin-left: 0;
+}
+
+.project-directory-card-no-leader {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-3);
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+
+.project-directory-card-detail {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  color: var(--brand-2);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.project-directory-empty-action {
+  display: flex;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+@media (max-width: 1100px) {
+  .project-directory-toolbar {
+    grid-template-columns: minmax(260px, 1fr) repeat(2, minmax(160px, 1fr));
+  }
+
+  .project-directory-search {
+    grid-column: 1 / -1;
+  }
+
+  .project-directory-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .project-directory-section {
+    padding: 40px 0 54px;
+  }
+
+  .project-directory-toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    padding: 11px;
+  }
+
+  .project-directory-reset {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+
+  .project-directory-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+@media (max-width: 420px) {
+  .project-directory-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .project-directory-search,
+  .project-directory-reset {
+    grid-column: auto;
+  }
+
+  .project-directory-card-body {
+    padding: 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .project-directory-card,
+  .project-directory-reset {
+    transition: none;
+  }
+}

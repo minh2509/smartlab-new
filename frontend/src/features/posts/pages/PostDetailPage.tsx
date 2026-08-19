@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Edit3, Send, ShieldCheck, Trash2, Upload } from 'lucide-react'
 import { Feedback } from '../../../shared/components/Feedback'
+import { useToast } from '../../../shared/toast/useToast'
 import { useAuth } from '../../auth/authContext'
 import { deletePost, directPublishPost, getPostBySlug, publishPost, submitPost } from '../api'
 import { PostContent } from '../components/PostContent'
@@ -22,6 +23,7 @@ type MutationKind = 'submit' | 'publish' | 'direct-publish' | 'delete'
 
 export function PostDetailPage() {
   const { token, profile } = useAuth()
+  const toast = useToast()
   const { slug } = useParams<{ slug: string }>()
   const navigate = useNavigate()
   const location = useLocation()
@@ -51,6 +53,12 @@ export function PostDetailPage() {
         : 'Bài viết không tồn tại hoặc không khả dụng.'))
       .finally(() => setLoading(false))
   }, [slug, token])
+
+  useEffect(() => {
+    if (!success) return
+    toast.success('Đã lưu thay đổi bài viết', success)
+    setSuccess(null)
+  }, [success, toast])
 
   const permissions = profile?.permissions ?? []
   const canSubmit = permissions.includes('posts.submit')
@@ -168,9 +176,7 @@ export function PostDetailPage() {
               onMutate={mutate}
               onDelete={remove}
             /> : null}
-            <div className="post-detail-feedback" aria-live="polite">
-              <Feedback message={success ?? undefined} error={error ?? undefined} />
-            </div>
+            <div className="post-detail-feedback"><Feedback error={error ?? undefined} /></div>
 
             <PostReviewFeedback post={post} />
 

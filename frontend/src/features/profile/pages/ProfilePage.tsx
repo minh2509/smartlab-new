@@ -1,5 +1,7 @@
-import { Camera, Check, CircleUserRound, Save, Trash2, UserRound } from 'lucide-react'
+import { AlertCircle, Camera, Check, Save, Trash2, UserRound } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
+import { Feedback } from '../../../shared/components/Feedback'
+import { useToast } from '../../../shared/toast/useToast'
 import { useAuth } from '../../auth/authContext'
 import { downloadFile, getMyMemberProfile, getResearchFields, updateMyMemberProfile, uploadAvatar } from '../api'
 import type { MemberProfile, ResearchField } from '../../../shared/types/api'
@@ -14,6 +16,7 @@ type FormState = {
 
 export function ProfilePage() {
   const { token, profile: account } = useAuth()
+  const toast = useToast()
   const canUpdate = account?.permissions.includes('PROFILE_UPDATE') ?? false
   const [member, setMember] = useState<MemberProfile | null>(null)
   const [fields, setFields] = useState<ResearchField[]>([])
@@ -22,14 +25,15 @@ export function ProfilePage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
-  const [message, setMessage] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [validationError, setValidationError] = useState<string | null>(null)
   const phonePattern = /^(|0[35789]\d{8}|\+84[35789]\d{8})$/
 
   useEffect(() => {
     if (!token) return
     let active = true
     setLoading(true)
+    setLoadError(null)
     Promise.all([getMyMemberProfile(token), getResearchFields()])
       .then(([profileData, fieldData]) => {
         if (!active) return
@@ -44,7 +48,7 @@ export function ProfilePage() {
         })
       })
       .catch((reason: unknown) => {
-        if (active) setError(reason instanceof Error ? reason.message : 'Không tải được hồ sơ.')
+        if (active) setLoadError(reason instanceof Error ? reason.message : 'Không tải được hồ sơ.')
       })
       .finally(() => {
         if (active) setLoading(false)
@@ -98,18 +102,17 @@ export function ProfilePage() {
     event.preventDefault()
     if (!token || !canUpdate) return
     if (!phonePattern.test(form.phone.trim())) {
-      setError('Số điện thoại phải có dạng 0xxxxxxxxx hoặc +84xxxxxxxxx.')
+      setValidationError('Số điện thoại phải có dạng 0xxxxxxxxx hoặc +84xxxxxxxxx.')
       return
     }
     setSaving(true)
-    setError(null)
-    setMessage(null)
+    setValidationError(null)
     try {
       const updated = await updateMyMemberProfile(token, form)
       setMember(updated)
-      setMessage('Đã lưu hồ sơ thành viên.')
+      toast.success('Đã lưu hồ sơ', 'Thông tin thành viên đã được cập nhật.')
     } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : 'Không thể lưu hồ sơ.')
+      toast.error('Không thể lưu hồ sơ', reason instanceof Error ? reason.message : 'Vui lòng thử lại.')
     } finally {
       setSaving(false)
     }
@@ -119,16 +122,14 @@ export function ProfilePage() {
     const file = event.target.files?.[0]
     if (!file || !token || !canUpdate) return
     setUploading(true)
-    setError(null)
-    setMessage(null)
     try {
       const uploaded = await uploadAvatar(token, file)
       const updated = await updateMyMemberProfile(token, { ...form, avatarFileId: uploaded.id })
       setMember(updated)
       setForm((current) => ({ ...current, avatarFileId: uploaded.id }))
-      setMessage('Đã cập nhật ảnh đại diện.')
+      toast.success('Đã cập nhật ảnh đại diện')
     } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : 'Không thể tải ảnh đại diện.')
+      toast.error('Không thể tải ảnh đại diện', reason instanceof Error ? reason.message : 'Vui lòng thử lại.')
     } finally {
       setUploading(false)
       event.target.value = ''
@@ -138,75 +139,85 @@ export function ProfilePage() {
   const removeAvatar = async () => {
     if (!token || !member?.avatar || !canUpdate) return
     setSaving(true)
-    setError(null)
-    setMessage(null)
     try {
       const updated = await updateMyMemberProfile(token, { ...form, avatarFileId: undefined, removeAvatar: true })
       setMember(updated)
       setForm((current) => ({ ...current, avatarFileId: undefined }))
-      setMessage('Đã gỡ ảnh đại diện khỏi hồ sơ.')
+      toast.success('Đã gỡ ảnh đại diện')
     } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : 'Không thể gỡ ảnh đại diện.')
+      toast.error('Không thể gỡ ảnh đại diện', reason instanceof Error ? reason.message : 'Vui lòng thử lại.')
     } finally {
       setSaving(false)
     }
   }
 
   if (loading) return <div className="empty">Đang tải hồ sơ thành viên...</div>
-  if (error && !member) return <div className="alert error"><CircleUserRound />{error}</div>
+  if (loadError && !member) return <Feedback error={loadError} />
 
   return (
     <div className="admin-profile">
-      <div className="page-title">
+      <div className="profile-page-intro">
         <div>
-          <span className="eyebrow">Member profile</span>
-          <h1>Hồ sơ của tôi</h1>
-          <p>Thông tin này được dùng trong danh sách thành viên và các hoạt động của Smart Lab.</p>
+          <h1>Hồ sơ cá nhân <span>Member Profile</span></h1>
+          <p>Quản lý thông tin hiển thị trong danh sách thành viên và hoạt động của Smart Lab.</p>
         </div>
-        <span className="badge success"><Check size={14} /> {member?.activeStatus ?? 'ACTIVE'}</span>
+        <span className="profile-status"><Check size={14} aria-hidden="true" /> {member?.activeStatus ?? 'ACTIVE'}</span>
       </div>
 
-      {error && <div className="alert error"><CircleUserRound />{error}</div>}
-      {message && <div className="alert"><Check />{message}</div>}
-      {!canUpdate && <div className="alert">Bạn chỉ có quyền xem hồ sơ. Liên hệ quản trị viên nếu cần cập nhật thông tin.</div>}
+      {!canUpdate && <Feedback message="Bạn chỉ có quyền xem hồ sơ. Liên hệ quản trị viên nếu cần cập nhật thông tin." />}
 
-      <section className="admin-profile-hero">
-        <div className="admin-profile-main">
-          <div className="profile-avatar-wrap">
+      <section className="profile-identity-surface" aria-label="Thông tin định danh thành viên">
+        <div className="profile-identity-main">
+          <div className="profile-avatar-wrap profile-avatar-wrap-large">
             {avatarUrl ? <img className="profile-avatar-image" src={avatarUrl} alt="Ảnh đại diện" /> : <span className="admin-profile-avatar">{initials}</span>}
             {canUpdate && <label className="avatar-upload" title="Đổi ảnh đại diện">
-              <Camera size={15} />
+              <Camera size={16} aria-hidden="true" />
+              <span className="sr-only">Đổi ảnh đại diện</span>
               <input type="file" accept="image/jpeg,image/png,image/gif,image/webp" onChange={handleAvatar} disabled={uploading} />
             </label>}
           </div>
-          <div>
-            <span className="eyebrow">Smart Lab member</span>
+          <div className="profile-identity-copy">
+            <span className="profile-identity-type">Smart Lab Member</span>
             <h2>{member?.name ?? account?.name}</h2>
             <p>{member?.email ?? account?.email}</p>
           </div>
-          {member?.avatar && canUpdate && <button className="btn ghost" type="button" onClick={() => void removeAvatar()} disabled={saving || uploading}><Trash2 size={15} /> Gỡ ảnh</button>}
         </div>
-        <div className="admin-profile-status">
-          {member?.researchFields.map((field) => <span className="badge info" key={field.id}>{field.name}</span>)}
+        <div className="profile-identity-actions">
+          <div className="profile-avatar-action-row">
+            {canUpdate && <label className="btn ghost profile-avatar-action" title="Đổi ảnh đại diện">
+              <Camera size={16} aria-hidden="true" /> Đổi ảnh
+              <input type="file" accept="image/jpeg,image/png,image/gif,image/webp" onChange={handleAvatar} disabled={uploading} />
+            </label>}
+            {member?.avatar && canUpdate && <button className="btn ghost profile-remove-avatar" type="button" onClick={() => void removeAvatar()} disabled={saving || uploading}><Trash2 size={16} aria-hidden="true" /> Gỡ ảnh</button>}
+          </div>
+          {uploading && <span className="profile-avatar-feedback" role="status">Đang tải ảnh lên...</span>}
         </div>
       </section>
 
-      <form className="panel-grid" onSubmit={handleSave}>
-        <section className="panel">
+      <form className="profile-form-layout" onSubmit={handleSave}>
+        <section className="panel profile-personal-panel">
           <div className="panel-head">
-            <div><h2>Thông tin cá nhân</h2><p>Chỉ email công khai mới xuất hiện trên trang thành viên.</p></div>
-            <UserRound size={20} />
+            <div><h2>Thông tin cá nhân</h2><p>Chỉ email công khai được dùng trên trang thành viên.</p></div>
+            <UserRound size={20} aria-hidden="true" />
           </div>
           <div className="form-stack">
-            <label className="field"><span>Số điện thoại</span><input className="input" type="tel" inputMode="tel" placeholder="0901234567" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} disabled={!canUpdate} /><small className="muted">Để trống nếu không muốn khai báo. Ví dụ: 0901234567 hoặc +84901234567.</small></label>
+            <label className="field"><span>Số điện thoại</span><input className="input" type="tel" inputMode="tel" placeholder="0901234567" value={form.phone} onChange={(event) => { setForm({ ...form, phone: event.target.value }); setValidationError(null) }} disabled={!canUpdate} aria-invalid={Boolean(validationError)} aria-describedby={validationError ? 'profile-phone-error' : undefined} /><small className="muted">Để trống nếu không muốn khai báo. Ví dụ: 0901234567 hoặc +84901234567.</small>{validationError && <small className="field-error profile-phone-validation" id="profile-phone-error" role="alert"><AlertCircle aria-hidden="true" />{validationError}</small>}</label>
             <label className="field"><span>Email công khai</span><input className="input" type="email" value={form.publicEmail} onChange={(event) => setForm({ ...form, publicEmail: event.target.value })} disabled={!canUpdate} /></label>
-            <div className="field"><span>Ngày tham gia Lab</span><strong className="input">{joinedLabDate}</strong><small className="muted">Ngày tham gia do hệ thống ghi nhận và không thể chỉnh sửa.</small></div>
             <label className="field"><span>Giới thiệu</span><textarea className="textarea" rows={6} value={form.bio} onChange={(event) => setForm({ ...form, bio: event.target.value })} disabled={!canUpdate} /></label>
           </div>
         </section>
 
-        <section className="panel">
-          <div className="panel-head"><div><h2>Lĩnh vực nghiên cứu</h2><p>Chọn một hoặc nhiều lĩnh vực đang tham gia.</p></div></div>
+        <section className="panel profile-lab-panel">
+          <div className="panel-head"><div><h2>Lab information</h2><p>Thông tin thành viên và lĩnh vực nghiên cứu.</p></div></div>
+          <div className="profile-readonly-meta">
+            <span>Ngày tham gia Lab</span>
+            <strong>{joinedLabDate}</strong>
+            <small>Do hệ thống ghi nhận, không thể chỉnh sửa.</small>
+          </div>
+          <div className="profile-fields-head">
+            <h3>Lĩnh vực nghiên cứu</h3>
+            <p>Chọn một hoặc nhiều lĩnh vực đang tham gia.</p>
+          </div>
           <div className="field-options">
             {fields.map((field) => (
               <label className={`field-option ${form.researchFieldIds.includes(field.id) ? 'selected' : ''}`} key={field.id}>
@@ -215,13 +226,13 @@ export function ProfilePage() {
                 {form.researchFieldIds.includes(field.id) && <Check size={17} />}
               </label>
             ))}
-            {!fields.length && <div className="empty tight">Chưa có lĩnh vực active.</div>}
-          </div>
-          <div className="form-actions profile-save-actions">
-            {canUpdate && <button className="btn primary" type="submit" disabled={saving || uploading}><Save size={16} />{saving ? 'Đang lưu...' : 'Lưu hồ sơ'}</button>}
-            {uploading && <span className="muted">Đang tải ảnh lên Drive...</span>}
+            {!fields.length && <div className="profile-fields-empty">Chưa có lĩnh vực nghiên cứu đang hoạt động.</div>}
           </div>
         </section>
+        <div className="form-actions profile-save-actions">
+          {canUpdate && <button className="btn primary" type="submit" disabled={saving || uploading}><Save size={16} aria-hidden="true" />{saving ? 'Đang lưu hồ sơ...' : 'Lưu thay đổi'}</button>}
+          {!canUpdate && <span className="profile-readonly-note">Hồ sơ đang ở chế độ chỉ xem.</span>}
+        </div>
       </form>
     </div>
   )

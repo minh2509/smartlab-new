@@ -5,6 +5,9 @@ import com.smartlab.dto.response.CursorPageResponse;
 import com.smartlab.dto.response.PostCommentResponse;
 import com.smartlab.dto.response.PostFeedResponse;
 import com.smartlab.dto.response.PostReactionResponse;
+import com.smartlab.dto.response.PostReactionUserResponse;
+import com.smartlab.enums.PostCommentScope;
+import com.smartlab.enums.PostCommentSort;
 import com.smartlab.enums.PostReactionType;
 
 public interface PostSocialService {
@@ -16,7 +19,18 @@ public interface PostSocialService {
     PostReactionResponse removeReaction(String authenticatedEmail, Long postId);
 
     CursorPageResponse<PostCommentResponse> getComments(
+            String authenticatedEmail, Long postId, String cursor, int limit,
+            PostCommentSort sort, PostCommentScope scope
+    );
+
+    default CursorPageResponse<PostCommentResponse> getComments(
             String authenticatedEmail, Long postId, String cursor, int limit
+    ) {
+        return getComments(authenticatedEmail, postId, cursor, limit, PostCommentSort.NEWEST, PostCommentScope.ALL);
+    }
+
+    CursorPageResponse<PostReactionUserResponse> getReactions(
+            String authenticatedEmail, Long postId, PostReactionType reaction, String cursor, int limit
     );
 
     PostCommentResponse createComment(String authenticatedEmail, Long postId, PostCommentRequest request);

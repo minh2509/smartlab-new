@@ -2,6 +2,7 @@ import { CalendarDays } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Feedback } from '../../../shared/components/Feedback'
+import { PopupSelect } from '../../../shared/ui/PopupSelect'
 import { useAuth } from '../../auth/authContext'
 import { listProjects } from '../../projects/api'
 import type { Project } from '../../projects/types'
@@ -57,21 +58,19 @@ export function EventManagementPage() {
 
   return (
     <>
-      <div className="page-title">
+      <div className="page-title event-page-title">
         <div>
           <span className="eyebrow">Lịch hoạt động</span>
           <h1>Quản lý sự kiện</h1>
           <p>Quản lý tập trung sự kiện toàn Lab và sự kiện thuộc từng dự án.</p>
         </div>
-        <CalendarDays size={28} />
+        <CalendarDays className="event-page-title-icon" size={24} aria-hidden="true" />
       </div>
 
-      <section className="panel page-section">
-        <div className="panel-head">
-          <div>
-            <h2>Phạm vi làm việc</h2>
-            <p>Chọn toàn Lab hoặc một dự án bạn có quyền xem.</p>
-          </div>
+      <section className="panel page-section event-scope-panel" aria-labelledby="event-scope-heading">
+        <div className="event-scope-copy">
+          <h2 id="event-scope-heading">Phạm vi sự kiện</h2>
+          <p>Chọn toàn Lab hoặc một dự án bạn có quyền xem.</p>
         </div>
 
         <Feedback
@@ -80,28 +79,24 @@ export function EventManagementPage() {
             : '')}
         />
 
-        <label className="field" style={{ maxWidth: 560 }}>
-          <span>Phạm vi sự kiện</span>
-          <select
-            className="select"
+        <div className="field event-scope-select">
+          <PopupSelect
             value={missingRequestedProject ? '' : selectedProject ? String(selectedProject.id) : 'LAB'}
             disabled={loadingProjects}
-            onChange={(event) => selectScope(event.target.value)}
-          >
-            {missingRequestedProject ? <option value="" disabled>Chọn lại phạm vi</option> : null}
-            <option value="LAB">Sự kiện cấp Lab</option>
-            {projects.map((project) => (
-              <option value={project.id} key={project.id}>
-                {project.code} · {project.name}
-              </option>
-            ))}
-          </select>
+            ariaLabel="Phạm vi sự kiện"
+            onChange={selectScope}
+            options={[
+              ...(missingRequestedProject ? [{ value: '', label: 'Chọn lại phạm vi' }] : []),
+              { value: 'LAB', label: 'Sự kiện cấp Lab' },
+              ...projects.map((project) => ({ value: String(project.id), label: `${project.code} · ${project.name}` })),
+            ]}
+          />
           <small>
             {loadingProjects
               ? 'Đang tải dự án...'
               : `${projects.length} dự án bạn có thể truy cập.`}
           </small>
-        </label>
+        </div>
       </section>
 
       {!loadingProjects && !missingRequestedProject

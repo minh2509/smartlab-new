@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ChevronDown } from 'lucide-react'
 import type { ReactionType } from '../types'
 import { REACTIONS, reactionPresentation } from '../reactions'
 
@@ -12,22 +13,23 @@ type Props = {
 export function PostReactionPicker({ selected, disabled, onSelect, onRemove }: Props) {
   const [open, setOpen] = useState(false)
   const current = reactionPresentation(selected)
+  const CurrentIcon = current.Icon
 
   return (
     <div className="reaction-control" onKeyDown={(event) => event.key === 'Escape' && setOpen(false)}>
       {open ? (
-        <div className="reaction-picker" role="menu" aria-label="Chọn cảm xúc">
+        <div className="reaction-picker" role="group" aria-label="Chọn cảm xúc">
           {REACTIONS.map((reaction) => (
             <button
               type="button"
-              role="menuitem"
               title={reaction.label}
               aria-label={reaction.label}
+              aria-pressed={selected === reaction.type}
               className={selected === reaction.type ? 'is-selected' : ''}
               key={reaction.type}
               onClick={() => { onSelect(reaction.type); setOpen(false) }}
             >
-              <span aria-hidden="true">{reaction.emoji}</span>
+              <reaction.Icon aria-hidden="true" />
             </button>
           ))}
         </div>
@@ -36,12 +38,12 @@ export function PostReactionPicker({ selected, disabled, onSelect, onRemove }: P
         type="button"
         className={selected ? 'social-action is-selected' : 'social-action'}
         disabled={disabled}
-        aria-haspopup="menu"
-        aria-expanded={open}
+        aria-label={selected ? `Gỡ cảm xúc ${current.label}` : 'Thích'}
+        aria-pressed={Boolean(selected)}
         onClick={() => selected ? onRemove() : onSelect('LIKE')}
         onContextMenu={(event) => { event.preventDefault(); setOpen((value) => !value) }}
       >
-        <span aria-hidden="true">{selected ? current.emoji : '👍'}</span>
+        <CurrentIcon aria-hidden="true" />
         {selected ? current.label : 'Thích'}
       </button>
       <button
@@ -52,7 +54,7 @@ export function PostReactionPicker({ selected, disabled, onSelect, onRemove }: P
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >
-        ▾
+        <ChevronDown aria-hidden="true" />
       </button>
     </div>
   )

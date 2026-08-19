@@ -1,9 +1,10 @@
-import { Save, Undo2, UsersRound } from 'lucide-react'
+import { Save, Undo2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { updateProjectLeadership } from '../api'
 import type { Project, ProjectLeaderCandidate } from '../types'
 import { ProjectLeaderPicker } from './ProjectLeaderPicker'
+import { confirmDialog } from '../../../shared/ui/projectConfirmDialog'
 
 type ProjectLeadershipEditorProps = {
   project: Project
@@ -65,10 +66,10 @@ export function ProjectLeadershipEditor({
         project.primaryLeader
           && removedLeaders.some((leader) => leader.userId === project.primaryLeader?.userId),
       )
-      const confirmation = removesAll
-        ? `Bỏ toàn bộ leader khỏi ${project.code}? Họ vẫn là thành viên dự án nhưng sẽ không còn quyền leader.`
-        : `Gỡ ${removedLeaders.length} leader khỏi ${project.code}${removesPrimary ? ', bao gồm leader chính hiện tại' : ''}? Họ vẫn là thành viên dự án.`
-      if (!window.confirm(confirmation)) return
+      const description = removesAll
+        ? `Tất cả leader sẽ được gỡ khỏi ${project.code}. Họ vẫn là thành viên dự án nhưng không còn quyền leader.`
+        : `${removedLeaders.length} leader sẽ được gỡ khỏi ${project.code}${removesPrimary ? ', bao gồm leader chính hiện tại' : ''}. Họ vẫn là thành viên dự án.`
+      if (!await confirmDialog({ title: 'Cập nhật nhóm leader?', description, confirmLabel: 'Cập nhật leader', destructive: true })) return
     }
 
     setSaving(true)
@@ -89,13 +90,13 @@ export function ProjectLeadershipEditor({
   }
 
   return (
-    <form className="panel page-section" onSubmit={handleSave} noValidate>
-      <div className="panel-head">
+    <form className="panel page-section project-leadership-editor" onSubmit={handleSave} noValidate>
+      <div className="project-leadership-header">
         <div>
-          <h2>Quản lý nhóm leader</h2>
-          <p>Tìm thành viên theo tên hoặc email, sau đó chọn một người làm leader chính.</p>
+          <h2>Nhóm leader</h2>
+          <p>Tìm thành viên, sau đó chỉ định người phụ trách chính nếu cần.</p>
         </div>
-        <UsersRound size={20} />
+        <span className="muted small">{leaders.length} leader</span>
       </div>
 
       <ProjectLeaderPicker
@@ -108,18 +109,14 @@ export function ProjectLeadershipEditor({
         onPrimaryLeaderChange={setPrimaryLeaderUserId}
       />
 
-      <div className="form-actions" style={{ marginTop: 16 }}>
-        <button className="btn brand" type="submit" disabled={!dirty || disabled || saving}>
-          <Save aria-hidden="true" />
-          {saving ? 'Đang lưu...' : 'Lưu thay đổi leader'}
-        </button>
-        <button className="btn ghost" type="button" disabled={!dirty || disabled || saving} onClick={resetDraft}>
-          <Undo2 aria-hidden="true" />
-          Hủy thay đổi
-        </button>
+      <div className="project-overview-action-footer project-leadership-action-footer">
         <span className="muted small" aria-live="polite">
           {dirty ? 'Có thay đổi chưa lưu.' : 'Nhóm leader đã được đồng bộ.'}
         </span>
+        <div className="form-actions">
+          <button className="btn ghost" type="button" disabled={!dirty || disabled || saving} onClick={resetDraft}><Undo2 aria-hidden="true" /> Hủy thay đổi</button>
+          <button className="btn primary" type="submit" disabled={!dirty || disabled || saving}><Save aria-hidden="true" />{saving ? 'Đang lưu...' : 'Lưu thay đổi leader'}</button>
+        </div>
       </div>
     </form>
   )
