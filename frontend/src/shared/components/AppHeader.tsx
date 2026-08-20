@@ -44,37 +44,32 @@ export function AppHeader() {
             </li>
           ))}
           {isAuthenticated ? (
-            <>
-              <li>
-                <NavLink to="/profile">Workspace</NavLink>
-              </li>
-              {role ? (
-                <li>
-                  <span className="nav-role-label">{role}</span>
-                </li>
-              ) : null}
-            </>
+            <li>
+              <NavLink to="/profile">Workspace</NavLink>
+            </li>
           ) : null}
         </ul>
 
         <div className="nav-act">
           {isAuthenticated ? (
             <>
-              <NavLink
-                end
-                className={({ isActive }) => `nav-private-link${isActive ? ' is-active' : ''}`}
-                to="/posts"
-              >
-                <Newspaper size={15} aria-hidden="true" />
-                Bảng tin
-              </NavLink>
-              {canReadNotifications ? (
-                <NotificationPopover />
-              ) : null}
-              <button className="btn sm" type="button" onClick={() => void logout()}>
-                <LogOut size={15} />
-                Đăng xuất
-              </button>
+              {role ? <span className="nav-role-label nav-utility-role">{role}</span> : null}
+              {role ? <span className="nav-utility-separator" aria-hidden="true" /> : null}
+              <div className="nav-utility-actions">
+                <NavLink
+                  end
+                  className={({ isActive }) => `nav-private-link${isActive ? ' is-active' : ''}`}
+                  to="/posts"
+                >
+                  <Newspaper size={15} aria-hidden="true" />
+                  Bảng tin
+                </NavLink>
+                {canReadNotifications ? <NotificationPopover /> : null}
+                <button className="btn sm" type="button" onClick={() => void logout()}>
+                  <LogOut size={15} />
+                  Đăng xuất
+                </button>
+              </div>
             </>
           ) : (
             <>

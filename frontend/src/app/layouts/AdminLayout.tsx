@@ -85,13 +85,15 @@ export function AdminLayout() {
 
         <section className="admin-workspace">
           <header className="admin-topbar">
-            <div>
+            <div className="admin-topbar-inner">
               <span>Smart Lab</span>
               <strong>{workspace.heading}</strong>
             </div>
           </header>
           <main className="admin-content">
-            <Outlet />
+            <div className="admin-content-inner">
+              <Outlet />
+            </div>
           </main>
         </section>
       </div>

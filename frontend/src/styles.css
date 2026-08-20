@@ -1,5 +1,6 @@
 :root {
   --admin-side: 280px;
+  --admin-workspace-max: 1440px;
 }
 
 body {
@@ -151,24 +152,7 @@ select {
   white-space: nowrap;
 }
 
-.menu > li:has(> .nav-role-label) {
-  display: flex;
-  align-items: center;
-}
-
-@media (min-width: 1201px) {
-  .menu > li:has(> .nav-role-label) {
-    transform: translateX(32px);
-  }
-}
-
-@media (min-width: 1024px) and (max-width: 1200px) {
-  .menu > li:has(> .nav-role-label) {
-    transform: translateX(8px);
-  }
-}
-
-.menu > li > .nav-role-label {
+.nav-role-label {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -190,26 +174,42 @@ select {
 
 .nav-act {
   flex: 0 0 auto;
-  gap: 10px;
+  gap: clamp(12px, 1vw, 16px);
   margin-left: auto;
-  padding-left: 18px;
-  border-left: 1px solid var(--line);
+  padding-left: 0;
+  border-left: 0;
 }
 
 .nav-act > * {
   flex: none;
 }
 
-@media (min-width: 1441px) {
+.nav-utility-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.nav-utility-separator {
+  width: 1px;
+  height: 24px;
+  background: var(--line);
+}
+
+@media (min-width: 1024px) {
   .site-nav .nav-in {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    width: 100%;
+    max-width: 1760px;
     box-sizing: border-box;
-    padding-inline: 20px;
+    padding-inline: clamp(16px, 1.5vw, 32px);
+    gap: 0;
   }
 
   .site-nav .logo {
     justify-self: start;
+    min-width: 0;
   }
 
   .site-nav .public-nav {
@@ -219,7 +219,13 @@ select {
 
   .site-nav .nav-act {
     justify-self: end;
+    min-width: 0;
     margin-left: 0;
+    gap: 6px;
+  }
+
+  .nav-utility-actions {
+    gap: 6px;
   }
 }
 
@@ -318,8 +324,10 @@ select {
   background: transparent;
   color: var(--text-2);
   cursor: pointer;
-  font-weight: 650;
-  line-height: 1;
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: inherit;
+  white-space: nowrap;
 }
 
 .nav-dropdown-trigger svg {
@@ -328,21 +336,26 @@ select {
 }
 
 .menu .nav-dropdown-trigger:hover,
-.menu .nav-dropdown-trigger.active,
 .nav-dropdown.open .nav-dropdown-trigger {
   background: var(--surface-2);
   color: var(--accent);
 }
 
-.menu .nav-dropdown-trigger.active::after {
+.menu .nav-dropdown-trigger.active {
+  background: transparent;
+  box-shadow: none;
+  color: var(--accent);
+}
+
+.menu > li:has(> .nav-dropdown > .nav-dropdown-trigger.active)::after {
   content: "";
   position: absolute;
   left: 13px;
   right: 13px;
-  bottom: -18px;
-  height: 2px;
+  bottom: -1px;
+  height: 2.5px;
   background: var(--accent);
-  border-radius: 999px;
+  border-radius: 2px;
 }
 
 .nav-dropdown-menu {
@@ -682,6 +695,19 @@ select {
   padding: 30px 34px 56px;
 }
 
+.admin-content-inner,
+.admin-topbar-inner {
+  width: 100%;
+  max-width: var(--admin-workspace-max);
+  min-width: 0;
+  margin-inline: auto;
+}
+
+.admin-content-inner > * {
+  min-width: 0;
+  margin-inline: auto;
+}
+
 .admin-workspace {
   min-width: 0;
   display: grid;
@@ -727,7 +753,7 @@ select {
 .admin-profile {
   display: grid;
   gap: 20px;
-  max-width: 1240px;
+  width: 100%;
 }
 
 .profile-page-intro {
@@ -2514,7 +2540,7 @@ select {
 
 .files-page {
   display: grid;
-  max-width: 1240px;
+  width: 100%;
   gap: 20px;
 }
 
@@ -3722,12 +3748,17 @@ select {
 
   .nav-act {
     gap: 6px;
-    padding-left: 10px;
+    padding-left: 0;
   }
 }
 
 @media (max-width: 1023px) {
   .public-nav {
+    display: none;
+  }
+
+  .nav-utility-role,
+  .nav-utility-separator {
     display: none;
   }
 }
