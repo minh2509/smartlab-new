@@ -12,6 +12,7 @@ import com.smartlab.enums.EventStatus;
 import com.smartlab.enums.EventVisibility;
 import com.smartlab.enums.ProjectMemberStatus;
 import com.smartlab.enums.ProjectRole;
+import com.smartlab.enums.PublicEventSort;
 import com.smartlab.repo.EventRepository;
 import com.smartlab.repo.ProjectMemberRepository;
 import com.smartlab.repo.ProjectRepository;
@@ -23,6 +24,7 @@ import com.smartlab.service.NotificationService;
 import com.smartlab.service.PermissionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -56,6 +58,7 @@ public class EventServiceImpl implements EventService {
     private static final int CONTENT_MAX_LENGTH = 20_000;
     private static final int LOCATION_MAX_LENGTH = 255;
     private static final int MEETING_URL_MAX_LENGTH = 2048;
+    private static final int PUBLIC_EVENT_LIMIT_MAX = 12;
 
     private final EventRepository eventRepository;
     private final ProjectRepository projectRepository;
@@ -68,12 +71,21 @@ public class EventServiceImpl implements EventService {
     @Override
     @Transactional(readOnly = true)
     public List<EventResponse> listPublic(EventStatus status, Boolean upcoming) {
-        List<EventEntity> events = eventRepository.findPublicEvents(
-                EventVisibility.PUBLIC,
-                status,
-                upcoming,
-                Instant.now()
-        );
+        return listPublic(status, upcoming, null, null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<EventResponse> listPublic(EventStatus status, Boolean upcoming, Integer limit, PublicEventSort sort) {
+        if (limit != null && (limit < 1 || limit > PUBLIC_EVENT_LIMIT_MAX)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Limit must be between 1 and 12");
+        }
+        Instant now = Instant.now();
+        List<EventEntity> events = limit == null
+                ? eventRepository.findPublicEvents(EventVisibility.PUBLIC, status, upcoming, now)
+                : sort == PublicEventSort.LATEST
+                ? eventRepository.findPublicEventsLatest(EventVisibility.PUBLIC, status, upcoming, now, PageRequest.of(0, limit))
+                : eventRepository.findPublicEventsLimited(EventVisibility.PUBLIC, status, upcoming, now, PageRequest.of(0, limit));
         Map<Long, EventCreatorResponse> creators = findCreators(events);
         return events.stream()
                 .map(event -> toResponse(event, creators.get(event.getCreatedByUserId())))

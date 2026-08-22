@@ -65,7 +65,10 @@ public class SecurityConfig {
                                 "/posts",
                                 "/posts/public/*",
                                 "/posts/*/files/*",
-                                "/events/public"
+                                "/events/public",
+                                "/projects/public/recruiting",
+                                "/publications",
+                                "/publications/years"
                         ).permitAll()
                         .requestMatchers(HttpMethod.GET, "/projects/leader-candidates").authenticated()
                         .requestMatchers(

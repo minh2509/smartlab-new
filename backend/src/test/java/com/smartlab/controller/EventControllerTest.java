@@ -7,6 +7,7 @@ import com.smartlab.dto.response.EventResponse;
 import com.smartlab.enums.EventMode;
 import com.smartlab.enums.EventStatus;
 import com.smartlab.enums.EventVisibility;
+import com.smartlab.enums.PublicEventSort;
 import com.smartlab.service.EventService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -95,7 +96,7 @@ class EventControllerTest {
 
     @Test
     void listsPublicEventsWithoutViewerContext() throws Exception {
-        when(eventService.listPublic(EventStatus.SCHEDULED, true))
+        when(eventService.listPublic(EventStatus.SCHEDULED, true, null, null))
                 .thenReturn(List.of(response()));
 
         mockMvc.perform(get("/events/public")
@@ -104,7 +105,23 @@ class EventControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(41));
 
-        verify(eventService).listPublic(EventStatus.SCHEDULED, true);
+        verify(eventService).listPublic(EventStatus.SCHEDULED, true, null, null);
+    }
+
+    @Test
+    void forwardsPublicLimitAndLatestSort() throws Exception {
+        when(eventService.listPublic(EventStatus.COMPLETED, false, 4, PublicEventSort.LATEST))
+                .thenReturn(List.of(response()));
+
+        mockMvc.perform(get("/events/public")
+                        .queryParam("status", "COMPLETED")
+                        .queryParam("upcoming", "false")
+                        .queryParam("limit", "4")
+                        .queryParam("sort", "LATEST"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(41));
+
+        verify(eventService).listPublic(EventStatus.COMPLETED, false, 4, PublicEventSort.LATEST);
     }
 
     @Test

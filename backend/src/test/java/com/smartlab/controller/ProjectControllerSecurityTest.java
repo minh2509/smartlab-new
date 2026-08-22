@@ -10,6 +10,7 @@ import com.smartlab.dto.request.UpdateProjectLeadershipRequest;
 import com.smartlab.dto.response.LeaderCandidateResponse;
 import com.smartlab.dto.response.ProjectLeaderResponse;
 import com.smartlab.dto.response.ProjectResponse;
+import com.smartlab.dto.response.PublicPageResponse;
 import com.smartlab.enums.ProjectStatus;
 import com.smartlab.enums.ProjectType;
 import com.smartlab.filter.JwtRequestFilter;
@@ -145,6 +146,16 @@ class ProjectControllerSecurityTest {
                 .andExpect(status().isUnauthorized());
 
         verifyNoInteractions(projectService);
+    }
+
+    @Test
+    void anonymousCanReadPublicRecruitingProjects() throws Exception {
+        when(projectService.listPublicRecruiting(0, 6))
+                .thenReturn(new PublicPageResponse<>(java.util.List.of(projectResponse()), 0, 6, 1, 1));
+        mockMvc.perform(get("/projects/public/recruiting"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].id").value(7));
+        verify(projectService).listPublicRecruiting(0, 6);
     }
 
     @Test

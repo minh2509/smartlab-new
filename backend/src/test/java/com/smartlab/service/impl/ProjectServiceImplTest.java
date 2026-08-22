@@ -8,6 +8,7 @@ import com.smartlab.dto.request.UpdateProjectLeadershipRequest;
 import com.smartlab.dto.response.LeaderCandidateResponse;
 import com.smartlab.dto.response.ProjectLeaderResponse;
 import com.smartlab.dto.response.ProjectResponse;
+import com.smartlab.dto.response.PublicPageResponse;
 import com.smartlab.entity.ProjectEntity;
 import com.smartlab.entity.ProjectMemberEntity;
 import com.smartlab.entity.UserEntity;
@@ -28,7 +29,9 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -840,6 +843,41 @@ class ProjectServiceImplTest {
         assertThat(response.getPrimaryLeader().getUserId()).isEqualTo("primary-user");
     }
 
+    @Test
+    void publicRecruitingListDelegatesEligibleStatusesAndPreservesPageMetadata() {
+        UserEntity leader = user(2L, "leader-user", "leader@smartlab.test", true);
+        ProjectEntity project = recruitingProject(7L, leader, ProjectStatus.IN_PROGRESS, true, true);
+        when(projectRepository.findPublicRecruitingProjects(any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(project), PageRequest.of(2, 4), 9));
+        when(projectMemberRepository.findActiveLeadersByProjectIds(List.of(7L))).thenReturn(List.of());
+
+        PublicPageResponse<ProjectResponse> response = projectService.listPublicRecruiting(2, 4);
+
+        assertThat(response.items()).extracting(ProjectResponse::getId).containsExactly(7L);
+        assertThat(response.page()).isEqualTo(2);
+        assertThat(response.size()).isEqualTo(4);
+        assertThat(response.totalElements()).isEqualTo(9);
+        assertThat(response.totalPages()).isEqualTo(3);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<ProjectStatus>> statuses = ArgumentCaptor.forClass(List.class);
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(projectRepository).findPublicRecruitingProjects(statuses.capture(), pageable.capture());
+        assertThat(statuses.getValue()).containsExactly(
+                ProjectStatus.PROPOSED, ProjectStatus.PREPARING, ProjectStatus.IN_PROGRESS
+        );
+        assertThat(pageable.getValue().getPageNumber()).isEqualTo(2);
+        assertThat(pageable.getValue().getPageSize()).isEqualTo(4);
+    }
+
+    @Test
+    void publicRecruitingListRejectsInvalidPageAndSizeBeforeQuerying() {
+        assertStatus(() -> projectService.listPublicRecruiting(-1, 4), HttpStatus.BAD_REQUEST);
+        assertStatus(() -> projectService.listPublicRecruiting(0, 0), HttpStatus.BAD_REQUEST);
+        assertStatus(() -> projectService.listPublicRecruiting(0, 25), HttpStatus.BAD_REQUEST);
+
+        verifyNoInteractions(projectRepository);
+    }
+
     private void stubAdmin(UserEntity admin) {
         when(userRepository.findByEmail(admin.getEmail())).thenReturn(Optional.of(admin));
         when(permissionService.getRoleCodes(admin)).thenReturn(Set.of("ADMIN"));
@@ -873,6 +911,33 @@ class ProjectServiceImplTest {
                 null,
                 isPublic,
                 false,
+                user(1L, "admin-user", "admin@smartlab.test", true)
+        );
+        ReflectionTestUtils.setField(project, "id", id);
+        return project;
+    }
+
+    private static ProjectEntity recruitingProject(
+            Long id,
+            UserEntity leader,
+            ProjectStatus status,
+            boolean isPublic,
+            boolean isRecruiting
+    ) {
+        ProjectEntity project = ProjectEntity.create(
+                "SL-" + id,
+                "Project " + id,
+                null,
+                null,
+                ProjectType.RESEARCH,
+                leader,
+                status,
+                LocalDate.of(2026, 8, 1),
+                LocalDate.of(2026, 12, 1),
+                null,
+                isPublic,
+                false,
+                isRecruiting,
                 user(1L, "admin-user", "admin@smartlab.test", true)
         );
         ReflectionTestUtils.setField(project, "id", id);

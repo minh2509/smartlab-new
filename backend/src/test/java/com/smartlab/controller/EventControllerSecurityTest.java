@@ -75,7 +75,7 @@ class EventControllerSecurityTest {
                 .andExpect(status().isUnauthorized());
         mockMvc.perform(delete("/events/41")).andExpect(status().isUnauthorized());
 
-        verify(eventService).listPublic(null, null);
+        verify(eventService).listPublic(null, null, null, null);
         verifyNoMoreInteractions(eventService);
     }
 

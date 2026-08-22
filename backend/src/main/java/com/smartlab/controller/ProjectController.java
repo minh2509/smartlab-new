@@ -7,6 +7,7 @@ import com.smartlab.dto.request.UpdateProjectRequest;
 import com.smartlab.dto.request.UpdateProjectLeadershipRequest;
 import com.smartlab.dto.response.LeaderCandidateResponse;
 import com.smartlab.dto.response.ProjectResponse;
+import com.smartlab.dto.response.PublicPageResponse;
 import com.smartlab.service.ProjectService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -42,6 +43,15 @@ public class ProjectController {
             @CurrentSecurityContext(expression = "authentication?.name") String currentEmail
     ) {
         return projectService.list(currentEmail);
+    }
+
+    @GetMapping("/public/recruiting")
+    @Operation(summary = "List public projects currently recruiting members")
+    public PublicPageResponse<ProjectResponse> listPublicRecruiting(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "6") int size
+    ) {
+        return projectService.listPublicRecruiting(page, size);
     }
 
     @GetMapping("/leader-candidates")

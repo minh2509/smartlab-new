@@ -8,6 +8,7 @@ import com.smartlab.dto.request.UpdateProjectLeadershipRequest;
 import com.smartlab.dto.response.LeaderCandidateResponse;
 import com.smartlab.dto.response.ProjectLeaderResponse;
 import com.smartlab.dto.response.ProjectResponse;
+import com.smartlab.dto.response.PublicPageResponse;
 import com.smartlab.entity.ProjectEntity;
 import com.smartlab.entity.ProjectMemberEntity;
 import com.smartlab.entity.UserEntity;
@@ -24,6 +25,7 @@ import com.smartlab.service.ProjectService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -49,6 +51,7 @@ import static com.smartlab.service.AuditVocabulary.PROJECT_MEMBER_UPDATED;
 @RequiredArgsConstructor
 public class ProjectServiceImpl implements ProjectService {
     private static final int LEADER_CANDIDATE_LIMIT = 20;
+    private static final int PUBLIC_RECRUITING_PAGE_SIZE_MAX = 24;
     private static final int LEADER_SEARCH_QUERY_MAX_LENGTH = 100;
     private static final int PROJECT_LEADER_LIMIT = 100;
     private static final int PUBLIC_USER_ID_MAX_LENGTH = 36;
@@ -87,6 +90,25 @@ public class ProjectServiceImpl implements ProjectService {
                 .filter(project -> Boolean.TRUE.equals(project.getIsPublic())
                         || canReadInternal && joinedProjectIds.contains(project.getId()))
                 .toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PublicPageResponse<ProjectResponse> listPublicRecruiting(int page, int size) {
+        if (page < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Page must not be negative");
+        }
+        if (size < 1 || size > PUBLIC_RECRUITING_PAGE_SIZE_MAX) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Size must be between 1 and 24");
+        }
+        Page<ProjectEntity> projects = projectRepository.findPublicRecruitingProjects(
+                List.of(ProjectStatus.PROPOSED, ProjectStatus.PREPARING, ProjectStatus.IN_PROGRESS),
+                PageRequest.of(page, size)
+        );
+        return PublicPageResponse.from(projects.map(project -> toResponse(
+                project,
+                findActiveLeaderMemberships(project.getId())
+        )));
     }
 
     @Override
@@ -147,6 +169,7 @@ public class ProjectServiceImpl implements ProjectService {
                 actualEndDate,
                 Boolean.TRUE.equals(request.getIsPublic()),
                 Boolean.TRUE.equals(request.getIsFeatured()),
+                Boolean.TRUE.equals(request.getIsRecruiting()),
                 creator
         );
 
@@ -203,7 +226,8 @@ public class ProjectServiceImpl implements ProjectService {
                 expectedEndDate,
                 actualEndDate,
                 request.getIsPublic() == null ? project.getIsPublic() : request.getIsPublic(),
-                request.getIsFeatured() == null ? project.getIsFeatured() : request.getIsFeatured()
+                request.getIsFeatured() == null ? project.getIsFeatured() : request.getIsFeatured(),
+                request.getIsRecruiting() == null ? project.getIsRecruiting() : request.getIsRecruiting()
         );
 
         try {
@@ -779,6 +803,7 @@ public class ProjectServiceImpl implements ProjectService {
                 .actualEndDate(project.getActualEndDate())
                 .isPublic(project.getIsPublic())
                 .isFeatured(project.getIsFeatured())
+                .isRecruiting(project.getIsRecruiting())
                 .primaryLeader(primaryLeader == null ? null : toLeaderResponse(primaryLeader))
                 .leaders(leadersByUserId.values().stream().map(this::toLeaderResponse).toList())
                 .createdAt(toInstant(project.getCreatedAt()))

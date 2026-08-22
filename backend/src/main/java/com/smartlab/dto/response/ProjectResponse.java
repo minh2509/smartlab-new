@@ -32,6 +32,7 @@ public class ProjectResponse {
     private LocalDate actualEndDate;
     private Boolean isPublic;
     private Boolean isFeatured;
+    private Boolean isRecruiting;
 
     @Schema(description = "Primary leader retained for project ownership metadata")
     private ProjectLeaderResponse primaryLeader;

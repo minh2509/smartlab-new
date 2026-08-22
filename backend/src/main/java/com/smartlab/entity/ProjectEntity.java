@@ -75,6 +75,9 @@ public class ProjectEntity {
     @Column(name = "is_featured", nullable = false)
     private Boolean isFeatured;
 
+    @Column(name = "is_recruiting", nullable = false)
+    private Boolean isRecruiting;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by_user_id")
     private UserEntity createdBy;
@@ -103,6 +106,7 @@ public class ProjectEntity {
             LocalDate actualEndDate,
             Boolean isPublic,
             Boolean isFeatured,
+            Boolean isRecruiting,
             UserEntity createdBy
     ) {
         return ProjectEntity.builder()
@@ -118,8 +122,18 @@ public class ProjectEntity {
                 .actualEndDate(actualEndDate)
                 .isPublic(isPublic)
                 .isFeatured(isFeatured)
+                .isRecruiting(isRecruiting)
                 .createdBy(createdBy)
                 .build();
+    }
+
+    public static ProjectEntity create(
+            String code, String name, String description, String goal, ProjectType projectType, UserEntity leader,
+            ProjectStatus status, LocalDate startDate, LocalDate expectedEndDate, LocalDate actualEndDate,
+            Boolean isPublic, Boolean isFeatured, UserEntity createdBy
+    ) {
+        return create(code, name, description, goal, projectType, leader, status, startDate, expectedEndDate,
+                actualEndDate, isPublic, isFeatured, false, createdBy);
     }
 
     public void updateCore(
@@ -133,7 +147,8 @@ public class ProjectEntity {
             LocalDate expectedEndDate,
             LocalDate actualEndDate,
             Boolean isPublic,
-            Boolean isFeatured
+            Boolean isFeatured,
+            Boolean isRecruiting
     ) {
         this.code = code;
         this.name = name;
@@ -146,6 +161,15 @@ public class ProjectEntity {
         this.actualEndDate = actualEndDate;
         this.isPublic = isPublic;
         this.isFeatured = isFeatured;
+        this.isRecruiting = isRecruiting;
+    }
+
+    public void updateCore(
+            String code, String name, String description, String goal, ProjectType projectType, ProjectStatus status,
+            LocalDate startDate, LocalDate expectedEndDate, LocalDate actualEndDate, Boolean isPublic, Boolean isFeatured
+    ) {
+        updateCore(code, name, description, goal, projectType, status, startDate, expectedEndDate, actualEndDate,
+                isPublic, isFeatured, this.isRecruiting);
     }
 
     public void changeLeader(UserEntity leader) {
@@ -154,5 +178,14 @@ public class ProjectEntity {
 
     public void softDelete() {
         this.deletedAt = Timestamp.from(Instant.now());
+    }
+
+    public boolean isOpenForRecruitment() {
+        return deletedAt == null
+                && Boolean.TRUE.equals(isPublic)
+                && Boolean.TRUE.equals(isRecruiting)
+                && (status == ProjectStatus.PROPOSED
+                || status == ProjectStatus.PREPARING
+                || status == ProjectStatus.IN_PROGRESS);
     }
 }

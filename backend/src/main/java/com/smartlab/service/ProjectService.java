@@ -7,11 +7,14 @@ import com.smartlab.dto.request.UpdateProjectRequest;
 import com.smartlab.dto.request.UpdateProjectLeadershipRequest;
 import com.smartlab.dto.response.LeaderCandidateResponse;
 import com.smartlab.dto.response.ProjectResponse;
+import com.smartlab.dto.response.PublicPageResponse;
 
 import java.util.List;
 
 public interface ProjectService {
     List<ProjectResponse> list(String currentEmail);
+
+    PublicPageResponse<ProjectResponse> listPublicRecruiting(int page, int size);
 
     ProjectResponse get(Long projectId, String currentEmail);
 

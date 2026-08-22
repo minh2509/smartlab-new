@@ -10,6 +10,7 @@ import com.smartlab.entity.UserEntity;
 import com.smartlab.enums.EventMode;
 import com.smartlab.enums.EventStatus;
 import com.smartlab.enums.EventVisibility;
+import com.smartlab.enums.PublicEventSort;
 import com.smartlab.enums.ProjectMemberStatus;
 import com.smartlab.enums.ProjectRole;
 import com.smartlab.repo.EventRepository;
@@ -27,6 +28,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
+import org.springframework.data.domain.Pageable;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.lang.reflect.Field;
@@ -89,6 +91,52 @@ class EventServiceImplTest {
         assertThat(result.getFirst().getVisibility()).isEqualTo(EventVisibility.PUBLIC);
         assertThat(result.getFirst().getCreator().getUserId()).isEqualTo("creator-user");
         verifyNoInteractions(permissionService, projectMemberRepository);
+    }
+
+    @Test
+    void publicListWithLimitUsesDefaultLimitedQueryAndFirstPage() {
+        EventEntity event = labEvent(2L, EventVisibility.PUBLIC, 21L);
+        when(eventRepository.findPublicEventsLimited(
+                eq(EventVisibility.PUBLIC), eq(EventStatus.COMPLETED), eq(false), any(Instant.class), any(Pageable.class)
+        )).thenReturn(List.of(event));
+        when(userRepository.findAllById(any())).thenReturn(List.of(user(21L, "creator-user", "creator@test")));
+
+        List<EventResponse> result = service.listPublic(EventStatus.COMPLETED, false, 4, null);
+
+        assertThat(result).extracting(EventResponse::getId).containsExactly(2L);
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(eventRepository).findPublicEventsLimited(
+                eq(EventVisibility.PUBLIC), eq(EventStatus.COMPLETED), eq(false), any(Instant.class), pageable.capture()
+        );
+        assertThat(pageable.getValue().getPageNumber()).isZero();
+        assertThat(pageable.getValue().getPageSize()).isEqualTo(4);
+    }
+
+    @Test
+    void publicListWithLatestSortUsesLatestLimitedQueryAndFirstPage() {
+        EventEntity event = labEvent(2L, EventVisibility.PUBLIC, 21L);
+        when(eventRepository.findPublicEventsLatest(
+                eq(EventVisibility.PUBLIC), eq(EventStatus.COMPLETED), eq(false), any(Instant.class), any(Pageable.class)
+        )).thenReturn(List.of(event));
+        when(userRepository.findAllById(any())).thenReturn(List.of(user(21L, "creator-user", "creator@test")));
+
+        List<EventResponse> result = service.listPublic(EventStatus.COMPLETED, false, 4, PublicEventSort.LATEST);
+
+        assertThat(result).extracting(EventResponse::getId).containsExactly(2L);
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(eventRepository).findPublicEventsLatest(
+                eq(EventVisibility.PUBLIC), eq(EventStatus.COMPLETED), eq(false), any(Instant.class), pageable.capture()
+        );
+        assertThat(pageable.getValue().getPageNumber()).isZero();
+        assertThat(pageable.getValue().getPageSize()).isEqualTo(4);
+    }
+
+    @Test
+    void publicListRejectsOutOfRangeLimitBeforeQuerying() {
+        assertStatus(HttpStatus.BAD_REQUEST, () -> service.listPublic(null, null, 0, null));
+        assertStatus(HttpStatus.BAD_REQUEST, () -> service.listPublic(null, null, 13, null));
+
+        verifyNoInteractions(eventRepository);
     }
 
     @Test

@@ -4,6 +4,7 @@ import com.smartlab.dto.request.CreateEventRequest;
 import com.smartlab.dto.request.UpdateEventRequest;
 import com.smartlab.dto.response.EventResponse;
 import com.smartlab.enums.EventStatus;
+import com.smartlab.enums.PublicEventSort;
 import com.smartlab.service.EventService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -41,9 +42,11 @@ public class EventController {
     @Operation(summary = "List public events")
     public List<EventResponse> listPublic(
             @RequestParam(required = false) EventStatus status,
-            @RequestParam(required = false) Boolean upcoming
+            @RequestParam(required = false) Boolean upcoming,
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) PublicEventSort sort
     ) {
-        return eventService.listPublic(status, upcoming);
+        return eventService.listPublic(status, upcoming, limit, sort);
     }
 
     @GetMapping
