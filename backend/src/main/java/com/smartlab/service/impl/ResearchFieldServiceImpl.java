@@ -4,7 +4,10 @@ import com.smartlab.dto.request.CreateResearchFieldRequest;
 import com.smartlab.dto.request.UpdateResearchFieldRequest;
 import com.smartlab.dto.response.ResearchFieldResponse;
 import com.smartlab.entity.ResearchFieldEntity;
+import com.smartlab.entity.StoredFileEntity;
 import com.smartlab.repo.ResearchFieldRepository;
+import com.smartlab.repo.StoredFileRepository;
+import com.smartlab.service.PostContentFileService;
 import com.smartlab.service.ResearchFieldService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -19,6 +22,8 @@ import java.util.Locale;
 @RequiredArgsConstructor
 public class ResearchFieldServiceImpl implements ResearchFieldService {
     private final ResearchFieldRepository researchFieldRepository;
+    private final StoredFileRepository storedFileRepository;
+    private final PostContentFileService postContentFileService;
 
     @Override
     @Transactional(readOnly = true)
@@ -47,6 +52,7 @@ public class ResearchFieldServiceImpl implements ResearchFieldService {
                 .code(code)
                 .name(request.getName().trim())
                 .description(request.getDescription())
+                .coverFile(request.getCoverFileId() == null ? null : resolveCoverFile(request.getCoverFileId()))
                 .isActive(true)
                 .build();
         return toResponse(researchFieldRepository.save(entity));
@@ -57,6 +63,9 @@ public class ResearchFieldServiceImpl implements ResearchFieldService {
     public ResearchFieldResponse update(Long id, UpdateResearchFieldRequest request) {
         ResearchFieldEntity entity = researchFieldRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Research field not found"));
+        if (request.getCoverFileId() != null && Boolean.TRUE.equals(request.getRemoveCover())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "coverFileId and removeCover cannot both be set");
+        }
         if (request.getName() != null && !request.getName().isBlank()) {
             entity.setName(request.getName().trim());
         }
@@ -65,6 +74,11 @@ public class ResearchFieldServiceImpl implements ResearchFieldService {
         }
         if (request.getIsActive() != null) {
             entity.setIsActive(request.getIsActive());
+        }
+        if (request.getCoverFileId() != null) {
+            entity.setCoverFile(resolveCoverFile(request.getCoverFileId()));
+        } else if (Boolean.TRUE.equals(request.getRemoveCover())) {
+            entity.setCoverFile(null);
         }
         return toResponse(researchFieldRepository.save(entity));
     }
@@ -84,8 +98,27 @@ public class ResearchFieldServiceImpl implements ResearchFieldService {
                 .code(entity.getCode())
                 .name(entity.getName())
                 .description(entity.getDescription())
+                .coverFileId(entity.getCoverFile() == null ? null : entity.getCoverFile().getId())
                 .isActive(entity.getIsActive())
                 .build();
+    }
+
+    private StoredFileEntity resolveCoverFile(Long fileId) {
+        if (fileId == null || fileId <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Research field cover file is unavailable");
+        }
+        PostContentFileService.FileMetadata metadata = postContentFileService.findActiveMetadata(fileId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Research field cover file is unavailable"));
+        if (!metadata.image()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Research field cover must use a supported image file");
+        }
+        if (!"PUBLIC".equals(metadata.accessScope())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Research field cover must use a PUBLIC file");
+        }
+        return storedFileRepository.getReferenceById(metadata.id());
     }
 
     private String normalizeCode(String code) {

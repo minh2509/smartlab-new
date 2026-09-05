@@ -11,6 +11,7 @@ import com.smartlab.dto.response.LeaderCandidateResponse;
 import com.smartlab.dto.response.ProjectLeaderResponse;
 import com.smartlab.dto.response.ProjectResponse;
 import com.smartlab.dto.response.PublicPageResponse;
+import com.smartlab.dto.response.PublicPageResponse;
 import com.smartlab.enums.ProjectStatus;
 import com.smartlab.enums.ProjectType;
 import com.smartlab.filter.JwtRequestFilter;
@@ -156,6 +157,18 @@ class ProjectControllerSecurityTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items[0].id").value(7));
         verify(projectService).listPublicRecruiting(0, 6);
+    }
+
+    @Test
+    void anonymousCanReadPublicProjectArchive() throws Exception {
+        when(projectService.listPublic(0, 12, null, null, null, null, null))
+                .thenReturn(new PublicPageResponse<>(java.util.List.of(projectResponse()), 0, 12, 1, 1));
+
+        mockMvc.perform(get("/projects/public"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].id").value(7));
+
+        verify(projectService).listPublic(0, 12, null, null, null, null, null);
     }
 
     @Test

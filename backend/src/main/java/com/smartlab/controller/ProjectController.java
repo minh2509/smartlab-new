@@ -8,6 +8,8 @@ import com.smartlab.dto.request.UpdateProjectLeadershipRequest;
 import com.smartlab.dto.response.LeaderCandidateResponse;
 import com.smartlab.dto.response.ProjectResponse;
 import com.smartlab.dto.response.PublicPageResponse;
+import com.smartlab.enums.ProjectType;
+import com.smartlab.enums.PublicProjectStatus;
 import com.smartlab.service.ProjectService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -43,6 +45,20 @@ public class ProjectController {
             @CurrentSecurityContext(expression = "authentication?.name") String currentEmail
     ) {
         return projectService.list(currentEmail);
+    }
+
+    @GetMapping("/public")
+    @Operation(summary = "List public projects with server-side pagination and filters")
+    public PublicPageResponse<ProjectResponse> listPublic(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "12") int size,
+            @RequestParam(name = "q", required = false) String query,
+            @RequestParam(required = false) Long researchFieldId,
+            @RequestParam(required = false) String field,
+            @RequestParam(required = false) ProjectType projectType,
+            @RequestParam(required = false) PublicProjectStatus status
+    ) {
+        return projectService.listPublic(page, size, query, researchFieldId, field, projectType, status);
     }
 
     @GetMapping("/public/recruiting")

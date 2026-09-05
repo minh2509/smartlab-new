@@ -5,6 +5,7 @@ import com.smartlab.config.SecurityConfig;
 import com.smartlab.dto.request.CreateEventRequest;
 import com.smartlab.dto.request.UpdateEventRequest;
 import com.smartlab.dto.response.EventResponse;
+import com.smartlab.dto.response.PublicPageResponse;
 import com.smartlab.enums.EventMode;
 import com.smartlab.enums.EventStatus;
 import com.smartlab.enums.EventVisibility;
@@ -77,6 +78,22 @@ class EventControllerSecurityTest {
 
         verify(eventService).listPublic(null, null, null, null);
         verifyNoMoreInteractions(eventService);
+    }
+
+    @Test
+    void anonymousCanReadPublicEventArchiveAndDetail() throws Exception {
+        when(eventService.listPublicArchive(0, 12, null, null, null))
+                .thenReturn(new PublicPageResponse<>(List.of(response()), 0, 12, 1, 1));
+        when(eventService.getPublic(41L)).thenReturn(response());
+
+        mockMvc.perform(get("/events/public/archive"))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.items[0].id").value(41));
+        mockMvc.perform(get("/events/public/41"))
+                .andExpect(status().isOk());
+
+        verify(eventService).listPublicArchive(0, 12, null, null, null);
+        verify(eventService).getPublic(41L);
     }
 
     @Test

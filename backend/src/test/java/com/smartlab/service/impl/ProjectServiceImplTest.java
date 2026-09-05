@@ -16,8 +16,10 @@ import com.smartlab.enums.ProjectMemberStatus;
 import com.smartlab.enums.ProjectRole;
 import com.smartlab.enums.ProjectStatus;
 import com.smartlab.enums.ProjectType;
+import com.smartlab.enums.PublicProjectStatus;
 import com.smartlab.repo.ProjectMemberRepository;
 import com.smartlab.repo.ProjectRepository;
+import com.smartlab.repo.ProjectResearchFieldRepository;
 import com.smartlab.repo.UserRepository;
 import com.smartlab.service.AuditService;
 import com.smartlab.service.PermissionService;
@@ -29,6 +31,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -44,8 +47,10 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -58,6 +63,9 @@ class ProjectServiceImplTest {
 
     @Mock
     private ProjectMemberRepository projectMemberRepository;
+
+    @Mock
+    private ProjectResearchFieldRepository projectResearchFieldRepository;
 
     @Mock
     private UserRepository userRepository;
@@ -870,6 +878,61 @@ class ProjectServiceImplTest {
     }
 
     @Test
+    void publicStatusUsesEffectiveRecruitingAcrossAllLifecycleCombinations() {
+        List<PublicTaxonomyCase> cases = List.of(
+                new PublicTaxonomyCase(ProjectStatus.PROPOSED, true, PublicProjectStatus.RECRUITING),
+                new PublicTaxonomyCase(ProjectStatus.PREPARING, true, PublicProjectStatus.RECRUITING),
+                new PublicTaxonomyCase(ProjectStatus.IN_PROGRESS, true, PublicProjectStatus.RECRUITING),
+                new PublicTaxonomyCase(ProjectStatus.PROPOSED, false, PublicProjectStatus.UPCOMING),
+                new PublicTaxonomyCase(ProjectStatus.PREPARING, false, PublicProjectStatus.UPCOMING),
+                new PublicTaxonomyCase(ProjectStatus.IN_PROGRESS, false, PublicProjectStatus.ACTIVE),
+                new PublicTaxonomyCase(ProjectStatus.PAUSED, false, PublicProjectStatus.ACTIVE),
+                new PublicTaxonomyCase(ProjectStatus.PAUSED, true, PublicProjectStatus.ACTIVE),
+                new PublicTaxonomyCase(ProjectStatus.COMPLETED, true, PublicProjectStatus.COMPLETED),
+                new PublicTaxonomyCase(ProjectStatus.CLOSED, true, PublicProjectStatus.COMPLETED)
+        );
+
+        for (int index = 0; index < cases.size(); index++) {
+            PublicTaxonomyCase testCase = cases.get(index);
+            reset(projectRepository, projectMemberRepository, projectResearchFieldRepository);
+            ProjectEntity project = recruitingProject(100L + index, null, testCase.lifecycle(), true, testCase.recruiting());
+            when(projectRepository.findPublicProjects(any(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), any(), any(Pageable.class)))
+                    .thenReturn(new PageImpl<>(List.of(project), PageRequest.of(0, 12), 1));
+            when(projectMemberRepository.findActiveLeadersByProjectIds(any())).thenReturn(List.of());
+            when(projectResearchFieldRepository.findAllWithFieldByProjectIds(any())).thenReturn(List.of());
+
+            ProjectResponse response = projectService.listPublic(0, 12, null, null, null, null, null).items().getFirst();
+
+            assertThat(response.getPublicStatus())
+                    .as("%s + isRecruiting=%s", testCase.lifecycle(), testCase.recruiting())
+                    .isEqualTo(testCase.expected());
+        }
+    }
+
+    @Test
+    void publicStatusFiltersUseEffectiveRecruitingExclusion() {
+        for (PublicProjectStatus status : PublicProjectStatus.values()) {
+            reset(projectRepository);
+            when(projectRepository.findPublicProjects(any(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), any(), any(Pageable.class)))
+                    .thenReturn(Page.empty());
+
+            projectService.listPublic(0, 12, null, null, null, null, status);
+
+            ArgumentCaptor<Boolean> recruitingOnly = ArgumentCaptor.forClass(Boolean.class);
+            ArgumentCaptor<Boolean> excludeEffectiveRecruiting = ArgumentCaptor.forClass(Boolean.class);
+            ArgumentCaptor<List<ProjectStatus>> recruitableStatuses = ArgumentCaptor.forClass(List.class);
+            verify(projectRepository).findPublicProjects(any(), any(), any(), recruitingOnly.capture(),
+                    excludeEffectiveRecruiting.capture(), recruitableStatuses.capture(), any(), any(), any(Pageable.class));
+
+            assertThat(recruitingOnly.getValue()).isEqualTo(status == PublicProjectStatus.RECRUITING);
+            assertThat(excludeEffectiveRecruiting.getValue()).isEqualTo(status != PublicProjectStatus.RECRUITING);
+            assertThat(recruitableStatuses.getValue()).containsExactly(
+                    ProjectStatus.PROPOSED, ProjectStatus.PREPARING, ProjectStatus.IN_PROGRESS
+            );
+        }
+    }
+
+    @Test
     void publicRecruitingListRejectsInvalidPageAndSizeBeforeQuerying() {
         assertStatus(() -> projectService.listPublicRecruiting(-1, 4), HttpStatus.BAD_REQUEST);
         assertStatus(() -> projectService.listPublicRecruiting(0, 0), HttpStatus.BAD_REQUEST);
@@ -953,6 +1016,8 @@ class ProjectServiceImplTest {
                 .isActive(active)
                 .build();
     }
+
+    private record PublicTaxonomyCase(ProjectStatus lifecycle, boolean recruiting, PublicProjectStatus expected) { }
 
     private static void assertStatus(Runnable action, HttpStatus expectedStatus) {
         assertThatThrownBy(action::run)

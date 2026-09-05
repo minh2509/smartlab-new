@@ -23,6 +23,15 @@ public interface ProjectResearchFieldRepository
     List<ProjectResearchFieldEntity> findAllWithFieldByProjectId(@Param("projectId") Long projectId);
 
     @Query("""
+            select prf
+            from ProjectResearchFieldEntity prf
+            join fetch prf.researchField rf
+            where prf.project.id in :projectIds
+            order by prf.project.id, lower(rf.name), lower(rf.code), rf.id
+            """)
+    List<ProjectResearchFieldEntity> findAllWithFieldByProjectIds(@Param("projectIds") List<Long> projectIds);
+
+    @Query("""
             select prf.project.id
             from ProjectResearchFieldEntity prf
             where prf.researchField.id = :fieldId

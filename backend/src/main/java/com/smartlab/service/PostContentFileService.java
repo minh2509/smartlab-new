@@ -8,7 +8,11 @@ public interface PostContentFileService {
 
     DownloadedContent downloadActiveContent(Long fileId);
 
-    record FileMetadata(Long id, Long ownerUserId, String mimeType, String originalName, boolean image) {
+    record FileMetadata(Long id, Long ownerUserId, String mimeType, String originalName, boolean image,
+                        String accessScope) {
+        public FileMetadata(Long id, Long ownerUserId, String mimeType, String originalName, boolean image) {
+            this(id, ownerUserId, mimeType, originalName, image, null);
+        }
     }
 
     record DownloadedContent(byte[] content, String mimeType, String originalName) {

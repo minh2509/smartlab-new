@@ -5,8 +5,10 @@ import com.smartlab.entity.UserEntity;
 import com.smartlab.entity.ProjectEntity;
 import com.smartlab.repo.DocumentRepository;
 import com.smartlab.repo.DocumentVersionRepository;
+import com.smartlab.repo.LabAchievementFileRepository;
 import com.smartlab.repo.MemberProfileRepository;
 import com.smartlab.repo.ProjectRepository;
+import com.smartlab.repo.ResearchFieldRepository;
 import com.smartlab.repo.StoredFileRepository;
 import com.smartlab.repo.TaskAttachmentRepository;
 import com.smartlab.repo.UserRepository;
@@ -50,6 +52,8 @@ class FileServiceImplTest {
     @Mock DocumentRepository documentRepository;
     @Mock DocumentVersionRepository documentVersionRepository;
     @Mock TaskAttachmentRepository taskAttachmentRepository;
+    @Mock ResearchFieldRepository researchFieldRepository;
+    @Mock LabAchievementFileRepository achievementFileRepository;
     @InjectMocks FileServiceImpl service;
 
     private final UserEntity owner = UserEntity.builder().id(1L).email("owner@lab.test").name("Owner").build();
@@ -201,6 +205,54 @@ class FileServiceImplTest {
                 .isInstanceOfSatisfying(ResponseStatusException.class,
                         exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
         verify(fileStorage, never()).trash(any());
+    }
+
+    @Test
+    void refusesToDeleteFileUsedAsResearchFieldCover() {
+        StoredFileEntity entity = storedFile(12L, "PUBLIC");
+        when(storedFileRepository.findByIdAndDeletedAtIsNull(12L)).thenReturn(Optional.of(entity));
+        when(researchFieldRepository.existsByCoverFile_Id(12L)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.delete(12L, owner.getEmail(), authentication(owner.getEmail())))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        exception -> {
+                            assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+                            assertThat(exception.getReason()).isEqualTo("File is currently used as a research field cover");
+                        });
+        verify(fileStorage, never()).trash(any());
+    }
+
+    @Test
+    void allowsDeletionAfterResearchFieldCoverIsRemoved() {
+        StoredFileEntity entity = storedFile(13L, "PUBLIC");
+        when(storedFileRepository.findByIdAndDeletedAtIsNull(13L)).thenReturn(Optional.of(entity));
+
+        service.delete(13L, owner.getEmail(), authentication(owner.getEmail()));
+
+        verify(fileStorage).trash("drive-id");
+        verify(storedFileRepository).save(entity);
+        assertThat(entity.getDeletedAt()).isNotNull();
+    }
+
+    @Test
+    void activeAchievementAttachmentBlocksDeletionButDetachedOrDeletedAchievementDoesNot() {
+        StoredFileEntity active = storedFile(14L, "PRIVATE");
+        when(storedFileRepository.findByIdAndDeletedAtIsNull(14L)).thenReturn(Optional.of(active));
+        when(achievementFileRepository.existsActiveReferenceForActiveAchievement(14L)).thenReturn(true);
+        assertThatThrownBy(() -> service.delete(14L, owner.getEmail(), authentication(owner.getEmail())))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+        verify(fileStorage, never()).trash("drive-id");
+
+        StoredFileEntity detached = storedFile(15L, "PRIVATE");
+        StoredFileEntity deletedAchievement = storedFile(16L, "PRIVATE");
+        when(storedFileRepository.findByIdAndDeletedAtIsNull(15L)).thenReturn(Optional.of(detached));
+        when(storedFileRepository.findByIdAndDeletedAtIsNull(16L)).thenReturn(Optional.of(deletedAchievement));
+        when(achievementFileRepository.existsActiveReferenceForActiveAchievement(15L)).thenReturn(false);
+        when(achievementFileRepository.existsActiveReferenceForActiveAchievement(16L)).thenReturn(false);
+        service.delete(15L, owner.getEmail(), authentication(owner.getEmail()));
+        service.delete(16L, owner.getEmail(), authentication(owner.getEmail()));
+        verify(fileStorage, org.mockito.Mockito.times(2)).trash("drive-id");
     }
 
     @Test

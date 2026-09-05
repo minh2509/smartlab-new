@@ -10,5 +10,6 @@ public class ResearchFieldResponse {
     private String code;
     private String name;
     private String description;
+    private Long coverFileId;
     private Boolean isActive;
 }

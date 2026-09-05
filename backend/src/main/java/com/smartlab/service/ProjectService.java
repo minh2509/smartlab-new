@@ -8,6 +8,8 @@ import com.smartlab.dto.request.UpdateProjectLeadershipRequest;
 import com.smartlab.dto.response.LeaderCandidateResponse;
 import com.smartlab.dto.response.ProjectResponse;
 import com.smartlab.dto.response.PublicPageResponse;
+import com.smartlab.enums.ProjectType;
+import com.smartlab.enums.PublicProjectStatus;
 
 import java.util.List;
 
@@ -15,6 +17,16 @@ public interface ProjectService {
     List<ProjectResponse> list(String currentEmail);
 
     PublicPageResponse<ProjectResponse> listPublicRecruiting(int page, int size);
+
+    PublicPageResponse<ProjectResponse> listPublic(
+            int page,
+            int size,
+            String query,
+            Long researchFieldId,
+            String researchFieldCode,
+            ProjectType projectType,
+            PublicProjectStatus status
+    );
 
     ProjectResponse get(Long projectId, String currentEmail);
 

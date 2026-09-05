@@ -8,8 +8,10 @@ import com.smartlab.dto.request.UpdateProjectLeadershipRequest;
 import com.smartlab.dto.response.LeaderCandidateResponse;
 import com.smartlab.dto.response.ProjectLeaderResponse;
 import com.smartlab.dto.response.ProjectResponse;
+import com.smartlab.dto.response.PublicPageResponse;
 import com.smartlab.enums.ProjectStatus;
 import com.smartlab.enums.ProjectType;
+import com.smartlab.enums.PublicProjectStatus;
 import com.smartlab.service.ProjectService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -83,6 +85,30 @@ class ProjectControllerTest {
                 .andExpect(jsonPath("$[0].code").value("SL-AI"))
                 .andExpect(jsonPath("$[0].primaryLeader.userId").value("leader-user"))
                 .andExpect(jsonPath("$[0].leaders[0].userId").value("leader-user"));
+    }
+
+    @Test
+    void listsPublicProjectsWithServerSideFiltersAndPagination() throws Exception {
+        when(projectService.listPublic(
+                1, 12, "robot", 3L, "ai", ProjectType.RESEARCH, PublicProjectStatus.RECRUITING
+        )).thenReturn(new PublicPageResponse<>(List.of(response(7L, "leader-user")), 1, 12, 13, 2));
+
+        mockMvc.perform(get("/projects/public")
+                        .queryParam("page", "1")
+                        .queryParam("size", "12")
+                        .queryParam("q", "robot")
+                        .queryParam("researchFieldId", "3")
+                        .queryParam("field", "ai")
+                        .queryParam("projectType", "RESEARCH")
+                        .queryParam("status", "RECRUITING"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].id").value(7))
+                .andExpect(jsonPath("$.page").value(1))
+                .andExpect(jsonPath("$.size").value(12))
+                .andExpect(jsonPath("$.totalElements").value(13))
+                .andExpect(jsonPath("$.totalPages").value(2));
+
+        verify(projectService).listPublic(1, 12, "robot", 3L, "ai", ProjectType.RESEARCH, PublicProjectStatus.RECRUITING);
     }
 
     @Test

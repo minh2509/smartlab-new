@@ -11,4 +11,6 @@ public interface ResearchFieldRepository extends JpaRepository<ResearchFieldEnti
     List<ResearchFieldEntity> findByIsActiveTrueOrderByNameAsc();
 
     boolean existsByCodeIgnoreCase(String code);
+
+    boolean existsByCoverFile_Id(Long fileId);
 }

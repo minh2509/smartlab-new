@@ -19,4 +19,6 @@ public class CreateResearchFieldRequest {
 
     @Size(max = 5000)
     private String description;
+
+    private Long coverFileId;
 }

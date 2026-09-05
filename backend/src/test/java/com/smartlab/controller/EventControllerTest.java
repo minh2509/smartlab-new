@@ -4,6 +4,7 @@ import com.smartlab.dto.request.CreateEventRequest;
 import com.smartlab.dto.request.UpdateEventRequest;
 import com.smartlab.dto.response.EventCreatorResponse;
 import com.smartlab.dto.response.EventResponse;
+import com.smartlab.dto.response.PublicPageResponse;
 import com.smartlab.enums.EventMode;
 import com.smartlab.enums.EventStatus;
 import com.smartlab.enums.EventVisibility;
@@ -122,6 +123,29 @@ class EventControllerTest {
                 .andExpect(jsonPath("$[0].id").value(41));
 
         verify(eventService).listPublic(EventStatus.COMPLETED, false, 4, PublicEventSort.LATEST);
+    }
+
+    @Test
+    void listsPublicEventArchiveAndGetsPublicDetail() throws Exception {
+        when(eventService.listPublicArchive(1, 12, EventStatus.COMPLETED, false, "workshop"))
+                .thenReturn(new PublicPageResponse<>(List.of(response()), 1, 12, 13, 2));
+        when(eventService.getPublic(41L)).thenReturn(response());
+
+        mockMvc.perform(get("/events/public/archive")
+                        .queryParam("page", "1")
+                        .queryParam("size", "12")
+                        .queryParam("status", "COMPLETED")
+                        .queryParam("upcoming", "false")
+                        .queryParam("q", "workshop"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].id").value(41))
+                .andExpect(jsonPath("$.totalPages").value(2));
+        mockMvc.perform(get("/events/public/41"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(41));
+
+        verify(eventService).listPublicArchive(1, 12, EventStatus.COMPLETED, false, "workshop");
+        verify(eventService).getPublic(41L);
     }
 
     @Test

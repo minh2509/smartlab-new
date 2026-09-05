@@ -74,13 +74,14 @@ class EventServiceImplTest {
     private EventServiceImpl service;
 
     @Test
-    void publicListUsesPublicOnlyQueryWithoutAuthenticationOrMembershipChecks() {
+    void publicListWithoutLimitUsesBoundedPublicQueryWithDefaultLimit() {
         EventEntity publicEvent = labEvent(2L, EventVisibility.PUBLIC, 21L);
-        when(eventRepository.findPublicEvents(
+        when(eventRepository.findPublicEventsLimited(
                 eq(EventVisibility.PUBLIC),
                 eq(EventStatus.SCHEDULED),
                 eq(true),
-                any(Instant.class)
+                any(Instant.class),
+                any(Pageable.class)
         )).thenReturn(List.of(publicEvent));
         when(userRepository.findAllById(any()))
                 .thenReturn(List.of(user(21L, "creator-user", "creator@test")));
@@ -90,6 +91,12 @@ class EventServiceImplTest {
         assertThat(result).extracting(EventResponse::getId).containsExactly(2L);
         assertThat(result.getFirst().getVisibility()).isEqualTo(EventVisibility.PUBLIC);
         assertThat(result.getFirst().getCreator().getUserId()).isEqualTo("creator-user");
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(eventRepository).findPublicEventsLimited(
+                eq(EventVisibility.PUBLIC), eq(EventStatus.SCHEDULED), eq(true), any(Instant.class), pageable.capture()
+        );
+        assertThat(pageable.getValue().getPageNumber()).isZero();
+        assertThat(pageable.getValue().getPageSize()).isEqualTo(12);
         verifyNoInteractions(permissionService, projectMemberRepository);
     }
 
