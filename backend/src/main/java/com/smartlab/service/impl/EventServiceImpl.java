@@ -108,7 +108,7 @@ public class EventServiceImpl implements EventService {
                 EventVisibility.PUBLIC,
                 status,
                 upcoming,
-                normalizeOptionalText(query),
+                normalizeSearchText(query),
                 Instant.now(),
                 PageRequest.of(page, pageSize)
         );
@@ -584,6 +584,11 @@ public class EventServiceImpl implements EventService {
         }
         String normalized = value.trim();
         return normalized.isEmpty() ? null : normalized;
+    }
+
+    private String normalizeSearchText(String value) {
+        String normalized = normalizeOptionalText(value);
+        return normalized == null ? "" : normalized;
     }
 
     private Map<Long, EventCreatorResponse> findCreators(List<EventEntity> events) {

@@ -10,6 +10,9 @@ import com.smartlab.dto.response.ProjectLeaderResponse;
 import com.smartlab.dto.response.ProjectResearchFieldResponse;
 import com.smartlab.dto.response.ProjectResponse;
 import com.smartlab.dto.response.PublicPageResponse;
+import com.smartlab.dto.response.PublicProjectDetailResponse;
+import com.smartlab.dto.response.PublicProjectLeaderResponse;
+import com.smartlab.dto.response.PublicProjectSummaryResponse;
 import com.smartlab.entity.ProjectEntity;
 import com.smartlab.entity.ProjectMemberEntity;
 import com.smartlab.entity.ProjectResearchFieldEntity;
@@ -105,7 +108,7 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Override
     @Transactional(readOnly = true)
-    public PublicPageResponse<ProjectResponse> listPublicRecruiting(int page, int size) {
+    public PublicPageResponse<PublicProjectSummaryResponse> listPublicRecruiting(int page, int size) {
         if (page < 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Page must not be negative");
         }
@@ -121,7 +124,7 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Override
     @Transactional(readOnly = true)
-    public PublicPageResponse<ProjectResponse> listPublic(
+    public PublicPageResponse<PublicProjectSummaryResponse> listPublic(
             int page,
             int size,
             String query,
@@ -137,14 +140,14 @@ public class ProjectServiceImpl implements ProjectService {
 
         List<ProjectStatus> statuses = statusesFor(status);
         Page<ProjectEntity> projects = projectRepository.findPublicProjects(
-                normalizeOptional(query),
+                normalizeSearch(query),
                 projectType,
                 statuses,
                 status == PublicProjectStatus.RECRUITING,
                 status != null && status != PublicProjectStatus.RECRUITING,
                 RECRUITABLE_STATUSES,
                 researchFieldId,
-                normalizeOptional(researchFieldCode),
+                normalizeSearch(researchFieldCode),
                 PageRequest.of(page, pageSize)
         );
         return toPublicPageResponse(projects);
@@ -159,6 +162,14 @@ public class ProjectServiceImpl implements ProjectService {
             throw notFound(projectId);
         }
         return toResponse(project, findActiveLeaderMemberships(projectId));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PublicProjectDetailResponse getPublic(Long projectId) {
+        ProjectEntity project = projectRepository.findPublicById(projectId)
+                .orElseThrow(() -> notFound(projectId));
+        return toPublicDetailResponse(project, findActiveLeaderMemberships(projectId));
     }
 
     @Override
@@ -791,6 +802,11 @@ public class ProjectServiceImpl implements ProjectService {
         return normalized.isEmpty() ? null : normalized;
     }
 
+    private String normalizeSearch(String value) {
+        String normalized = normalizeOptional(value);
+        return normalized == null ? "" : normalized;
+    }
+
     private List<ProjectResponse> toResponses(List<ProjectEntity> projects) {
         if (projects.isEmpty()) {
             return List.of();
@@ -821,10 +837,10 @@ public class ProjectServiceImpl implements ProjectService {
                 .toList();
     }
 
-    private PublicPageResponse<ProjectResponse> toPublicPageResponse(Page<ProjectEntity> projects) {
+    private PublicPageResponse<PublicProjectSummaryResponse> toPublicPageResponse(Page<ProjectEntity> projects) {
         List<ProjectEntity> projectContent = projects.getContent();
         if (projectContent.isEmpty()) {
-            return PublicPageResponse.from(projects.map(project -> toResponse(project, List.of(), List.of())));
+            return PublicPageResponse.from(projects.map(project -> toPublicSummaryResponse(project, List.of(), List.of())));
         }
 
         List<Long> projectIds = projectContent.stream().map(ProjectEntity::getId).toList();
@@ -845,8 +861,8 @@ public class ProjectServiceImpl implements ProjectService {
                         java.util.stream.Collectors.toList()
                 ));
 
-        List<ProjectResponse> responses = projectContent.stream()
-                .map(project -> toResponse(
+        List<PublicProjectSummaryResponse> responses = projectContent.stream()
+                .map(project -> toPublicSummaryResponse(
                         project,
                         membershipsByProjectId.getOrDefault(project.getId(), List.of()),
                         fieldsByProjectId.getOrDefault(project.getId(), List.of())
@@ -858,6 +874,34 @@ public class ProjectServiceImpl implements ProjectService {
                 projects.getSize(),
                 projects.getTotalElements(),
                 projects.getTotalPages()
+        );
+    }
+
+    private PublicProjectSummaryResponse toPublicSummaryResponse(
+            ProjectEntity project,
+            Collection<ProjectMemberEntity> leaderMemberships,
+            Collection<ProjectResearchFieldEntity> researchFields
+    ) {
+        UserEntity primaryLeader = project.getLeader();
+        Map<String, UserEntity> leadersByUserId = new LinkedHashMap<>();
+        if (primaryLeader != null) {
+            leadersByUserId.put(primaryLeader.getUserId(), primaryLeader);
+        }
+        leaderMemberships.stream()
+                .map(ProjectMemberEntity::getUser)
+                .sorted(Comparator.comparing(UserEntity::getId))
+                .forEach(leader -> leadersByUserId.putIfAbsent(leader.getUserId(), leader));
+
+        return new PublicProjectSummaryResponse(
+                project.getId(),
+                project.getCode(),
+                project.getName(),
+                project.getDescription(),
+                project.getGoal(),
+                project.getProjectType(),
+                toPublicProjectStatus(project.getStatus(), project.getIsRecruiting()),
+                researchFields.stream().map(this::toResearchFieldResponse).toList(),
+                leadersByUserId.values().stream().map(this::toPublicLeaderResponse).toList()
         );
     }
 
@@ -911,6 +955,40 @@ public class ProjectServiceImpl implements ProjectService {
                 .createdAt(toInstant(project.getCreatedAt()))
                 .updatedAt(toInstant(project.getUpdatedAt()))
                 .build();
+    }
+
+    private PublicProjectDetailResponse toPublicDetailResponse(
+            ProjectEntity project,
+            Collection<ProjectMemberEntity> leaderMemberships
+    ) {
+        List<ProjectResearchFieldEntity> researchFields = projectResearchFieldRepository
+                .findAllWithFieldByProjectId(project.getId());
+        UserEntity primaryLeader = project.getLeader();
+        Map<String, UserEntity> leadersByUserId = new LinkedHashMap<>();
+        if (primaryLeader != null) {
+            leadersByUserId.put(primaryLeader.getUserId(), primaryLeader);
+        }
+        leaderMemberships.stream()
+                .map(ProjectMemberEntity::getUser)
+                .sorted(Comparator.comparing(UserEntity::getId))
+                .forEach(leader -> leadersByUserId.putIfAbsent(leader.getUserId(), leader));
+
+        return new PublicProjectDetailResponse(
+                project.getId(),
+                project.getCode(),
+                project.getName(),
+                project.getDescription(),
+                project.getGoal(),
+                project.getProjectType(),
+                toPublicProjectStatus(project.getStatus(), project.getIsRecruiting()),
+                project.getStartDate(),
+                project.getExpectedEndDate(),
+                project.getActualEndDate(),
+                project.getIsFeatured(),
+                researchFields.stream().map(this::toResearchFieldResponse).toList(),
+                primaryLeader == null ? null : toPublicLeaderResponse(primaryLeader),
+                leadersByUserId.values().stream().map(this::toPublicLeaderResponse).toList()
+        );
     }
 
     private ProjectResearchFieldResponse toResearchFieldResponse(ProjectResearchFieldEntity field) {
@@ -967,6 +1045,10 @@ public class ProjectServiceImpl implements ProjectService {
                 .userId(leader.getUserId())
                 .name(leader.getName())
                 .build();
+    }
+
+    private PublicProjectLeaderResponse toPublicLeaderResponse(UserEntity leader) {
+        return new PublicProjectLeaderResponse(leader.getName());
     }
 
     private LeaderCandidateResponse toLeaderCandidateResponse(UserEntity candidate) {

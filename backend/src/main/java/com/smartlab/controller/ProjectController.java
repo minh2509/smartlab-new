@@ -8,6 +8,8 @@ import com.smartlab.dto.request.UpdateProjectLeadershipRequest;
 import com.smartlab.dto.response.LeaderCandidateResponse;
 import com.smartlab.dto.response.ProjectResponse;
 import com.smartlab.dto.response.PublicPageResponse;
+import com.smartlab.dto.response.PublicProjectDetailResponse;
+import com.smartlab.dto.response.PublicProjectSummaryResponse;
 import com.smartlab.enums.ProjectType;
 import com.smartlab.enums.PublicProjectStatus;
 import com.smartlab.service.ProjectService;
@@ -49,7 +51,7 @@ public class ProjectController {
 
     @GetMapping("/public")
     @Operation(summary = "List public projects with server-side pagination and filters")
-    public PublicPageResponse<ProjectResponse> listPublic(
+    public PublicPageResponse<PublicProjectSummaryResponse> listPublic(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "12") int size,
             @RequestParam(name = "q", required = false) String query,
@@ -63,11 +65,17 @@ public class ProjectController {
 
     @GetMapping("/public/recruiting")
     @Operation(summary = "List public projects currently recruiting members")
-    public PublicPageResponse<ProjectResponse> listPublicRecruiting(
+    public PublicPageResponse<PublicProjectSummaryResponse> listPublicRecruiting(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "6") int size
     ) {
         return projectService.listPublicRecruiting(page, size);
+    }
+
+    @GetMapping("/public/{id}")
+    @Operation(summary = "Get one public project")
+    public PublicProjectDetailResponse getPublic(@PathVariable Long id) {
+        return projectService.getPublic(id);
     }
 
     @GetMapping("/leader-candidates")

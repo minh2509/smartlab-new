@@ -5,20 +5,19 @@ import { hasAllPermissions } from '../../../app/accessPolicy'
 import { Feedback } from '../../../shared/components/Feedback'
 import { useAuth } from '../../auth/authContext'
 import { PublicPageHead } from '../../public/components/PublicPageHead'
-import { getProject, listMyProjectMemberships } from '../api'
+import { getPublicProject, listMyProjectMemberships } from '../api'
 import { ProjectJoinRequestCard } from '../components/ProjectJoinRequestCard'
 import {
-  PROJECT_STATUS_BADGES,
-  PROJECT_STATUS_LABELS,
+  PUBLIC_PROJECT_STATUS_LABELS,
   PROJECT_TYPE_LABELS,
 } from '../types'
-import type { Project } from '../types'
+import type { PublicProjectDetail } from '../types'
 import './ProjectDetailPage.css'
 
 export function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { token, profile } = useAuth()
-  const [project, setProject] = useState<Project | null>(null)
+  const [project, setProject] = useState<PublicProjectDetail | null>(null)
   const [hasActiveMembership, setHasActiveMembership] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -40,7 +39,7 @@ export function ProjectDetailPage() {
     }
 
     setLoading(true)
-    getProject(projectId, token)
+    getPublicProject(projectId)
       .then((result) => {
         if (active) setProject(result)
       })
@@ -56,7 +55,7 @@ export function ProjectDetailPage() {
     return () => {
       active = false
     }
-  }, [id, reloadKey, token])
+  }, [id, reloadKey])
 
   const isAdminProjectManager = Boolean(
     profile?.roles.includes('ADMIN')
@@ -124,17 +123,13 @@ export function ProjectDetailPage() {
     { label: 'Ngày bắt đầu', value: formatDate(project.startDate) },
     { label: 'Dự kiến kết thúc', value: formatDate(project.expectedEndDate) },
     { label: 'Kết thúc thực tế', value: formatDate(project.actualEndDate) },
-    { label: 'Phạm vi', value: project.isPublic ? 'Công khai' : 'Nội bộ' },
   ]
 
   const primaryLeader = project.primaryLeader
-  const uniqueLeaders = new Map(project.leaders.map((leader) => [leader.userId, leader]))
-
-  if (primaryLeader) uniqueLeaders.set(primaryLeader.userId, primaryLeader)
-
-  const leaders = Array.from(uniqueLeaders.values()).map((leader) => ({
+  const publicStatus = project.publicStatus
+  const leaders = project.leaders.map((leader) => ({
     ...leader,
-    isPrimary: leader.userId === primaryLeader?.userId,
+    isPrimary: leader.name === primaryLeader?.name,
   }))
 
   return (
@@ -146,12 +141,10 @@ export function ProjectDetailPage() {
           <Link className="project-detail-back" to="/du-an">← Quay lại danh sách dự án</Link>
 
           <div className="project-detail-context" aria-label="Phân loại dự án">
-            <span className={`badge ${PROJECT_STATUS_BADGES[project.status]}`}>
-              <span className="dot" />
-              {PROJECT_STATUS_LABELS[project.status]}
+            <span className={`project-detail-public-status project-detail-public-status-${publicStatus.toLowerCase()}`}>
+              {PUBLIC_PROJECT_STATUS_LABELS[publicStatus]}
             </span>
             <span className="project-detail-type">{PROJECT_TYPE_LABELS[project.projectType]}</span>
-            {!project.isPublic ? <span className="project-detail-meta">Nội bộ</span> : null}
             {project.isFeatured ? <span className="project-detail-meta">Nổi bật</span> : null}
           </div>
 
@@ -166,14 +159,23 @@ export function ProjectDetailPage() {
                 <h2 id="project-goal-title">Mục tiêu</h2>
                 <p className={!project.goal ? 'is-muted' : undefined}>{project.goal || 'Dự án chưa cập nhật mục tiêu.'}</p>
               </section>
+
+              <section className="project-detail-copy" aria-labelledby="project-fields-title">
+                <h2 id="project-fields-title">Lĩnh vực nghiên cứu</h2>
+                {project.researchFields && project.researchFields.length > 0 ? (
+                  <div className="project-detail-field-list">
+                    {project.researchFields.map((field) => <span className="chip" key={field.id}>{field.name}</span>)}
+                  </div>
+                ) : <p className="is-muted">Dự án chưa cập nhật lĩnh vực nghiên cứu.</p>}
+              </section>
             </div>
 
             <aside className="project-detail-leaders" aria-labelledby="project-leaders-title">
               <h2 id="project-leaders-title"><UsersRound size={18} aria-hidden="true" /> Nhóm leader</h2>
               {leaders.length > 0 ? (
                 <ul className="project-detail-leader-list">
-                  {leaders.map((leader) => (
-                    <li key={leader.userId}>
+                  {leaders.map((leader, index) => (
+                    <li key={`${leader.name}-${index}`}>
                       <span className="project-detail-avatar" aria-hidden="true">{initialsOf(leader.name)}</span>
                       <span>
                         <strong>{leader.name}</strong>
@@ -212,7 +214,7 @@ export function ProjectDetailPage() {
   )
 }
 
-function ProjectWorkspaceSection({ project }: { project: Project }) {
+function ProjectWorkspaceSection({ project }: { project: Pick<PublicProjectDetail, 'id'> }) {
   return (
     <section className="project-detail-workspace" aria-labelledby="project-workspace-title">
       <div className="project-detail-workspace-copy">

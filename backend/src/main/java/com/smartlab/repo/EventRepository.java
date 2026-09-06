@@ -52,7 +52,7 @@ public interface EventRepository extends JpaRepository<EventEntity, Long> {
                 or (:upcoming = false and e.startAt < :now)
               )
               and (
-                :query is null
+                :query = ''
                 or lower(e.title) like lower(concat('%', :query, '%'))
                 or lower(coalesce(e.content, '')) like lower(concat('%', :query, '%'))
                 or lower(coalesce(e.location, '')) like lower(concat('%', :query, '%'))

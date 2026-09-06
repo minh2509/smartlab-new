@@ -19,6 +19,15 @@ import java.util.Optional;
 public interface ProjectRepository extends JpaRepository<ProjectEntity, Long> {
     Optional<ProjectEntity> findByIdAndDeletedAtIsNull(Long id);
 
+    @Query("""
+            select p
+            from ProjectEntity p
+            where p.id = :id
+              and p.deletedAt is null
+              and p.isPublic = true
+            """)
+    Optional<ProjectEntity> findPublicById(@Param("id") Long id);
+
     List<ProjectEntity> findAllByDeletedAtIsNullOrderByCreatedAtDesc();
 
     @Query("""
@@ -40,7 +49,7 @@ public interface ProjectRepository extends JpaRepository<ProjectEntity, Long> {
             where p.deletedAt is null
               and p.isPublic = true
               and (
-                :query is null
+                :query = ''
                 or lower(p.code) like lower(concat('%', :query, '%'))
                 or lower(p.name) like lower(concat('%', :query, '%'))
                 or lower(coalesce(p.description, '')) like lower(concat('%', :query, '%'))
@@ -60,7 +69,7 @@ public interface ProjectRepository extends JpaRepository<ProjectEntity, Long> {
                 )
               )
               and (
-                :researchFieldCode is null
+                :researchFieldCode = ''
                 or exists (
                     select prfByCode.id
                     from ProjectResearchFieldEntity prfByCode

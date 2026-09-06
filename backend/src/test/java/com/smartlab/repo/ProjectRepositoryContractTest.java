@@ -53,7 +53,7 @@ class ProjectRepositoryContractTest {
 
         assertThat(query).contains(
                 "p.isPublic = true",
-                ":query is null",
+                ":query = ''",
                 ":projectType is null",
                 "p.status in :statuses",
                 ":recruitingOnly = false",
@@ -61,8 +61,21 @@ class ProjectRepositoryContractTest {
                 ":excludeEffectiveRecruiting = false",
                 ":recruitableStatuses",
                 ":researchFieldId is null",
-                ":researchFieldCode is null",
+                ":researchFieldCode = ''",
                 "order by p.createdAt desc, p.id desc"
+        );
+        assertThat(query).doesNotContain(":query is null", ":researchFieldCode is null");
+    }
+
+    @Test
+    void publicDetailQueryRequiresActivePublicProject() throws NoSuchMethodException {
+        Method method = ProjectRepository.class.getMethod("findPublicById", Long.class);
+        String query = method.getAnnotation(Query.class).value();
+
+        assertThat(query).contains(
+                "p.id = :id",
+                "p.deletedAt is null",
+                "p.isPublic = true"
         );
     }
 }

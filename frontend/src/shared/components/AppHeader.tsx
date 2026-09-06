@@ -31,24 +31,26 @@ export function AppHeader() {
           <Logo />
         </NavLink>
 
-        <ul className="menu public-nav">
-          <li>
-            <NavLink to="/">Trang chủ</NavLink>
-          </li>
-          <li>
-            <AboutDropdown />
-          </li>
-          {publicLinks.map((link) => (
-            <li key={link.to}>
-              <NavLink to={link.to}>{link.label}</NavLink>
-            </li>
-          ))}
-          {isAuthenticated ? (
+        <nav className="public-nav" aria-label="Điều hướng chính">
+          <ul className="menu">
             <li>
-              <NavLink to="/profile">Workspace</NavLink>
+              <NavLink to="/">Trang chủ</NavLink>
             </li>
-          ) : null}
-        </ul>
+            <li>
+              <AboutDropdown />
+            </li>
+            {publicLinks.map((link) => (
+              <li key={link.to}>
+                <NavLink to={link.to}>{link.label}</NavLink>
+              </li>
+            ))}
+            {isAuthenticated ? (
+              <li>
+                <NavLink to="/profile">Workspace</NavLink>
+              </li>
+            ) : null}
+          </ul>
+        </nav>
 
         <div className="nav-act">
           {isAuthenticated ? (

@@ -1,5 +1,6 @@
 import { CalendarDays, UsersRound } from 'lucide-react'
 import type { CSSProperties } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import aiResearchImage from '../../../assets/fields/ai-research.webp'
 import roboticsResearchImage from '../../../assets/fields/robotics-research.webp'
@@ -7,11 +8,17 @@ import softwareEngineeringImage from '../../../assets/fields/software-engineerin
 import type { MemberProfile, ResearchField } from '../../../shared/types/api'
 import type { PostFeedItem } from '../../posts/types'
 import {
-  PROJECT_STATUS_BADGES,
-  PROJECT_STATUS_LABELS,
+  PUBLIC_PROJECT_STATUS_LABELS,
   PROJECT_TYPE_LABELS,
-  type Project,
+  type PublicProjectSummary,
 } from '../../projects/types'
+
+const PUBLIC_PROJECT_STATUS_BADGES = {
+  RECRUITING: 'ok',
+  UPCOMING: 'info',
+  ACTIVE: 'ok',
+  COMPLETED: 'mute',
+} as const
 
 const FIELD_VISUALS = {
   ai: {
@@ -36,11 +43,20 @@ const FIELD_VISUALS = {
 
 export function ResearchFieldCard({ field }: { field: ResearchField }) {
   const visual = fieldVisual(field)
+  const [coverFailed, setCoverFailed] = useState(false)
+  const image = field.coverFileId && !coverFailed ? publicFileUrl(field.coverFileId) : visual.image
 
   return (
     <article className="fieldcard" style={{ '--c': visual.color } as CSSProperties}>
       <span className="fieldcard-media">
-        <img src={visual.image} alt={visual.imageAlt} loading="lazy" />
+        <img
+          src={image}
+          alt={visual.imageAlt}
+          loading="lazy"
+          onError={() => {
+            if (field.coverFileId && !coverFailed) setCoverFailed(true)
+          }}
+        />
       </span>
       <h3>{field.name}</h3>
       <p>{field.description || 'Thông tin chi tiết về hướng nghiên cứu này đang được cập nhật.'}</p>
@@ -52,7 +68,7 @@ export function ResearchFieldCard({ field }: { field: ResearchField }) {
   )
 }
 
-export function PublicProjectCard({ project }: { project: Project }) {
+export function PublicProjectCard({ project }: { project: PublicProjectSummary }) {
   const shownLeaders = project.leaders.slice(0, 3)
   const remainingLeaderCount = project.leaders.length - shownLeaders.length
 
@@ -60,12 +76,11 @@ export function PublicProjectCard({ project }: { project: Project }) {
     <Link className="card hover projcard" to={`/du-an/${project.id}`}>
       <div className="body">
         <div className="row gap-6 wrapf">
-          <span className={`lbl badge ${PROJECT_STATUS_BADGES[project.status]}`}>
+          <span className={`lbl badge ${PUBLIC_PROJECT_STATUS_BADGES[project.publicStatus]}`}>
             <span className="dot" />
-            {PROJECT_STATUS_LABELS[project.status]}
+            {PUBLIC_PROJECT_STATUS_LABELS[project.publicStatus]}
           </span>
           <span className="chip accent">{PROJECT_TYPE_LABELS[project.projectType]}</span>
-          {project.isFeatured ? <span className="chip">Nổi bật</span> : null}
         </div>
         <div>
           <span className="muted small">{project.code}</span>
@@ -75,8 +90,8 @@ export function PublicProjectCard({ project }: { project: Project }) {
         <div className="foot">
           {shownLeaders.length > 0 ? (
             <span className="ava-stack" aria-label={`${project.leaders.length} leader`}>
-              {shownLeaders.map((leader) => (
-                <span className="ava xs" title={leader.name} key={leader.userId}>{initialsOf(leader.name)}</span>
+              {shownLeaders.map((leader, index) => (
+                <span className="ava xs" title={leader.name} key={`${leader.name}-${index}`}>{initialsOf(leader.name)}</span>
               ))}
               {remainingLeaderCount > 0 ? <span className="ava xs">+{remainingLeaderCount}</span> : null}
             </span>
@@ -128,6 +143,26 @@ export function PublicPostCard({ post }: { post: PostFeedItem }) {
         <div className="by">
           <span className="ava xs" style={{ background: 'var(--s1)' }}>{initialsOf(post.author?.name)}</span>
           {post.author?.name ?? 'Smart Lab'}
+        </div>
+      </div>
+    </Link>
+  )
+}
+
+export function PublicArticleCard({ article }: { article: import('../articleTypes').LabArticleSummary }) {
+  const description = shorten(article.excerpt || 'Mở bài viết để xem nội dung đầy đủ.', 220)
+
+  return (
+    <Link className="card hover postcard landing-article-card" to={`/bai-viet/${encodeURIComponent(article.slug)}`}>
+      <div className="cover ph ph-article" />
+      <div className="body">
+        <div className="pmeta">
+          {article.publishedAt ? <span>{formatDate(article.publishedAt)}</span> : null}
+        </div>
+        <h3>{article.title}</h3>
+        <p>{description}</p>
+        <div className="foot">
+          <span className="muted-link">Đọc bài viết →</span>
         </div>
       </div>
     </Link>

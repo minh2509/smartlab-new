@@ -13,9 +13,29 @@ export const PROJECT_STATUSES = [
 
 export type ProjectStatus = (typeof PROJECT_STATUSES)[number]
 
+export const PUBLIC_PROJECT_STATUSES = ['RECRUITING', 'UPCOMING', 'ACTIVE', 'COMPLETED'] as const
+
+export type PublicProjectStatus = (typeof PUBLIC_PROJECT_STATUSES)[number]
+
 export type ProjectLeader = {
   userId: string
   name: string
+}
+
+export type PublicProjectLeader = {
+  name: string
+}
+
+export type PublicProjectSummary = {
+  id: number
+  code: string
+  name: string
+  description: string | null
+  goal: string | null
+  projectType: ProjectType
+  publicStatus: PublicProjectStatus
+  researchFields: ProjectResearchField[]
+  leaders: PublicProjectLeader[]
 }
 
 export type ProjectLeaderCandidate = {
@@ -32,15 +52,35 @@ export type Project = {
   goal: string | null
   projectType: ProjectType
   status: ProjectStatus
+  publicStatus?: PublicProjectStatus | null
   startDate: string | null
   expectedEndDate: string | null
   actualEndDate: string | null
   isPublic: boolean
   isFeatured: boolean
+  isRecruiting: boolean
+  researchFields?: ProjectResearchField[]
   primaryLeader: ProjectLeader | null
   leaders: ProjectLeader[]
   createdAt: string | null
   updatedAt: string | null
+}
+
+export type PublicProjectDetail = {
+  id: number
+  code: string
+  name: string
+  description: string | null
+  goal: string | null
+  projectType: ProjectType
+  publicStatus: PublicProjectStatus
+  startDate: string | null
+  expectedEndDate: string | null
+  actualEndDate: string | null
+  isFeatured: boolean
+  researchFields: ProjectResearchField[]
+  primaryLeader: PublicProjectLeader | null
+  leaders: PublicProjectLeader[]
 }
 
 export type CreateProjectPayload = {
@@ -162,6 +202,13 @@ export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
   PAUSED: 'Tạm dừng',
   COMPLETED: 'Hoàn thành',
   CLOSED: 'Đã đóng',
+}
+
+export const PUBLIC_PROJECT_STATUS_LABELS: Record<PublicProjectStatus, string> = {
+  RECRUITING: 'Đang tuyển',
+  UPCOMING: 'Sắp triển khai',
+  ACTIVE: 'Đang thực hiện',
+  COMPLETED: 'Đã hoàn thành',
 }
 
 export const PROJECT_STATUS_BADGES: Record<ProjectStatus, string> = {

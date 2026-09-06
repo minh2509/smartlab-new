@@ -68,6 +68,7 @@ public class SecurityConfig {
                                 "/events/public",
                                 "/events/public/*",
                                 "/projects/public",
+                                "/projects/public/*",
                                 "/projects/public/recruiting",
                                 "/achievements",
                                 "/achievements/years",

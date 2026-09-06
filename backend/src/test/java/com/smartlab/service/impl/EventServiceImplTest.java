@@ -28,6 +28,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -43,6 +44,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -144,6 +146,46 @@ class EventServiceImplTest {
         assertStatus(HttpStatus.BAD_REQUEST, () -> service.listPublic(null, null, 13, null));
 
         verifyNoInteractions(eventRepository);
+    }
+
+    @Test
+    void publicArchiveNormalizesAbsentAndBlankQueryToNonNullSentinel() {
+        when(eventRepository.findPublicEventsPage(
+                eq(EventVisibility.PUBLIC), eq(null), eq(null), any(), any(Instant.class), any(Pageable.class)
+        )).thenReturn(Page.empty(Pageable.ofSize(12)));
+
+        service.listPublicArchive(0, 12, null, null, null);
+
+        verify(eventRepository).findPublicEventsPage(
+                eq(EventVisibility.PUBLIC), eq(null), eq(null), eq(""), any(Instant.class), any(Pageable.class)
+        );
+
+        reset(eventRepository);
+        when(eventRepository.findPublicEventsPage(
+                eq(EventVisibility.PUBLIC), eq(EventStatus.COMPLETED), eq(false), any(), any(Instant.class), any(Pageable.class)
+        )).thenReturn(Page.empty(Pageable.ofSize(12)));
+
+        service.listPublicArchive(0, 12, EventStatus.COMPLETED, false, "  ");
+
+        verify(eventRepository).findPublicEventsPage(
+                eq(EventVisibility.PUBLIC), eq(EventStatus.COMPLETED), eq(false), eq(""), any(Instant.class), any(Pageable.class)
+        );
+    }
+
+    @Test
+    void publicArchiveTrimsNonBlankQueryAndPreservesArchiveFilters() {
+        when(eventRepository.findPublicEventsPage(
+                eq(EventVisibility.PUBLIC), eq(EventStatus.SCHEDULED), eq(true), any(), any(Instant.class), any(Pageable.class)
+        )).thenReturn(Page.empty(Pageable.ofSize(24)));
+
+        service.listPublicArchive(2, 24, EventStatus.SCHEDULED, true, "  workshop  ");
+
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(eventRepository).findPublicEventsPage(
+                eq(EventVisibility.PUBLIC), eq(EventStatus.SCHEDULED), eq(true), eq("workshop"), any(Instant.class), pageable.capture()
+        );
+        assertThat(pageable.getValue().getPageNumber()).isEqualTo(2);
+        assertThat(pageable.getValue().getPageSize()).isEqualTo(24);
     }
 
     @Test

@@ -22,6 +22,10 @@ import { PostCreatePage } from '../features/posts/pages/PostCreatePage'
 import { PostEditPage } from '../features/posts/pages/PostEditPage'
 import { PostReviewQueuePage } from '../features/posts/pages/PostReviewQueuePage'
 import { PostReviewDetailPage } from '../features/posts/pages/PostReviewDetailPage'
+import { ArticleArchivePage } from '../features/public/pages/ArticleArchivePage'
+import { ArticleDetailPage } from '../features/public/pages/ArticleDetailPage'
+import { NewsArchivePage } from '../features/public/pages/NewsArchivePage'
+import { AchievementArchivePage } from '../features/public/pages/AchievementArchivePage'
 import { HomePage } from '../features/public/pages/HomePage'
 import { StaticPublicPage } from '../features/public/pages/StaticPublicPage'
 import { RequirePermissions } from './RequirePermissions'
@@ -75,16 +79,10 @@ export function App() {
             />
           }
         />
-        <Route
-          path="/bai-viet"
-          element={
-            <StaticPublicPage
-              kind="blog"
-              title="Bài viết"
-              description="Thông báo, kết quả nghiên cứu, bài viết học thuật và chia sẻ kinh nghiệm từ các nhóm dự án."
-            />
-          }
-        />
+        <Route path="/bai-viet" element={<ArticleArchivePage />} />
+        <Route path="/bai-viet/:slug" element={<ArticleDetailPage />} />
+        <Route path="/tin-tuc" element={<NewsArchivePage />} />
+        <Route path="/thanh-tuu" element={<AchievementArchivePage />} />
         <Route path="/blog" element={<Navigate to="/bai-viet" replace />} />
         <Route path="/posts" element={<PostFeedPage />} />
         <Route path="/my-posts" element={<MyPostsPage />} />

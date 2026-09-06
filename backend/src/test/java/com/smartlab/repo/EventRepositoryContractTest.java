@@ -63,10 +63,11 @@ class EventRepositoryContractTest {
                 "e.visibility = :visibility",
                 ":status is null",
                 ":upcoming is null",
-                ":query is null",
+                ":query = ''",
                 "lower(e.title)",
                 "order by e.startAt desc, e.id desc"
         );
+        assertThat(query).doesNotContain(":query is null");
     }
 
     @Test

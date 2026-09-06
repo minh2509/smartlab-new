@@ -18,7 +18,7 @@ import {
 import type { Project, ProjectJoinRequest, ProjectMembershipHistory } from '../types'
 import './ProjectJoinRequestCard.css'
 
-export function ProjectJoinRequestCard({ project, showWorkspaceActions = true }: { project: Project; showWorkspaceActions?: boolean }) {
+export function ProjectJoinRequestCard({ project, showWorkspaceActions = true }: { project: Pick<Project, 'id'>; showWorkspaceActions?: boolean }) {
   const { token, profile } = useAuth()
   const toast = useToast()
   const [memberships, setMemberships] = useState<ProjectMembershipHistory[]>([])

@@ -8,7 +8,10 @@ import com.smartlab.dto.request.UpdateProjectLeadershipRequest;
 import com.smartlab.dto.response.LeaderCandidateResponse;
 import com.smartlab.dto.response.ProjectLeaderResponse;
 import com.smartlab.dto.response.ProjectResponse;
+import com.smartlab.dto.response.PublicProjectDetailResponse;
+import com.smartlab.dto.response.PublicProjectLeaderResponse;
 import com.smartlab.dto.response.PublicPageResponse;
+import com.smartlab.dto.response.PublicProjectSummaryResponse;
 import com.smartlab.entity.ProjectEntity;
 import com.smartlab.entity.ProjectMemberEntity;
 import com.smartlab.entity.UserEntity;
@@ -48,6 +51,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.reset;
@@ -859,9 +863,9 @@ class ProjectServiceImplTest {
                 .thenReturn(new PageImpl<>(List.of(project), PageRequest.of(2, 4), 9));
         when(projectMemberRepository.findActiveLeadersByProjectIds(List.of(7L))).thenReturn(List.of());
 
-        PublicPageResponse<ProjectResponse> response = projectService.listPublicRecruiting(2, 4);
+        PublicPageResponse<PublicProjectSummaryResponse> response = projectService.listPublicRecruiting(2, 4);
 
-        assertThat(response.items()).extracting(ProjectResponse::getId).containsExactly(7L);
+        assertThat(response.items()).extracting(PublicProjectSummaryResponse::id).containsExactly(7L);
         assertThat(response.page()).isEqualTo(2);
         assertThat(response.size()).isEqualTo(4);
         assertThat(response.totalElements()).isEqualTo(9);
@@ -875,6 +879,25 @@ class ProjectServiceImplTest {
         );
         assertThat(pageable.getValue().getPageNumber()).isEqualTo(2);
         assertThat(pageable.getValue().getPageSize()).isEqualTo(4);
+    }
+
+    @Test
+    void publicArchiveMapsDedicatedSummaryWithoutInternalProjectFields() {
+        UserEntity leader = user(2L, "leader-user", "leader@smartlab.test", true);
+        ProjectEntity project = recruitingProject(7L, leader, ProjectStatus.IN_PROGRESS, true, true);
+        when(projectRepository.findPublicProjects(any(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(project), PageRequest.of(0, 12), 1));
+        when(projectMemberRepository.findActiveLeadersByProjectIds(List.of(7L))).thenReturn(List.of());
+        when(projectResearchFieldRepository.findAllWithFieldByProjectIds(List.of(7L))).thenReturn(List.of());
+
+        PublicProjectSummaryResponse response = projectService
+                .listPublic(0, 12, null, null, null, null, null)
+                .items()
+                .getFirst();
+
+        assertThat(response.id()).isEqualTo(7L);
+        assertThat(response.publicStatus()).isEqualTo(PublicProjectStatus.RECRUITING);
+        assertThat(response.leaders()).containsExactly(new PublicProjectLeaderResponse("leader-user"));
     }
 
     @Test
@@ -901,12 +924,41 @@ class ProjectServiceImplTest {
             when(projectMemberRepository.findActiveLeadersByProjectIds(any())).thenReturn(List.of());
             when(projectResearchFieldRepository.findAllWithFieldByProjectIds(any())).thenReturn(List.of());
 
-            ProjectResponse response = projectService.listPublic(0, 12, null, null, null, null, null).items().getFirst();
+            PublicProjectSummaryResponse response = projectService.listPublic(0, 12, null, null, null, null, null).items().getFirst();
 
-            assertThat(response.getPublicStatus())
+            assertThat(response.publicStatus())
                     .as("%s + isRecruiting=%s", testCase.lifecycle(), testCase.recruiting())
                     .isEqualTo(testCase.expected());
         }
+    }
+
+    @Test
+    void publicDetailReturnsOnlyActivePublicProjectWithCanonicalPublicStatus() {
+        UserEntity leader = user(2L, "leader-user", "leader@smartlab.test", true);
+        ProjectEntity project = recruitingProject(7L, leader, ProjectStatus.IN_PROGRESS, true, true);
+        when(projectRepository.findPublicById(7L)).thenReturn(Optional.of(project));
+        when(projectMemberRepository.findActiveLeadersByProjectIds(List.of(7L))).thenReturn(List.of());
+        when(projectResearchFieldRepository.findAllWithFieldByProjectId(7L)).thenReturn(List.of());
+
+        PublicProjectDetailResponse response = projectService.getPublic(7L);
+
+        assertThat(response.id()).isEqualTo(7L);
+        assertThat(response.publicStatus()).isEqualTo(PublicProjectStatus.RECRUITING);
+        assertThat(response.name()).isEqualTo(project.getName());
+        assertThat(response.primaryLeader()).isEqualTo(new PublicProjectLeaderResponse("leader-user"));
+        verify(userRepository, never()).findByEmail(any());
+        verifyNoInteractions(permissionService);
+    }
+
+    @Test
+    void publicDetailTreatsPrivateOrDeletedProjectAsNotFoundForEveryCaller() {
+        when(projectRepository.findPublicById(7L)).thenReturn(Optional.empty());
+
+        assertStatus(() -> projectService.getPublic(7L), HttpStatus.NOT_FOUND);
+        assertStatus(() -> projectService.getPublic(7L), HttpStatus.NOT_FOUND);
+
+        verify(projectRepository, org.mockito.Mockito.times(2)).findPublicById(7L);
+        verifyNoInteractions(userRepository, permissionService, projectMemberRepository, projectResearchFieldRepository);
     }
 
     @Test
@@ -930,6 +982,44 @@ class ProjectServiceImplTest {
                     ProjectStatus.PROPOSED, ProjectStatus.PREPARING, ProjectStatus.IN_PROGRESS
             );
         }
+    }
+
+    @Test
+    void publicListNormalizesNullableSearchStringsToNonNullSentinels() {
+        when(projectRepository.findPublicProjects(any(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), any(), any(Pageable.class)))
+                .thenReturn(Page.empty(PageRequest.of(0, 12)));
+
+        projectService.listPublic(0, 12, null, null, null, null, null);
+
+        ArgumentCaptor<String> query = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<String> fieldCode = ArgumentCaptor.forClass(String.class);
+        verify(projectRepository).findPublicProjects(query.capture(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), fieldCode.capture(), any(Pageable.class));
+
+        assertThat(query.getValue()).isEmpty();
+        assertThat(fieldCode.getValue()).isEmpty();
+    }
+
+    @Test
+    void publicListTrimsNonBlankSearchStringsAndConvertsBlankToSentinel() {
+        when(projectRepository.findPublicProjects(any(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), any(), any(Pageable.class)))
+                .thenReturn(Page.empty(PageRequest.of(0, 12)));
+
+        projectService.listPublic(0, 12, "  robot  ", null, "  AI  ", null, null);
+
+        ArgumentCaptor<String> query = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<String> fieldCode = ArgumentCaptor.forClass(String.class);
+        verify(projectRepository).findPublicProjects(query.capture(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), fieldCode.capture(), any(Pageable.class));
+
+        assertThat(query.getValue()).isEqualTo("robot");
+        assertThat(fieldCode.getValue()).isEqualTo("AI");
+
+        reset(projectRepository);
+        when(projectRepository.findPublicProjects(any(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), any(), any(Pageable.class)))
+                .thenReturn(Page.empty(PageRequest.of(0, 12)));
+
+        projectService.listPublic(0, 12, "  ", null, " \t", null, null);
+
+        verify(projectRepository).findPublicProjects(eq(""), any(), any(), anyBoolean(), anyBoolean(), any(), any(), eq(""), any(Pageable.class));
     }
 
     @Test

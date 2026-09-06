@@ -142,10 +142,16 @@ select {
 }
 
 .public-nav {
+  display: flex;
+  align-items: center;
   flex: 1 1 auto;
   justify-content: center;
   margin-left: 0;
   min-width: 0;
+}
+
+.public-nav > .menu {
+  margin-left: 0;
 }
 
 .public-nav a {

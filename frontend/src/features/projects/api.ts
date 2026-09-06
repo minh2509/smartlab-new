@@ -10,9 +10,52 @@ import type {
   ProjectMembershipHistory,
   ProjectMemberStatus,
   ProjectResearchField,
+  PublicProjectDetail,
+  PublicProjectSummary,
+  ProjectType,
+  PublicProjectStatus,
   UpdateProjectLeadershipPayload,
   UpdateProjectPayload,
 } from './types'
+
+export type RecruitingPage = {
+  items: PublicProjectSummary[]
+  page: number
+  size: number
+  totalElements: number
+  totalPages: number
+}
+
+export type PublicProjectPage = RecruitingPage
+
+export type PublicProjectFilters = {
+  query?: string
+  researchFieldId?: number
+  researchFieldCode?: string
+  projectType?: ProjectType
+  status?: PublicProjectStatus
+}
+
+export function listPublicRecruitingProjects(page = 0, size = 6) {
+  return apiClient<RecruitingPage>(`/projects/public/recruiting${toQuery({ page, size })}`)
+}
+
+export function listPublicProjects(
+  page = 0,
+  size = 12,
+  filters: PublicProjectFilters = {},
+  signal?: AbortSignal,
+) {
+  return apiClient<PublicProjectPage>(`/projects/public${toQuery({
+    page,
+    size,
+    q: filters.query?.trim() || undefined,
+    researchFieldId: filters.researchFieldId,
+    field: filters.researchFieldCode,
+    projectType: filters.projectType,
+    status: filters.status,
+  })}`, { signal })
+}
 
 export function listProjects(token?: string | null, filters: { researchFieldId?: number } = {}) {
   return apiClient<Project[]>(`/projects${toQuery(filters)}`, { token: token ?? null })
@@ -20,6 +63,10 @@ export function listProjects(token?: string | null, filters: { researchFieldId?:
 
 export function getProject(id: number, token?: string | null) {
   return apiClient<Project>(`/projects/${id}`, { token: token ?? null })
+}
+
+export function getPublicProject(id: number, signal?: AbortSignal) {
+  return apiClient<PublicProjectDetail>(`/projects/public/${id}`, { signal })
 }
 
 export function createProject(token: string, payload: CreateProjectPayload) {

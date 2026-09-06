@@ -11,7 +11,9 @@ import com.smartlab.dto.response.LeaderCandidateResponse;
 import com.smartlab.dto.response.ProjectLeaderResponse;
 import com.smartlab.dto.response.ProjectResponse;
 import com.smartlab.dto.response.PublicPageResponse;
-import com.smartlab.dto.response.PublicPageResponse;
+import com.smartlab.dto.response.PublicProjectDetailResponse;
+import com.smartlab.dto.response.PublicProjectLeaderResponse;
+import com.smartlab.dto.response.PublicProjectSummaryResponse;
 import com.smartlab.enums.ProjectStatus;
 import com.smartlab.enums.ProjectType;
 import com.smartlab.filter.JwtRequestFilter;
@@ -152,21 +154,29 @@ class ProjectControllerSecurityTest {
     @Test
     void anonymousCanReadPublicRecruitingProjects() throws Exception {
         when(projectService.listPublicRecruiting(0, 6))
-                .thenReturn(new PublicPageResponse<>(java.util.List.of(projectResponse()), 0, 6, 1, 1));
+                .thenReturn(new PublicPageResponse<>(java.util.List.of(publicSummaryResponse()), 0, 6, 1, 1));
         mockMvc.perform(get("/projects/public/recruiting"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.items[0].id").value(7));
+                .andExpect(jsonPath("$.items[0].id").value(7))
+                .andExpect(jsonPath("$.items[0].status").doesNotExist())
+                .andExpect(jsonPath("$.items[0].leaders[0].userId").doesNotExist());
         verify(projectService).listPublicRecruiting(0, 6);
     }
 
     @Test
     void anonymousCanReadPublicProjectArchive() throws Exception {
         when(projectService.listPublic(0, 12, null, null, null, null, null))
-                .thenReturn(new PublicPageResponse<>(java.util.List.of(projectResponse()), 0, 12, 1, 1));
+                .thenReturn(new PublicPageResponse<>(java.util.List.of(publicSummaryResponse()), 0, 12, 1, 1));
 
         mockMvc.perform(get("/projects/public"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.items[0].id").value(7));
+                .andExpect(jsonPath("$.items[0].id").value(7))
+                .andExpect(jsonPath("$.items[0].status").doesNotExist())
+                .andExpect(jsonPath("$.items[0].isPublic").doesNotExist())
+                .andExpect(jsonPath("$.items[0].isRecruiting").doesNotExist())
+                .andExpect(jsonPath("$.items[0].createdAt").doesNotExist())
+                .andExpect(jsonPath("$.items[0].updatedAt").doesNotExist())
+                .andExpect(jsonPath("$.items[0].leaders[0].userId").doesNotExist());
 
         verify(projectService).listPublic(0, 12, null, null, null, null, null);
     }
@@ -396,6 +406,32 @@ class ProjectControllerSecurityTest {
     }
 
     @Test
+    void anonymousCanReadDedicatedPublicProjectDetail() throws Exception {
+        when(projectService.getPublic(7L)).thenReturn(publicDetailResponse());
+
+        mockMvc.perform(get("/projects/public/7"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(7))
+                .andExpect(jsonPath("$.primaryLeader.name").value("Leader"))
+                .andExpect(jsonPath("$.primaryLeader.userId").doesNotExist())
+                .andExpect(jsonPath("$.leaders[0].userId").doesNotExist());
+
+        verify(projectService).getPublic(7L);
+    }
+
+    @Test
+    void authenticatedCallerCanUsePublicDetailEndpointWithoutInternalServiceContext() throws Exception {
+        when(projectService.getPublic(7L)).thenReturn(publicDetailResponse());
+
+        mockMvc.perform(get("/projects/public/7").with(user("member@smartlab.test")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.publicStatus").value("RECRUITING"))
+                .andExpect(jsonPath("$.primaryLeader.userId").doesNotExist());
+
+        verify(projectService).getPublic(7L);
+    }
+
+    @Test
     void anonymousCannotAccessNestedProjectRoutes() throws Exception {
         mockMvc.perform(get("/projects/7/documents"))
                 .andExpect(status().isUnauthorized());
@@ -453,5 +489,40 @@ class ProjectControllerSecurityTest {
                 .primaryLeader(leader)
                 .leaders(java.util.List.of(leader))
                 .build();
+    }
+
+    private static PublicProjectDetailResponse publicDetailResponse() {
+        PublicProjectLeaderResponse leader = new PublicProjectLeaderResponse("Leader");
+        return new PublicProjectDetailResponse(
+                7L,
+                "SL-AI",
+                "Smart Lab AI",
+                "Public description",
+                "Public goal",
+                ProjectType.RESEARCH,
+                com.smartlab.enums.PublicProjectStatus.RECRUITING,
+                null,
+                null,
+                null,
+                true,
+                java.util.List.of(),
+                leader,
+                java.util.List.of(leader)
+        );
+    }
+
+    private static PublicProjectSummaryResponse publicSummaryResponse() {
+        PublicProjectLeaderResponse leader = new PublicProjectLeaderResponse("Leader");
+        return new PublicProjectSummaryResponse(
+                7L,
+                "SL-AI",
+                "Smart Lab AI",
+                "Public description",
+                "Public goal",
+                ProjectType.RESEARCH,
+                com.smartlab.enums.PublicProjectStatus.RECRUITING,
+                java.util.List.of(),
+                java.util.List.of(leader)
+        );
     }
 }
