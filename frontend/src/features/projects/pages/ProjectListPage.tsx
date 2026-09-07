@@ -7,6 +7,7 @@ import { EmptyState } from '../../../shared/components/EmptyState'
 import { Feedback } from '../../../shared/components/Feedback'
 import type { ResearchField } from '../../../shared/types/api'
 import { PopupSelect } from '../../../shared/ui/PopupSelect'
+import { ApiClientError } from '../../../lib/apiClient'
 import { getResearchFields } from '../../profile/api'
 import { PublicPageHead } from '../../public/components/PublicPageHead'
 import { listPublicProjects } from '../api'
@@ -32,6 +33,7 @@ export function ProjectListPage() {
   const [error, setError] = useState<string | null>(null)
   const [researchFields, setResearchFields] = useState<ResearchField[]>([])
   const [fieldsError, setFieldsError] = useState<string | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
 
   const currentPage = parsePage(searchParams.get('page'))
   const query = searchParams.get('q') ?? ''
@@ -75,7 +77,7 @@ export function ProjectListPage() {
           setProjects([])
           setTotalElements(0)
           setTotalPages(0)
-          setError(reason instanceof Error ? reason.message : 'Không tải được danh sách dự án.')
+          setError(projectListError(reason))
         }
       })
       .finally(() => {
@@ -83,7 +85,7 @@ export function ProjectListPage() {
       })
 
     return () => controller.abort()
-  }, [currentPage, fieldFilter, query, statusFilter, typeFilter])
+  }, [currentPage, fieldFilter, query, reloadKey, statusFilter, typeFilter])
 
   const hasFilters = Boolean(query.trim()) || typeFilter !== 'ALL' || statusFilter !== 'ALL' || fieldFilter !== 'ALL'
   const fieldOptions = useMemo(() => [
@@ -177,7 +179,7 @@ export function ProjectListPage() {
           {error ? (
             <div className="project-directory-request-state" role="alert">
               <Feedback error={error} />
-              <button className="btn" type="button" onClick={() => setSearchParams(new URLSearchParams(searchParams))}>
+              <button className="btn" type="button" onClick={() => setReloadKey((value) => value + 1)}>
                 Thử tải lại
               </button>
             </div>
@@ -278,6 +280,12 @@ function parsePage(value: string | null) {
 function formatRange(page: number, size: number, total: number) {
   if (total === 0) return '0 / 0'
   return `${(page - 1) * size + 1}–${Math.min(page * size, total)} / ${total}`
+}
+
+function projectListError(reason: unknown) {
+  return reason instanceof ApiClientError && reason.message
+    ? reason.message
+    : 'Không thể tải danh sách dự án. Vui lòng thử lại.'
 }
 
 function initialsOf(name: string) {
