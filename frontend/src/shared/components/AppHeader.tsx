@@ -15,7 +15,6 @@ const publicLinks = [
 const aboutLinks = [
   { to: '/gioi-thieu', title: 'Về phòng Lab', description: 'Tổng quan, mục tiêu, định hướng' },
   { to: '/linh-vuc', title: 'Lĩnh vực nghiên cứu', description: 'AI · Robotics · Kỹ thuật phần mềm' },
-  { to: '/thanh-vien', title: 'Thành viên', description: 'Đội ngũ và nhóm nghiên cứu' },
   { to: '/thu-vien-anh', title: 'Hình ảnh hoạt động', description: 'Thư viện ảnh của Lab' },
 ]
 

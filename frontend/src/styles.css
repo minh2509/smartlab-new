@@ -841,8 +841,7 @@ select {
   flex: none;
 }
 
-.profile-avatar-image,
-.public-member-avatar {
+.profile-avatar-image {
   display: block;
   object-fit: cover;
   border-radius: 16px;
@@ -1184,12 +1183,6 @@ select {
 .profile-readonly-note {
   color: var(--text-3);
   font-size: 13px;
-}
-
-.public-member-avatar {
-  width: 76px;
-  height: 76px;
-  margin-bottom: 14px;
 }
 
 .admin-profile-main h2 {

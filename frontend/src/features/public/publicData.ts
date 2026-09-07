@@ -3,7 +3,6 @@ import roboticsResearchImage from '../../assets/fields/robotics-research.webp'
 import softwareEngineeringImage from '../../assets/fields/software-engineering.webp'
 
 export const stats = [
-  { value: '38', label: 'thành viên đang hoạt động' },
   { value: '12', label: 'dự án nghiên cứu & sản phẩm' },
   { value: '17', label: 'bài báo & báo cáo khoa học' },
   { value: '3', label: 'lĩnh vực nghiên cứu chính' },
@@ -14,7 +13,6 @@ export const aboutQuickFacts = [
   { label: 'Trực thuộc', value: 'Khoa Công nghệ thông tin' },
   { label: 'Địa điểm', value: 'Phòng A3-502, Hoà Lạc' },
   { label: 'Lĩnh vực', value: 'AI · Robotics · SE' },
-  { label: 'Thành viên', value: '38 người đang hoạt động' },
 ]
 
 export const coreValues = [
@@ -93,7 +91,6 @@ export const projects = [
     badge: 'ok',
     progress: '72%',
     cover: 'ph-ai',
-    members: ['VA', 'NH', 'TL', '+3'],
     description: 'Bộ dữ liệu biển báo nội địa và mô hình phát hiện thời gian thực chạy được trên thiết bị biên.',
   },
   {
@@ -104,7 +101,6 @@ export const projects = [
     badge: 'ok',
     progress: '45%',
     cover: 'ph-robotics',
-    members: ['TM', 'QD', 'HA', '+1'],
     description: 'Tay gắp 4 bậc tự do kết hợp camera, phân loại và sắp xếp vật thể theo màu và hình dạng.',
   },
   {
@@ -115,7 +111,6 @@ export const projects = [
     badge: 'ok',
     progress: '38%',
     cover: 'ph-se',
-    members: ['NL', 'DA', 'KH', '+2'],
     description: 'Hệ thống quản lý nhân sự, dự án, nhiệm vụ và nội dung của Lab.',
   },
   {
@@ -126,7 +121,6 @@ export const projects = [
     badge: 'warn',
     progress: '15%',
     cover: 'ph-robotics',
-    members: ['DK', 'MT', '+2'],
     description: 'Nền tảng xe tự hành thu nhỏ dùng camera và LiDAR giá rẻ, phục vụ nghiên cứu điều khiển và định vị.',
   },
   {
@@ -137,7 +131,6 @@ export const projects = [
     badge: 'warn',
     progress: '12%',
     cover: 'ph-ai',
-    members: ['PH', 'TN', '+1'],
     description: 'Chatbot truy hồi tăng cường trả lời câu hỏi trên kho tài liệu và quy trình nội bộ của Lab.',
   },
   {
@@ -148,20 +141,8 @@ export const projects = [
     badge: 'info',
     progress: '100%',
     cover: 'ph-se',
-    members: ['LM', 'QT', 'VA'],
     description: 'Bộ dashboard theo dõi tiến độ, nhiệm vụ và điểm đánh giá theo tiêu chí của từng leader.',
   },
-]
-
-export const members = [
-  { initials: 'VA', name: 'TS. Vũ Minh Anh', role: 'Trưởng phòng Lab', exp: 'Thị giác máy tính, học sâu', field: 'AI', color: 'var(--s1)' },
-  { initials: 'TM', name: 'ThS. Trần Mạnh', role: 'Leader · Robotics', exp: 'Hệ nhúng, điều khiển tự động', field: 'Robotics', color: 'var(--s2)' },
-  { initials: 'NL', name: 'Nguyễn Ngọc Lam', role: 'Leader · Software Engineering', exp: 'Kiến trúc hệ thống, DevOps', field: 'SE', color: 'var(--s3)' },
-  { initials: 'PH', name: 'Phạm Hải', role: 'Member', exp: 'RAG, NLP, backend service', field: 'AI', color: 'var(--s5)' },
-  { initials: 'DA', name: 'Đỗ Đức Anh', role: 'Member', exp: 'Frontend, UI system', field: 'SE', color: 'var(--s4)' },
-  { initials: 'QD', name: 'Quách Duy', role: 'Member', exp: 'Robot arm, firmware', field: 'Robotics', color: 'var(--s2)' },
-  { initials: 'KH', name: 'Kiều Hạnh', role: 'Member', exp: 'Testing, product workflow', field: 'SE', color: 'var(--s3)' },
-  { initials: 'TN', name: 'Trần Ngọc', role: 'Member', exp: 'Data labeling, model eval', field: 'AI', color: 'var(--s1)' },
 ]
 
 export const posts = [

@@ -1,5 +1,5 @@
 import type { FileResponse, MemberProfile, ResearchField } from '../../shared/types/api'
-import { apiClient, toQuery } from '../../lib/apiClient'
+import { apiClient } from '../../lib/apiClient'
 
 export function getMyMemberProfile(token: string) {
   return apiClient<MemberProfile>('/me/profile', { token })
@@ -60,8 +60,4 @@ export function downloadFile(token: string, fileId: number) {
     if (!response.ok) throw new Error(`File request failed with status ${response.status}`)
     return response.blob()
   })
-}
-
-export function getMembers(params: { keyword?: string; fieldCode?: string } = {}) {
-  return apiClient<MemberProfile[]>(`/members${toQuery(params)}`)
 }

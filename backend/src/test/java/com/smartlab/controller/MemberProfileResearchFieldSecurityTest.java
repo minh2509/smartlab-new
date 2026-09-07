@@ -42,17 +42,16 @@ class MemberProfileResearchFieldSecurityTest {
     @MockitoBean UserSessionService userSessionService;
 
     @Test
-    void anonymousCanReadPublicCollectionsOnly() throws Exception {
-        when(memberProfileService.listMembers(null, null, null)).thenReturn(List.of());
+    void anonymousCannotReadMemberCollectionButCanReadPublicCollections() throws Exception {
         when(researchFieldService.listActive()).thenReturn(List.of());
 
-        mockMvc.perform(get("/members")).andExpect(status().isOk());
+        mockMvc.perform(get("/members")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/research-fields")).andExpect(status().isOk());
         mockMvc.perform(get("/me/profile")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/admin/members")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/admin/research-fields")).andExpect(status().isUnauthorized());
 
-        verify(memberProfileService).listMembers(null, null, null);
+        verifyNoInteractions(memberProfileService);
         verify(researchFieldService).listActive();
     }
 
@@ -91,6 +90,8 @@ class MemberProfileResearchFieldSecurityTest {
         mockMvc.perform(get("/admin/members").with(user(EMAIL)
                         .authorities(new SimpleGrantedAuthority("MEMBER_MANAGE"))))
                 .andExpect(status().isOk());
+        when(memberProfileService.listMembers(null, null, null)).thenReturn(List.of());
+        mockMvc.perform(get("/members").with(user(EMAIL))).andExpect(status().isOk());
         mockMvc.perform(get("/admin/research-fields").with(user(EMAIL)
                         .authorities(new SimpleGrantedAuthority("RESEARCH_FIELD_MANAGE"))))
                 .andExpect(status().isOk());
@@ -98,6 +99,7 @@ class MemberProfileResearchFieldSecurityTest {
         verify(memberProfileService).getOwnProfile(EMAIL);
         verify(memberProfileService).updateOwnProfile(eq(EMAIL), any());
         verify(memberProfileService).listAllMembers();
+        verify(memberProfileService).listMembers(null, null, null);
         verify(researchFieldService).listAll();
     }
 }

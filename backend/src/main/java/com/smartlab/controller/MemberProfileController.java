@@ -22,7 +22,7 @@ import java.util.List;
 
 @RestController
 @RequiredArgsConstructor
-@Tag(name = "Member Profiles", description = "Public member directory and authenticated member profile management.")
+@Tag(name = "Member Profiles", description = "Authenticated member profile and internal member management.")
 public class MemberProfileController {
     private final MemberProfileService memberProfileService;
 
@@ -46,7 +46,8 @@ public class MemberProfileController {
     }
 
     @GetMapping("/members")
-    @Operation(summary = "List public member profiles")
+    @Operation(summary = "List member profiles for authenticated workspace use")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
     public List<MemberProfileResponse> listMembers(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String fieldCode,
