@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom'
 import aiResearchImage from '../../../assets/fields/ai-research.webp'
 import roboticsResearchImage from '../../../assets/fields/robotics-research.webp'
 import softwareEngineeringImage from '../../../assets/fields/software-engineering.webp'
-import type { MemberProfile, ResearchField } from '../../../shared/types/api'
+import type { ResearchField } from '../../../shared/types/api'
 import type { PostFeedItem } from '../../posts/types'
 import {
   PUBLIC_PROJECT_STATUS_LABELS,
@@ -100,29 +100,6 @@ export function PublicProjectCard({ project }: { project: PublicProjectSummary }
         </div>
       </div>
     </Link>
-  )
-}
-
-export function PublicMemberCard({ member, isProjectLeader = false }: { member: MemberProfile; isProjectLeader?: boolean }) {
-  const avatarUrl = member.avatar ? publicFileUrl(member.avatar.id) : null
-  const roleLabel = isProjectLeader
-    ? member.isFeatured ? 'Leader · Nổi bật' : 'Leader dự án'
-    : member.isFeatured ? 'Thành viên nổi bật' : 'Thành viên Smart Lab'
-
-  return (
-    <article className="card hover person">
-      {avatarUrl
-        ? <img className="public-member-avatar" src={avatarUrl} alt={`Ảnh đại diện của ${member.name}`} loading="lazy" />
-        : <span className="ava lg" style={{ background: 'var(--s1)' }}>{initialsOf(member.name)}</span>}
-      <h3>{member.name}</h3>
-      <div className="role">{roleLabel}</div>
-      <div className="exp">{member.bio || 'Hồ sơ chuyên môn đang được cập nhật.'}</div>
-      {member.researchFields.length > 0 ? (
-        <div className="tags">
-          {member.researchFields.map((field) => <span className="chip accent" key={field.id}>{field.name}</span>)}
-        </div>
-      ) : null}
-    </article>
   )
 }
 

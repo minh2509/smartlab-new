@@ -69,16 +69,6 @@ export function App() {
         />
         <Route path="/du-an" element={<ProjectListPage />} />
         <Route path="/du-an/:id" element={<ProjectDetailPage />} />
-        <Route
-          path="/thanh-vien"
-          element={
-            <StaticPublicPage
-              kind="members"
-              title="Thành viên"
-              description="Đội ngũ leader và thành viên đang tham gia các nhóm nghiên cứu trong Lab."
-            />
-          }
-        />
         <Route path="/bai-viet" element={<ArticleArchivePage />} />
         <Route path="/bai-viet/:slug" element={<ArticleDetailPage />} />
         <Route path="/tin-tuc" element={<NewsArchivePage />} />

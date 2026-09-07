@@ -1,22 +1,22 @@
 import { BadgeCheck, FileText, FlaskConical, GraduationCap, Search } from 'lucide-react'
 import type { CSSProperties, ReactNode } from 'react'
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import type { MemberProfile, ResearchField } from '../../../shared/types/api'
+import type { ResearchField } from '../../../shared/types/api'
 import { listPosts } from '../../posts/api'
 import type { PostFeedItem } from '../../posts/types'
-import { getMembers, getResearchFields } from '../../profile/api'
+import { getResearchFields } from '../../profile/api'
 import { listPublicProjects } from '../../projects/api'
 import type { PublicProjectSummary } from '../../projects/types'
 import { aboutQuickFacts, coreValues, documents, gallery, operatingSteps } from '../publicData'
-import { PublicMemberCard, PublicPostCard, PublicProjectCard, ResearchFieldCard } from '../components/PublicDataCards'
+import { PublicPostCard, PublicProjectCard, ResearchFieldCard } from '../components/PublicDataCards'
 import { PublicPageHead } from '../components/PublicPageHead'
 import { listPublicEvents } from '../../events/api'
 
 type StaticPublicPageProps = {
   title: string
   description: string
-  kind: 'about' | 'fields' | 'members' | 'documents' | 'gallery' | 'contact' | 'search'
+  kind: 'about' | 'fields' | 'documents' | 'gallery' | 'contact' | 'search'
 }
 
 export function StaticPublicPage({ title, description, kind }: StaticPublicPageProps) {
@@ -25,7 +25,6 @@ export function StaticPublicPage({ title, description, kind }: StaticPublicPageP
       <PublicPageHead title={title} description={description} />
       {kind === 'about' ? <AboutContent /> : null}
       {kind === 'fields' ? <FieldsContent /> : null}
-      {kind === 'members' ? <ApiMembersContent /> : null}
       {kind === 'documents' ? <DocumentsContent /> : null}
       {kind === 'gallery' ? <GalleryContent /> : null}
       {kind === 'contact' ? <ContactContent /> : null}
@@ -38,20 +37,19 @@ export function StaticPublicPage({ title, description, kind }: StaticPublicPageP
 
 function AboutContent() {
   const valueIcons = [FlaskConical, GraduationCap, BadgeCheck]
-  const [counts, setCounts] = useState({ members: null as number | null, projects: null as number | null, fields: null as number | null, events: null as number | null })
+  const [counts, setCounts] = useState({ projects: null as number | null, fields: null as number | null, events: null as number | null })
 
   useEffect(() => {
     let active = true
-    void Promise.all([getMembers(), listPublicProjects(0, 1), getResearchFields(), listPublicEvents({ upcoming: true })])
-      .then(([members, projects, fields, events]) => {
-        if (active) setCounts({ members: members.length, projects: projects.totalElements, fields: fields.length, events: events.length })
+    void Promise.all([listPublicProjects(0, 1), getResearchFields(), listPublicEvents({ upcoming: true })])
+      .then(([projects, fields, events]) => {
+        if (active) setCounts({ projects: projects.totalElements, fields: fields.length, events: events.length })
       })
       .catch(() => undefined)
     return () => { active = false }
   }, [])
 
   const liveStats = [
-    { value: countLabel(counts.members), label: 'hồ sơ thành viên công khai' },
     { value: countLabel(counts.projects), label: 'dự án có thể xem' },
     { value: countLabel(counts.events), label: 'sự kiện công khai sắp tới' },
     { value: countLabel(counts.fields), label: 'lĩnh vực nghiên cứu' },
@@ -92,11 +90,9 @@ function AboutContent() {
                   {aboutQuickFacts.map((fact) => (
                     <Fragment key={fact.label}>
                       <dt>{fact.label}</dt>
-                      <dd>{fact.label === 'Thành viên'
-                        ? `${countLabel(counts.members)} hồ sơ công khai`
-                        : fact.label === 'Lĩnh vực'
-                          ? `${countLabel(counts.fields)} hướng nghiên cứu`
-                          : fact.value}</dd>
+                      <dd>{fact.label === 'Lĩnh vực'
+                        ? `${countLabel(counts.fields)} hướng nghiên cứu`
+                        : fact.value}</dd>
                     </Fragment>
                   ))}
                 </dl>
@@ -111,7 +107,7 @@ function AboutContent() {
 
       <section className="section alt tight">
         <div className="wrap">
-          <div className="grid c4">
+          <div className="grid c3">
             {liveStats.map((stat) => (
               <div className="card pad center stat-card" key={stat.label}>
                 <b>{stat.value}</b>
@@ -226,69 +222,6 @@ function FieldsContent() {
   )
 }
 
-function ApiMembersContent() {
-  const [apiMembers, setApiMembers] = useState<MemberProfile[]>([])
-  const [publicProjects, setPublicProjects] = useState<PublicProjectSummary[]>([])
-  const [query, setQuery] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [reloadKey, setReloadKey] = useState(0)
-
-  useEffect(() => {
-    let active = true
-    setLoading(true)
-    setError(null)
-    void Promise.all([getMembers(), listPublicProjects(0, 48)])
-      .then(([memberResult, projectResult]) => {
-        if (!active) return
-        setApiMembers(memberResult)
-        setPublicProjects(projectResult.items)
-      })
-      .catch((reason: unknown) => {
-        if (active) setError(messageOf(reason, 'Không tải được danh sách thành viên.'))
-      })
-      .finally(() => { if (active) setLoading(false) })
-    return () => { active = false }
-  }, [reloadKey])
-
-  const visibleMembers = useMemo(() => {
-    const normalized = query.trim().toLocaleLowerCase('vi')
-    return [...apiMembers]
-      .sort((left, right) => {
-        const byFeatured = Number(right.isFeatured) - Number(left.isFeatured)
-        if (byFeatured !== 0) return byFeatured
-        return (left.featuredOrder ?? Number.MAX_SAFE_INTEGER) - (right.featuredOrder ?? Number.MAX_SAFE_INTEGER)
-      })
-      .filter((member) => !normalized
-        || member.name.toLocaleLowerCase('vi').includes(normalized)
-        || (member.bio ?? '').toLocaleLowerCase('vi').includes(normalized)
-        || member.researchFields.some((field) => field.name.toLocaleLowerCase('vi').includes(normalized)))
-  }, [apiMembers, query])
-  const publicLeaderNames = useMemo(
-    () => new Set(publicProjects.flatMap((project) => project.leaders.map((leader) => normalizePublicName(leader.name)))),
-    [publicProjects],
-  )
-
-  return (
-    <section className="section">
-      <div className="wrap">
-        <div className="toolbar">
-          <div className="searchbar" style={{ flex: 1, minWidth: 220 }}>
-            <Search aria-hidden="true" />
-            <input className="input" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm thành viên theo tên hoặc lĩnh vực..." aria-label="Tìm thành viên" />
-          </div>
-        </div>
-        {loading ? <div className="public-empty empty tight">Đang tải danh sách thành viên...</div> : null}
-        {error ? <LoadError message={error} onRetry={() => setReloadKey((value) => value + 1)} /> : null}
-        {!loading && !error && visibleMembers.length > 0 ? <div className="grid c4">{visibleMembers.map((member) => <PublicMemberCard key={member.userId} member={member} isProjectLeader={publicLeaderNames.has(normalizePublicName(member.name))} />)}</div> : null}
-        {!loading && !error && visibleMembers.length === 0 ? <div className="public-empty empty tight">{apiMembers.length === 0 ? 'Chưa có thành viên công khai.' : 'Không tìm thấy thành viên phù hợp.'}</div> : null}
-      </div>
-    </section>
-  )
-}
-
-
-
 function DocumentsContent() {
   return (
     <section className="section">
@@ -378,7 +311,6 @@ function SearchContent() {
   const [query, setQuery] = useState('')
   const [projects, setProjects] = useState<PublicProjectSummary[]>([])
   const [posts, setPosts] = useState<PostFeedItem[]>([])
-  const [members, setMembers] = useState<MemberProfile[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
@@ -387,12 +319,11 @@ function SearchContent() {
     let active = true
     setLoading(true)
     setError(null)
-    void Promise.all([listPublicProjects(0, 48, { query: query.trim() }), listPosts(null, undefined, 30), getMembers()])
-      .then(([projectResult, postResult, memberResult]) => {
+    void Promise.all([listPublicProjects(0, 48, { query: query.trim() }), listPosts(null, undefined, 30)])
+      .then(([projectResult, postResult]) => {
         if (!active) return
         setProjects(projectResult.items)
         setPosts(postResult.items)
-        setMembers(memberResult)
       })
       .catch((reason: unknown) => {
         if (active) setError(messageOf(reason, 'Không tải được dữ liệu tìm kiếm công khai.'))
@@ -414,13 +345,7 @@ function SearchContent() {
     post.author?.name,
     post.category?.name,
   ], normalized))
-  const matchingMembers = members.filter((member) => includesQuery([
-    member.name,
-    member.bio,
-    ...member.researchFields.map((field) => field.name),
-  ], normalized))
-  const publicLeaderNames = new Set(projects.flatMap((project) => project.leaders.map((leader) => normalizePublicName(leader.name))))
-  const total = matchingProjects.length + matchingPosts.length + matchingMembers.length
+  const total = matchingProjects.length + matchingPosts.length
 
   return (
     <section className="section">
@@ -428,7 +353,7 @@ function SearchContent() {
         <div className="toolbar">
           <div className="searchbar" style={{ flex: 1, minWidth: 220 }}>
             <Search aria-hidden="true" />
-            <input className="input" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm dự án, bài viết, thành viên..." aria-label="Tìm nội dung công khai" autoFocus />
+            <input className="input" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm dự án, bài viết..." aria-label="Tìm nội dung công khai" autoFocus />
           </div>
         </div>
         {loading ? <div className="public-empty empty tight">Đang tải dữ liệu tìm kiếm...</div> : null}
@@ -436,7 +361,6 @@ function SearchContent() {
         {!loading && !error && total === 0 ? <div className="public-empty empty tight">Không tìm thấy nội dung phù hợp.</div> : null}
         {!loading && !error && matchingProjects.length > 0 ? <SearchGroup title={`Dự án (${matchingProjects.length})`}><div className="grid c3">{matchingProjects.map((project) => <PublicProjectCard key={project.id} project={project} />)}</div></SearchGroup> : null}
         {!loading && !error && matchingPosts.length > 0 ? <SearchGroup title={`Bài viết (${matchingPosts.length})`}><div className="grid c3">{matchingPosts.map((post) => <PublicPostCard key={post.id} post={post} />)}</div></SearchGroup> : null}
-        {!loading && !error && matchingMembers.length > 0 ? <SearchGroup title={`Thành viên (${matchingMembers.length})`}><div className="grid c4">{matchingMembers.map((member) => <PublicMemberCard key={member.userId} member={member} isProjectLeader={publicLeaderNames.has(normalizePublicName(member.name))} />)}</div></SearchGroup> : null}
       </div>
     </section>
   )
@@ -463,10 +387,6 @@ function LoadError({ message, onRetry }: { message: string; onRetry: () => void 
 function includesQuery(values: Array<string | null | undefined>, normalizedQuery: string) {
   if (!normalizedQuery) return true
   return values.some((value) => value?.toLocaleLowerCase('vi').includes(normalizedQuery))
-}
-
-function normalizePublicName(value: string) {
-  return value.trim().toLocaleLowerCase('vi')
 }
 
 function messageOf(reason: unknown, fallback: string) {
