@@ -52,6 +52,9 @@ public class CreateProjectRequest {
     @Schema(description = "Whether the project is featured. Defaults to false.", example = "false")
     private Boolean isFeatured;
 
+    @Schema(description = "Whether this project is currently recruiting members. Defaults to false.", example = "false")
+    private Boolean isRecruiting;
+
     @Schema(
             description = "Optional public user id of the primary leader. Omit it to assign a primary leader later.",
             example = "d3151812-a9d9-4244-bd51-6c62d2f11c92"

@@ -12,6 +12,9 @@ import { AdminRbacPage } from '../features/admin/pages/AdminRbacPage'
 import { ProfilePage } from '../features/profile/pages/ProfilePage'
 import { ResearchFieldsPage } from '../features/profile/pages/ResearchFieldsPage'
 import { AdminMembersPage } from '../features/profile/pages/AdminMembersPage'
+import { AdminAchievementsPage } from '../features/content/pages/AdminAchievementsPage'
+import { AdminArticlesPage } from '../features/content/pages/AdminArticlesPage'
+import { AdminNewsPage } from '../features/content/pages/AdminNewsPage'
 import { MyPostsPage } from '../features/posts/pages/PostListPage'
 import { PostFeedPage } from '../features/posts/pages/PostFeedPage'
 import { PostDetailPage } from '../features/posts/pages/PostDetailPage'
@@ -19,6 +22,10 @@ import { PostCreatePage } from '../features/posts/pages/PostCreatePage'
 import { PostEditPage } from '../features/posts/pages/PostEditPage'
 import { PostReviewQueuePage } from '../features/posts/pages/PostReviewQueuePage'
 import { PostReviewDetailPage } from '../features/posts/pages/PostReviewDetailPage'
+import { ArticleArchivePage } from '../features/public/pages/ArticleArchivePage'
+import { ArticleDetailPage } from '../features/public/pages/ArticleDetailPage'
+import { NewsArchivePage } from '../features/public/pages/NewsArchivePage'
+import { AchievementArchivePage } from '../features/public/pages/AchievementArchivePage'
 import { HomePage } from '../features/public/pages/HomePage'
 import { StaticPublicPage } from '../features/public/pages/StaticPublicPage'
 import { RequirePermissions } from './RequirePermissions'
@@ -72,16 +79,10 @@ export function App() {
             />
           }
         />
-        <Route
-          path="/bai-viet"
-          element={
-            <StaticPublicPage
-              kind="blog"
-              title="Bài viết"
-              description="Thông báo, kết quả nghiên cứu, bài viết học thuật và chia sẻ kinh nghiệm từ các nhóm dự án."
-            />
-          }
-        />
+        <Route path="/bai-viet" element={<ArticleArchivePage />} />
+        <Route path="/bai-viet/:slug" element={<ArticleDetailPage />} />
+        <Route path="/tin-tuc" element={<NewsArchivePage />} />
+        <Route path="/thanh-tuu" element={<AchievementArchivePage />} />
         <Route path="/blog" element={<Navigate to="/bai-viet" replace />} />
         <Route path="/posts" element={<PostFeedPage />} />
         <Route path="/my-posts" element={<MyPostsPage />} />
@@ -151,6 +152,9 @@ export function App() {
         <Route path="/admin/tasks" element={<RequirePermissions allOf={accessPolicies.tasks}><TasksPage /></RequirePermissions>} />
         <Route path="/admin/research-fields" element={<RequirePermissions allOf={accessPolicies.researchFields}><ResearchFieldsPage /></RequirePermissions>} />
         <Route path="/admin/members" element={<RequirePermissions allOf={accessPolicies.members}><AdminMembersPage /></RequirePermissions>} />
+        <Route path="/admin/achievements" element={<RequirePermissions roles={['ADMIN']} allOf={accessPolicies.content}><AdminAchievementsPage /></RequirePermissions>} />
+        <Route path="/admin/articles" element={<RequirePermissions roles={['ADMIN']} allOf={accessPolicies.content}><AdminArticlesPage /></RequirePermissions>} />
+        <Route path="/admin/news" element={<RequirePermissions roles={['ADMIN']} allOf={accessPolicies.content}><AdminNewsPage /></RequirePermissions>} />
         <Route path="/admin/accounts" element={<RequirePermissions allOf={accessPolicies.accounts}><AdminAccountsPage /></RequirePermissions>} />
         <Route path="/admin/rbac" element={<RequirePermissions allOf={accessPolicies.rbac}><AdminRbacPage /></RequirePermissions>} />
       </Route>

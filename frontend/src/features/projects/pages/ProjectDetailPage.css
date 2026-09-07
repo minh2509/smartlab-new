@@ -29,7 +29,8 @@
 }
 
 .project-detail-type,
-.project-detail-meta {
+.project-detail-meta,
+.project-detail-public-status {
   display: inline-flex;
   align-items: center;
   min-height: 27px;
@@ -38,6 +39,18 @@
   font-size: 12px;
   font-weight: 720;
   line-height: 1;
+}
+
+.project-detail-public-status {
+  border: 1px solid color-mix(in srgb, var(--brand-2) 35%, var(--line));
+  background: color-mix(in srgb, var(--brand-2) 10%, var(--surface));
+  color: var(--brand-2);
+}
+
+.project-detail-public-status-recruiting {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  color: var(--accent);
 }
 
 .project-detail-type {
@@ -91,6 +104,13 @@
 .project-detail-copy p.is-muted,
 .project-detail-empty {
   color: var(--text-3);
+}
+
+.project-detail-field-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 .project-detail-facts {

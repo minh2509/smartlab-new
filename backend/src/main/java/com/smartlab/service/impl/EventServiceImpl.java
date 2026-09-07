@@ -4,6 +4,7 @@ import com.smartlab.dto.request.CreateEventRequest;
 import com.smartlab.dto.request.UpdateEventRequest;
 import com.smartlab.dto.response.EventCreatorResponse;
 import com.smartlab.dto.response.EventResponse;
+import com.smartlab.dto.response.PublicPageResponse;
 import com.smartlab.entity.EventEntity;
 import com.smartlab.entity.ProjectMemberEntity;
 import com.smartlab.entity.UserEntity;
@@ -12,6 +13,7 @@ import com.smartlab.enums.EventStatus;
 import com.smartlab.enums.EventVisibility;
 import com.smartlab.enums.ProjectMemberStatus;
 import com.smartlab.enums.ProjectRole;
+import com.smartlab.enums.PublicEventSort;
 import com.smartlab.repo.EventRepository;
 import com.smartlab.repo.ProjectMemberRepository;
 import com.smartlab.repo.ProjectRepository;
@@ -23,6 +25,8 @@ import com.smartlab.service.NotificationService;
 import com.smartlab.service.PermissionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -56,6 +60,8 @@ public class EventServiceImpl implements EventService {
     private static final int CONTENT_MAX_LENGTH = 20_000;
     private static final int LOCATION_MAX_LENGTH = 255;
     private static final int MEETING_URL_MAX_LENGTH = 2048;
+    private static final int PUBLIC_EVENT_LIMIT_MAX = 12;
+    private static final int PUBLIC_EVENT_PAGE_SIZE_MAX = 48;
 
     private final EventRepository eventRepository;
     private final ProjectRepository projectRepository;
@@ -68,16 +74,64 @@ public class EventServiceImpl implements EventService {
     @Override
     @Transactional(readOnly = true)
     public List<EventResponse> listPublic(EventStatus status, Boolean upcoming) {
-        List<EventEntity> events = eventRepository.findPublicEvents(
-                EventVisibility.PUBLIC,
-                status,
-                upcoming,
-                Instant.now()
-        );
+        return listPublic(status, upcoming, null, null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<EventResponse> listPublic(EventStatus status, Boolean upcoming, Integer limit, PublicEventSort sort) {
+        int effectiveLimit = limit == null ? PUBLIC_EVENT_LIMIT_MAX : limit;
+        if (effectiveLimit < 1 || effectiveLimit > PUBLIC_EVENT_LIMIT_MAX) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Limit must be between 1 and 12");
+        }
+        Instant now = Instant.now();
+        List<EventEntity> events = sort == PublicEventSort.LATEST
+                ? eventRepository.findPublicEventsLatest(EventVisibility.PUBLIC, status, upcoming, now, PageRequest.of(0, effectiveLimit))
+                : eventRepository.findPublicEventsLimited(EventVisibility.PUBLIC, status, upcoming, now, PageRequest.of(0, effectiveLimit));
         Map<Long, EventCreatorResponse> creators = findCreators(events);
         return events.stream()
                 .map(event -> toResponse(event, creators.get(event.getCreatedByUserId())))
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PublicPageResponse<EventResponse> listPublicArchive(
+            int page,
+            int size,
+            EventStatus status,
+            Boolean upcoming,
+            String query
+    ) {
+        int pageSize = normalizePublicPageSize(page, size);
+        Page<EventEntity> events = eventRepository.findPublicEventsPage(
+                EventVisibility.PUBLIC,
+                status,
+                upcoming,
+                normalizeSearchText(query),
+                Instant.now(),
+                PageRequest.of(page, pageSize)
+        );
+        Map<Long, EventCreatorResponse> creators = findCreators(events.getContent());
+        List<EventResponse> responses = events.getContent().stream()
+                .map(event -> toResponse(event, creators.get(event.getCreatedByUserId())))
+                .toList();
+        return new PublicPageResponse<>(
+                responses,
+                events.getNumber(),
+                events.getSize(),
+                events.getTotalElements(),
+                events.getTotalPages()
+        );
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public EventResponse getPublic(Long eventId) {
+        validateEventId(eventId);
+        EventEntity event = eventRepository.findPublicById(eventId, EventVisibility.PUBLIC)
+                .orElseThrow(this::eventNotFound);
+        return toResponse(event, findCreator(event.getCreatedByUserId()));
     }
 
     @Override
@@ -483,6 +537,16 @@ public class EventServiceImpl implements EventService {
                 && event.getVisibility() == visibility;
     }
 
+    private int normalizePublicPageSize(int page, int size) {
+        if (page < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Page must not be negative");
+        }
+        if (size < 1) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Size must be at least 1");
+        }
+        return Math.min(size, PUBLIC_EVENT_PAGE_SIZE_MAX);
+    }
+
     private void validateEventId(Long eventId) {
         if (eventId == null || eventId <= 0) {
             throw badRequest("Event id must be positive");
@@ -520,6 +584,11 @@ public class EventServiceImpl implements EventService {
         }
         String normalized = value.trim();
         return normalized.isEmpty() ? null : normalized;
+    }
+
+    private String normalizeSearchText(String value) {
+        String normalized = normalizeOptionalText(value);
+        return normalized == null ? "" : normalized;
     }
 
     private Map<Long, EventCreatorResponse> findCreators(List<EventEntity> events) {

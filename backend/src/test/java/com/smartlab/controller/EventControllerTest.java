@@ -4,9 +4,11 @@ import com.smartlab.dto.request.CreateEventRequest;
 import com.smartlab.dto.request.UpdateEventRequest;
 import com.smartlab.dto.response.EventCreatorResponse;
 import com.smartlab.dto.response.EventResponse;
+import com.smartlab.dto.response.PublicPageResponse;
 import com.smartlab.enums.EventMode;
 import com.smartlab.enums.EventStatus;
 import com.smartlab.enums.EventVisibility;
+import com.smartlab.enums.PublicEventSort;
 import com.smartlab.service.EventService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -95,7 +97,7 @@ class EventControllerTest {
 
     @Test
     void listsPublicEventsWithoutViewerContext() throws Exception {
-        when(eventService.listPublic(EventStatus.SCHEDULED, true))
+        when(eventService.listPublic(EventStatus.SCHEDULED, true, null, null))
                 .thenReturn(List.of(response()));
 
         mockMvc.perform(get("/events/public")
@@ -104,7 +106,46 @@ class EventControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(41));
 
-        verify(eventService).listPublic(EventStatus.SCHEDULED, true);
+        verify(eventService).listPublic(EventStatus.SCHEDULED, true, null, null);
+    }
+
+    @Test
+    void forwardsPublicLimitAndLatestSort() throws Exception {
+        when(eventService.listPublic(EventStatus.COMPLETED, false, 4, PublicEventSort.LATEST))
+                .thenReturn(List.of(response()));
+
+        mockMvc.perform(get("/events/public")
+                        .queryParam("status", "COMPLETED")
+                        .queryParam("upcoming", "false")
+                        .queryParam("limit", "4")
+                        .queryParam("sort", "LATEST"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(41));
+
+        verify(eventService).listPublic(EventStatus.COMPLETED, false, 4, PublicEventSort.LATEST);
+    }
+
+    @Test
+    void listsPublicEventArchiveAndGetsPublicDetail() throws Exception {
+        when(eventService.listPublicArchive(1, 12, EventStatus.COMPLETED, false, "workshop"))
+                .thenReturn(new PublicPageResponse<>(List.of(response()), 1, 12, 13, 2));
+        when(eventService.getPublic(41L)).thenReturn(response());
+
+        mockMvc.perform(get("/events/public/archive")
+                        .queryParam("page", "1")
+                        .queryParam("size", "12")
+                        .queryParam("status", "COMPLETED")
+                        .queryParam("upcoming", "false")
+                        .queryParam("q", "workshop"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].id").value(41))
+                .andExpect(jsonPath("$.totalPages").value(2));
+        mockMvc.perform(get("/events/public/41"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(41));
+
+        verify(eventService).listPublicArchive(1, 12, EventStatus.COMPLETED, false, "workshop");
+        verify(eventService).getPublic(41L);
     }
 
     @Test

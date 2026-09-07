@@ -1,0 +1,986 @@
+/* Admin Content - Achievements */
+
+.admin-achievement-page {
+  /* standard block flow, .page-title has its own margin */
+}
+
+.achievement-list-toolbar {
+  display: grid;
+  grid-template-columns: minmax(300px, 1fr) 150px 140px 180px 135px auto;
+  gap: 10px;
+  margin-bottom: 12px; /* reduced gap */
+}
+
+.achievement-list-search {
+  position: relative;
+  min-width: 0;
+}
+
+.achievement-list-search > svg {
+  position: absolute;
+  top: 50%;
+  left: 14px;
+  z-index: 1;
+  width: 17px;
+  height: 17px;
+  color: var(--text-3);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.achievement-list-search .input,
+.achievement-list-toolbar .btn,
+.achievement-list-filter {
+  height: 44px;
+  min-height: 44px;
+  border-radius: var(--r-sm);
+}
+
+.achievement-list-search .input {
+  width: 100%;
+  padding-left: 42px;
+}
+
+.achievement-list-filter {
+  width: 100%;
+  min-width: 0;
+  padding: 0 14px;
+  font-size: 14px;
+}
+
+.admin-achievement-page .popup-select-trigger {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  min-height: 44px;
+  white-space: nowrap;
+}
+
+.admin-achievement-page .popup-select-trigger > span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.admin-achievement-page .popup-select-trigger > svg {
+  flex: none;
+}
+
+.achievement-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 13.5px;
+}
+
+.achievement-pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.achievement-admin-table {
+  table-layout: fixed;
+}
+
+.achievement-admin-table th {
+  color: var(--text-3);
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .045em;
+  padding: 12px 16px;
+}
+
+.achievement-admin-table td {
+  vertical-align: middle;
+  height: 58px;
+}
+
+.achievement-admin-table th.col-title { width: 34%; }
+.achievement-admin-table td.col-title {
+  font-size: 14px;
+  font-weight: 660;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-1);
+}
+
+.achievement-admin-table th.col-type,
+.achievement-admin-table td.col-type,
+.achievement-admin-table th.col-year,
+.achievement-admin-table td.col-year,
+.achievement-admin-table th.col-project,
+.achievement-admin-table td.col-project,
+.achievement-admin-table th.col-visibility,
+.achievement-admin-table td.col-visibility,
+.achievement-admin-table th.col-updated,
+.achievement-admin-table td.col-updated {
+  white-space: nowrap;
+}
+
+.achievement-admin-table th.col-type { width: 17%; }
+.achievement-admin-table th.col-year { width: 11%; }
+.achievement-admin-table th.col-project { width: 10%; }
+.achievement-admin-table th.col-visibility { width: 12%; }
+.achievement-admin-table th.col-updated { width: 11%; }
+.achievement-admin-table th.col-actions {
+  width: 60px;
+  text-align: center;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+.achievement-admin-table td.col-actions {
+  text-align: center;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.achievement-year {
+  display: block;
+  font-size: 14px;
+  color: var(--text-1);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.achievement-date {
+  display: block;
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.achievement-admin-table .badge {
+  min-height: 24px;
+  padding: 3px 9px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.achievement-action-menu {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.achievement-action-menu .table-btn {
+  min-width: 38px;
+  width: 38px;
+  height: 38px;
+  min-height: 0;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  outline: none;
+}
+
+.achievement-action-menu .table-btn svg {
+  width: 20px;
+  height: 20px;
+  flex: none;
+}
+
+.achievement-action-menu .table-btn:hover,
+.achievement-action-menu .table-btn[aria-expanded="true"] {
+  background: var(--surface-2);
+  border-color: var(--line);
+  color: var(--text-1);
+}
+
+.achievement-action-menu .table-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px color-mix(in srgb, var(--brand-1) 40%, transparent);
+}
+
+.achievement-action-menu-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  box-shadow: var(--sh-3);
+}
+
+.achievement-action-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-2);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.achievement-action-menu-item:hover {
+  background: var(--surface-2);
+  color: var(--text-1);
+  text-decoration: none;
+}
+
+.achievement-action-menu-item.danger {
+  color: var(--danger);
+}
+
+.achievement-action-menu-item.danger:hover {
+  background: var(--danger-bg);
+}
+
+.achievement-editor-dialog {
+  width: min(800px, calc(100vw - 32px));
+  max-width: none;
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--r-xl);
+  background: var(--surface);
+  color: var(--text-1);
+  box-shadow: var(--sh-3);
+  animation: achievement-dialog-in .18s ease-out both;
+}
+
+.achievement-editor-dialog::backdrop {
+  background: rgba(8, 24, 48, .54);
+  backdrop-filter: blur(4px);
+}
+
+.achievement-editor-form {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  max-height: calc(100dvh - 32px);
+}
+
+.achievement-editor-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 22px 24px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--brand-1) 8%, var(--surface)), var(--surface));
+}
+
+.achievement-editor-head h2 {
+  font-size: 22px;
+  margin: 0;
+}
+
+.achievement-editor-head p {
+  margin-top: 3px;
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.achievement-editor-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-lg);
+  background: var(--brand-1);
+  color: #fff;
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--brand-1) 24%, transparent);
+}
+
+.achievement-editor-icon svg {
+  width: 21px;
+  height: 21px;
+}
+
+.achievement-close-button {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.achievement-close-button:hover {
+  border-color: color-mix(in srgb, var(--brand-1) 28%, var(--line));
+  background: var(--surface-2);
+  color: var(--text-1);
+}
+
+.achievement-editor-body {
+  display: flex;
+  flex-direction: column;
+  gap: 36px;
+  padding: 28px 24px;
+  overflow-y: auto;
+}
+
+.achievement-editor-section > h3 {
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--text-1);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.achievement-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px 18px;
+}
+
+.field-full { grid-column: 1 / -1; }
+.field-2 { grid-column: span 2; }
+.field-1 { grid-column: span 1; }
+
+.achievement-attachments h4 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: var(--text-1);
+}
+
+.achievement-attachment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.attachment-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  transition: all 0.2s ease;
+}
+
+.attachment-item:hover {
+  border-color: var(--text-2);
+  background: var(--surface);
+}
+
+.attachment-item.pending {
+  border-style: dashed;
+  background: transparent;
+}
+
+.attachment-icon {
+  color: var(--text-2);
+  flex: none;
+}
+
+.attachment-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.attachment-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.attachment-meta {
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.attachment-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.upload-btn {
+  display: inline-flex;
+  width: auto;
+  align-self: flex-start;
+}
+
+.achievement-editor-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--line);
+  background: var(--surface-2);
+}
+
+.achievement-mobile-list { display: none; flex-direction: column; }
+.achievement-mobile-card {
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.achievement-mobile-card:last-child { border-bottom: none; }
+.achievement-mobile-card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.achievement-mobile-card-title { font-weight: 650; color: var(--text-1); line-height: 1.4; word-break: break-word; }
+.achievement-mobile-card-meta { color: var(--text-2); font-size: 13.5px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.achievement-mobile-card-details { display: grid; gap: 4px; color: var(--text-2); font-size: 12.5px; line-height: 1.45; }
+.achievement-empty-state { padding: 64px 0; }
+
+.admin-inline-alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 0;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--warn) 36%, var(--line));
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--warn) 8%, var(--surface));
+  color: var(--text-1);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.admin-inline-alert .btn { flex: none; }
+
+/* Research fields admin */
+.research-field-admin-row {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.research-field-admin-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.research-field-admin-row-head > div { min-width: 0; }
+.research-field-admin-row-head strong,
+.research-field-admin-row-head > div > span { display: block; }
+.research-field-admin-row-head strong { overflow-wrap: anywhere; }
+.research-field-admin-row-head > div > span { margin-top: 3px; color: var(--text-3); font-size: 12px; }
+
+.research-field-cover-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.research-field-cover-preview,
+.research-field-cover-placeholder {
+  width: 80px;
+  height: 80px;
+  flex: none;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+}
+
+.research-field-cover-preview { display: block; object-fit: cover; background: var(--surface-2); }
+.research-field-cover-preview-wrap { display: flex; align-items: center; gap: 10px; }
+.research-field-cover-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 8px;
+  background: var(--surface-2);
+  color: var(--text-3);
+  font-size: 11px;
+  text-align: center;
+}
+
+.research-field-cover-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.research-field-cover-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+.research-field-cover-actions .is-disabled { cursor: progress; opacity: .65; }
+.research-field-cover-permission,
+.research-field-cover-error { max-width: 360px; margin: 0; font-size: 12px; line-height: 1.45; }
+.research-field-cover-permission { color: var(--text-2); }
+.research-field-cover-error { color: var(--danger); }
+
+.research-field-form-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+
+@keyframes achievement-dialog-in {
+  from { opacity: 0; transform: translateY(12px) scale(.98); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (max-width: 1024px) {
+  .col-updated { display: none; }
+}
+
+@media (max-width: 980px) {
+  .achievement-list-toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .achievement-list-search { grid-column: 1 / -1; }
+}
+
+@media (max-width: 900px) {
+  .achievement-editor-grid { grid-template-columns: 1fr; }
+  .field-1, .field-2, .field-full { grid-column: auto; }
+}
+
+@media (max-width: 768px) {
+  .admin-table-wrap { display: none; }
+  .achievement-mobile-list { display: flex; }
+}
+
+@media (max-width: 720px) {
+  .achievement-list-toolbar { grid-template-columns: 1fr; }
+  .achievement-list-toolbar .btn { width: 100%; }
+}
+
+@media (max-width: 640px) {
+  .admin-inline-alert {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .research-field-admin-row-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .research-field-cover-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .achievement-pagination { flex-direction: column; align-items: stretch; text-align: center; }
+  .achievement-pagination-controls { justify-content: space-between; }
+  .achievement-editor-dialog {
+    width: calc(100vw - 20px);
+    max-height: calc(100dvh - 20px);
+    border-radius: 16px;
+  }
+  .achievement-editor-form { max-height: calc(100dvh - 20px); }
+  .achievement-editor-head, .achievement-editor-body { padding: 18px; }
+  .achievement-editor-actions { flex-wrap: wrap; padding: 14px 18px; }
+  .achievement-editor-actions .btn { width: 100%; }
+}
+
+.achievement-visibility-settings { display: grid; gap: 0; }
+.achievement-visibility-row { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 10px; min-height: 70px; padding: 15px 4px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.achievement-visibility-row > span { display: grid; gap: 3px; min-width: 0; }
+.achievement-visibility-row strong { color: var(--text-1); font-size: 14px; }
+.achievement-visibility-row small { color: var(--text-2); font-size: 12px; line-height: 1.45; }
+.achievement-visibility-row input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--brand-1); }
+.achievement-visibility-row:has(input:focus-visible) { outline: 3px solid color-mix(in srgb, var(--accent) 28%, transparent); outline-offset: 2px; }
+
+.achievement-attachment-menu { position: relative; }
+.achievement-attachment-trigger {
+  width: 36px; height: 36px; display: grid; place-items: center;
+  background: transparent; border: 1px solid transparent; border-radius: var(--r-sm);
+  color: var(--text-2); cursor: pointer; padding: 0;
+}
+.achievement-attachment-trigger:hover,
+.achievement-attachment-trigger[aria-expanded="true"] {
+  background: var(--surface-2); color: var(--text-1);
+}
+.achievement-attachment-trigger:focus-visible {
+  outline: 2px solid var(--brand-1); outline-offset: 2px;
+}
+.achievement-attachment-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 100;
+  min-width: 180px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--sh-3);
+  border-radius: var(--r-sm);
+  padding: 4px;
+  display: grid;
+  gap: 2px;
+}
+.achievement-attachment-menu-item {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 8px 12px; background: transparent; border: none;
+  text-align: left; font-size: 14px; color: var(--text-1); border-radius: 4px;
+  cursor: pointer;
+}
+.achievement-attachment-menu-item:hover { background: var(--surface-2); }
+.achievement-attachment-menu-item.danger {
+  color: var(--danger);
+}
+.achievement-attachment-menu-item.danger:hover {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+/* Article and News admin */
+.admin-content-page {
+  min-width: 0;
+}
+
+.admin-content-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+}
+
+.admin-content-table {
+  width: 100%;
+  min-width: 860px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.admin-content-table th,
+.admin-content-table td {
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.admin-content-table th {
+  background: var(--surface-2);
+  color: var(--text-3);
+  font-size: 11.5px;
+  font-weight: 750;
+  letter-spacing: .045em;
+  text-transform: uppercase;
+}
+
+.admin-content-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.admin-content-table th:nth-child(1) { width: 27%; }
+.admin-content-table th:nth-child(2) { width: 20%; }
+.admin-content-table th:nth-child(3) { width: 15%; }
+.admin-content-table th:nth-child(4) { width: 14%; }
+.admin-content-table th:nth-child(5) { width: 15%; }
+.admin-content-table th:nth-child(6) { width: 160px; }
+
+.admin-content-title-cell {
+  color: var(--text-1);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.admin-content-muted-cell {
+  color: var(--text-2);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.admin-content-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.admin-content-actions .btn {
+  white-space: nowrap;
+}
+
+.admin-content-source-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  color: var(--brand-2);
+  font-size: 13px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.admin-content-source-link:hover {
+  color: var(--brand-1);
+}
+
+.admin-content-mobile-list {
+  display: none;
+}
+
+.admin-content-mobile-card {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.admin-content-mobile-card:last-child {
+  border-bottom: 0;
+}
+
+.admin-content-mobile-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.admin-content-mobile-card h3 {
+  min-width: 0;
+  margin: 0;
+  color: var(--text-1);
+  font-size: 15px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.admin-content-mobile-meta {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.admin-content-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.admin-content-field-full {
+  grid-column: 1 / -1;
+}
+
+.admin-content-body-input {
+  min-height: 270px;
+  resize: vertical;
+  font-family: inherit;
+  line-height: 1.6;
+}
+
+.admin-content-checkbox-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  padding: 14px 4px;
+  border-top: 1px solid var(--line);
+  cursor: pointer;
+}
+
+.admin-content-checkbox-row input {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  accent-color: var(--brand-1);
+}
+
+.admin-content-checkbox-row span {
+  display: grid;
+  gap: 3px;
+}
+
+.admin-content-checkbox-row strong {
+  color: var(--text-1);
+  font-size: 14px;
+}
+
+.admin-content-checkbox-row small {
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.admin-content-checkbox-row:has(input:focus-visible) {
+  outline: 3px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  outline-offset: 2px;
+}
+
+.admin-content-dialog {
+  width: min(820px, calc(100vw - 32px));
+  max-width: none;
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--r-xl);
+  background: var(--surface);
+  color: var(--text-1);
+  box-shadow: var(--sh-3);
+}
+
+.admin-content-dialog::backdrop {
+  background: rgba(8, 24, 48, .54);
+  backdrop-filter: blur(4px);
+}
+
+.admin-content-dialog-form {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  max-height: calc(100dvh - 32px);
+}
+
+.admin-content-dialog-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 22px 24px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--brand-1) 8%, var(--surface)), var(--surface));
+}
+
+.admin-content-dialog-head h2 {
+  margin: 4px 0 0;
+  font-size: 22px;
+}
+
+.admin-content-dialog-head p {
+  margin: 4px 0 0;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.admin-content-dialog-close {
+  display: grid;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.admin-content-dialog-close:hover {
+  background: var(--surface-2);
+  color: var(--text-1);
+}
+
+.admin-content-dialog-close:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  outline-offset: 2px;
+}
+
+.admin-content-dialog-body {
+  display: grid;
+  gap: 18px;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.admin-content-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--line);
+  background: var(--surface-2);
+}
+
+@media (max-width: 900px) {
+  .admin-content-table {
+    min-width: 760px;
+  }
+
+  .admin-content-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-content-field-full {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .admin-content-table-wrap {
+    display: none;
+  }
+
+  .admin-content-mobile-list {
+    display: block;
+    margin: 0 -1px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+  }
+
+  .admin-content-dialog {
+    width: calc(100vw - 20px);
+    max-height: calc(100dvh - 20px);
+    border-radius: var(--r-lg);
+  }
+
+  .admin-content-dialog-form {
+    max-height: calc(100dvh - 20px);
+  }
+
+  .admin-content-dialog-head,
+  .admin-content-dialog-body {
+    padding: 18px;
+  }
+
+  .admin-content-dialog-actions {
+    flex-wrap: wrap;
+    padding: 14px 18px;
+  }
+
+  .admin-content-dialog-actions .btn {
+    flex: 1 1 140px;
+  }
+}

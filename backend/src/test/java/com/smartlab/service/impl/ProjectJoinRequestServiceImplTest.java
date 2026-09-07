@@ -23,6 +23,9 @@ import com.smartlab.service.ProjectAccessService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -33,6 +36,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -104,19 +108,39 @@ class ProjectJoinRequestServiceImplTest {
 
     @Test
     void rejectsPrivateProjectThatRequesterCannotReadWithoutLeakingIt() {
-        ProjectEntity privateProject = project(false);
+        ProjectEntity privateProject = project(ProjectStatus.IN_PROGRESS, false, true);
         when(projectRepository.findActiveByIdForUpdate(7L)).thenReturn(Optional.of(privateProject));
         when(projectAccessService.requireRead(privateProject, REQUESTER_EMAIL))
                 .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Project not found: 7"));
 
         assertStatus(() -> service.create(7L, null, REQUESTER_EMAIL), HttpStatus.NOT_FOUND);
 
+        verify(projectAccessService).requireRead(privateProject, REQUESTER_EMAIL);
+        verify(joinRequestRepository, never()).saveAndFlush(any());
+    }
+
+    @ParameterizedTest(name = "{0} project returns conflict without creating a join request")
+    @MethodSource("projectsClosedToRecruitment")
+    void rejectsNotRecruitingAndTerminalOrPausedProjectsBeforeCreatingJoinRequest(
+            String scenario,
+            ProjectStatus status,
+            boolean isPublic,
+            boolean isRecruiting
+    ) {
+        ProjectEntity project = project(status, isPublic, isRecruiting);
+        when(projectRepository.findActiveByIdForUpdate(7L)).thenReturn(Optional.of(project));
+        when(projectAccessService.requireAuthenticatedUser(REQUESTER_EMAIL)).thenReturn(requester);
+
+        assertStatus(() -> service.create(7L, null, REQUESTER_EMAIL), HttpStatus.CONFLICT);
+
+        verify(projectRepository).findActiveByIdForUpdate(7L);
+        verify(projectAccessService).requireAuthenticatedUser(REQUESTER_EMAIL);
         verify(joinRequestRepository, never()).saveAndFlush(any());
     }
 
     @Test
     void latestMineRejectsUnreadablePrivateProjectWithoutLeakingIt() {
-        ProjectEntity privateProject = project(false);
+        ProjectEntity privateProject = project(ProjectStatus.IN_PROGRESS, false, true);
         when(projectRepository.findByIdAndDeletedAtIsNull(7L))
                 .thenReturn(Optional.of(privateProject));
         when(projectAccessService.requireRead(privateProject, REQUESTER_EMAIL))
@@ -132,7 +156,7 @@ class ProjectJoinRequestServiceImplTest {
 
     @Test
     void cancelMineRejectsUnreadablePrivateProjectWithoutLeakingIt() {
-        ProjectEntity privateProject = project(false);
+        ProjectEntity privateProject = project(ProjectStatus.IN_PROGRESS, false, true);
         when(projectRepository.findActiveByIdForUpdate(7L))
                 .thenReturn(Optional.of(privateProject));
         when(projectAccessService.requireRead(privateProject, REQUESTER_EMAIL))
@@ -280,10 +304,23 @@ class ProjectJoinRequestServiceImplTest {
         return request;
     }
 
+    private static Stream<Arguments> projectsClosedToRecruitment() {
+        return Stream.of(
+                Arguments.of("not recruiting", ProjectStatus.IN_PROGRESS, true, false),
+                Arguments.of("paused", ProjectStatus.PAUSED, true, true),
+                Arguments.of("completed", ProjectStatus.COMPLETED, true, true),
+                Arguments.of("closed", ProjectStatus.CLOSED, true, true)
+        );
+    }
+
     private ProjectEntity project(boolean isPublic) {
+        return project(ProjectStatus.IN_PROGRESS, isPublic, true);
+    }
+
+    private ProjectEntity project(ProjectStatus status, boolean isPublic, boolean isRecruiting) {
         ProjectEntity project = ProjectEntity.create(
                 "SL-AI", "Smart Lab AI", null, null, ProjectType.RESEARCH, reviewer,
-                ProjectStatus.IN_PROGRESS, null, null, null, isPublic, false, reviewer
+                status, null, null, null, isPublic, false, isRecruiting, reviewer
         );
         ReflectionTestUtils.setField(project, "id", 7L);
         return project;

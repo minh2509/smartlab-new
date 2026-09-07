@@ -7,16 +7,24 @@ import com.smartlab.dto.request.UpdateProjectRequest;
 import com.smartlab.dto.request.UpdateProjectLeadershipRequest;
 import com.smartlab.dto.response.LeaderCandidateResponse;
 import com.smartlab.dto.response.ProjectLeaderResponse;
+import com.smartlab.dto.response.ProjectResearchFieldResponse;
 import com.smartlab.dto.response.ProjectResponse;
+import com.smartlab.dto.response.PublicPageResponse;
+import com.smartlab.dto.response.PublicProjectDetailResponse;
+import com.smartlab.dto.response.PublicProjectLeaderResponse;
+import com.smartlab.dto.response.PublicProjectSummaryResponse;
 import com.smartlab.entity.ProjectEntity;
 import com.smartlab.entity.ProjectMemberEntity;
+import com.smartlab.entity.ProjectResearchFieldEntity;
 import com.smartlab.entity.UserEntity;
 import com.smartlab.enums.ProjectMemberStatus;
 import com.smartlab.enums.ProjectRole;
 import com.smartlab.enums.ProjectStatus;
 import com.smartlab.enums.ProjectType;
+import com.smartlab.enums.PublicProjectStatus;
 import com.smartlab.repo.ProjectMemberRepository;
 import com.smartlab.repo.ProjectRepository;
+import com.smartlab.repo.ProjectResearchFieldRepository;
 import com.smartlab.repo.UserRepository;
 import com.smartlab.service.AuditService;
 import com.smartlab.service.PermissionService;
@@ -24,6 +32,7 @@ import com.smartlab.service.ProjectService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -49,9 +58,16 @@ import static com.smartlab.service.AuditVocabulary.PROJECT_MEMBER_UPDATED;
 @RequiredArgsConstructor
 public class ProjectServiceImpl implements ProjectService {
     private static final int LEADER_CANDIDATE_LIMIT = 20;
+    private static final int PUBLIC_RECRUITING_PAGE_SIZE_MAX = 24;
+    private static final int PUBLIC_PROJECT_PAGE_SIZE_MAX = 48;
     private static final int LEADER_SEARCH_QUERY_MAX_LENGTH = 100;
     private static final int PROJECT_LEADER_LIMIT = 100;
     private static final int PUBLIC_USER_ID_MAX_LENGTH = 36;
+    private static final List<ProjectStatus> RECRUITABLE_STATUSES = List.of(
+            ProjectStatus.PROPOSED,
+            ProjectStatus.PREPARING,
+            ProjectStatus.IN_PROGRESS
+    );
     private static final String ADMIN = "ADMIN";
     private static final String LEADER = "LEADER";
     private static final String PROJECT_READ = "PROJECT_READ";
@@ -59,6 +75,7 @@ public class ProjectServiceImpl implements ProjectService {
 
     private final ProjectRepository projectRepository;
     private final ProjectMemberRepository projectMemberRepository;
+    private final ProjectResearchFieldRepository projectResearchFieldRepository;
     private final UserRepository userRepository;
     private final PermissionService permissionService;
     private final AuditService auditService;
@@ -91,6 +108,53 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Override
     @Transactional(readOnly = true)
+    public PublicPageResponse<PublicProjectSummaryResponse> listPublicRecruiting(int page, int size) {
+        if (page < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Page must not be negative");
+        }
+        if (size < 1 || size > PUBLIC_RECRUITING_PAGE_SIZE_MAX) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Size must be between 1 and 24");
+        }
+        Page<ProjectEntity> projects = projectRepository.findPublicRecruitingProjects(
+                List.of(ProjectStatus.PROPOSED, ProjectStatus.PREPARING, ProjectStatus.IN_PROGRESS),
+                PageRequest.of(page, size)
+        );
+        return toPublicPageResponse(projects);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PublicPageResponse<PublicProjectSummaryResponse> listPublic(
+            int page,
+            int size,
+            String query,
+            Long researchFieldId,
+            String researchFieldCode,
+            ProjectType projectType,
+            PublicProjectStatus status
+    ) {
+        int pageSize = normalizePageSize(page, size, PUBLIC_PROJECT_PAGE_SIZE_MAX);
+        if (researchFieldId != null && researchFieldId <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Research field id must be positive");
+        }
+
+        List<ProjectStatus> statuses = statusesFor(status);
+        Page<ProjectEntity> projects = projectRepository.findPublicProjects(
+                normalizeSearch(query),
+                projectType,
+                statuses,
+                status == PublicProjectStatus.RECRUITING,
+                status != null && status != PublicProjectStatus.RECRUITING,
+                RECRUITABLE_STATUSES,
+                researchFieldId,
+                normalizeSearch(researchFieldCode),
+                PageRequest.of(page, pageSize)
+        );
+        return toPublicPageResponse(projects);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public ProjectResponse get(Long projectId, String currentEmail) {
         ProjectEntity project = getActiveProject(projectId);
         UserEntity currentUser = findCurrentUser(currentEmail);
@@ -98,6 +162,14 @@ public class ProjectServiceImpl implements ProjectService {
             throw notFound(projectId);
         }
         return toResponse(project, findActiveLeaderMemberships(projectId));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PublicProjectDetailResponse getPublic(Long projectId) {
+        ProjectEntity project = projectRepository.findPublicById(projectId)
+                .orElseThrow(() -> notFound(projectId));
+        return toPublicDetailResponse(project, findActiveLeaderMemberships(projectId));
     }
 
     @Override
@@ -147,6 +219,7 @@ public class ProjectServiceImpl implements ProjectService {
                 actualEndDate,
                 Boolean.TRUE.equals(request.getIsPublic()),
                 Boolean.TRUE.equals(request.getIsFeatured()),
+                Boolean.TRUE.equals(request.getIsRecruiting()),
                 creator
         );
 
@@ -203,7 +276,8 @@ public class ProjectServiceImpl implements ProjectService {
                 expectedEndDate,
                 actualEndDate,
                 request.getIsPublic() == null ? project.getIsPublic() : request.getIsPublic(),
-                request.getIsFeatured() == null ? project.getIsFeatured() : request.getIsFeatured()
+                request.getIsFeatured() == null ? project.getIsFeatured() : request.getIsFeatured(),
+                request.getIsRecruiting() == null ? project.getIsRecruiting() : request.getIsRecruiting()
         );
 
         try {
@@ -728,24 +802,107 @@ public class ProjectServiceImpl implements ProjectService {
         return normalized.isEmpty() ? null : normalized;
     }
 
+    private String normalizeSearch(String value) {
+        String normalized = normalizeOptional(value);
+        return normalized == null ? "" : normalized;
+    }
+
     private List<ProjectResponse> toResponses(List<ProjectEntity> projects) {
         if (projects.isEmpty()) {
             return List.of();
         }
+        List<Long> projectIds = projects.stream().map(ProjectEntity::getId).toList();
         Map<Long, List<ProjectMemberEntity>> membershipsByProjectId = projectMemberRepository
-                .findActiveLeadersByProjectIds(projects.stream().map(ProjectEntity::getId).toList())
+                .findActiveLeadersByProjectIds(projectIds)
                 .stream()
                 .collect(java.util.stream.Collectors.groupingBy(
                         membership -> membership.getProject().getId(),
                         LinkedHashMap::new,
                         java.util.stream.Collectors.toList()
                 ));
+        Map<Long, List<ProjectResearchFieldEntity>> fieldsByProjectId = projectResearchFieldRepository
+                .findAllWithFieldByProjectIds(projectIds)
+                .stream()
+                .collect(java.util.stream.Collectors.groupingBy(
+                        field -> field.getProject().getId(),
+                        LinkedHashMap::new,
+                        java.util.stream.Collectors.toList()
+                ));
         return projects.stream()
                 .map(project -> toResponse(
                         project,
-                        membershipsByProjectId.getOrDefault(project.getId(), List.of())
+                        membershipsByProjectId.getOrDefault(project.getId(), List.of()),
+                        fieldsByProjectId.getOrDefault(project.getId(), List.of())
                 ))
                 .toList();
+    }
+
+    private PublicPageResponse<PublicProjectSummaryResponse> toPublicPageResponse(Page<ProjectEntity> projects) {
+        List<ProjectEntity> projectContent = projects.getContent();
+        if (projectContent.isEmpty()) {
+            return PublicPageResponse.from(projects.map(project -> toPublicSummaryResponse(project, List.of(), List.of())));
+        }
+
+        List<Long> projectIds = projectContent.stream().map(ProjectEntity::getId).toList();
+        Map<Long, List<ProjectMemberEntity>> membershipsByProjectId = projectMemberRepository
+                .findActiveLeadersByProjectIds(projectIds)
+                .stream()
+                .collect(java.util.stream.Collectors.groupingBy(
+                        membership -> membership.getProject().getId(),
+                        LinkedHashMap::new,
+                        java.util.stream.Collectors.toList()
+                ));
+        Map<Long, List<ProjectResearchFieldEntity>> fieldsByProjectId = projectResearchFieldRepository
+                .findAllWithFieldByProjectIds(projectIds)
+                .stream()
+                .collect(java.util.stream.Collectors.groupingBy(
+                        field -> field.getProject().getId(),
+                        LinkedHashMap::new,
+                        java.util.stream.Collectors.toList()
+                ));
+
+        List<PublicProjectSummaryResponse> responses = projectContent.stream()
+                .map(project -> toPublicSummaryResponse(
+                        project,
+                        membershipsByProjectId.getOrDefault(project.getId(), List.of()),
+                        fieldsByProjectId.getOrDefault(project.getId(), List.of())
+                ))
+                .toList();
+        return new PublicPageResponse<>(
+                responses,
+                projects.getNumber(),
+                projects.getSize(),
+                projects.getTotalElements(),
+                projects.getTotalPages()
+        );
+    }
+
+    private PublicProjectSummaryResponse toPublicSummaryResponse(
+            ProjectEntity project,
+            Collection<ProjectMemberEntity> leaderMemberships,
+            Collection<ProjectResearchFieldEntity> researchFields
+    ) {
+        UserEntity primaryLeader = project.getLeader();
+        Map<String, UserEntity> leadersByUserId = new LinkedHashMap<>();
+        if (primaryLeader != null) {
+            leadersByUserId.put(primaryLeader.getUserId(), primaryLeader);
+        }
+        leaderMemberships.stream()
+                .map(ProjectMemberEntity::getUser)
+                .sorted(Comparator.comparing(UserEntity::getId))
+                .forEach(leader -> leadersByUserId.putIfAbsent(leader.getUserId(), leader));
+
+        return new PublicProjectSummaryResponse(
+                project.getId(),
+                project.getCode(),
+                project.getName(),
+                project.getDescription(),
+                project.getGoal(),
+                project.getProjectType(),
+                toPublicProjectStatus(project.getStatus(), project.getIsRecruiting()),
+                researchFields.stream().map(this::toResearchFieldResponse).toList(),
+                leadersByUserId.values().stream().map(this::toPublicLeaderResponse).toList()
+        );
     }
 
     private List<ProjectMemberEntity> findActiveLeaderMemberships(Long projectId) {
@@ -755,6 +912,17 @@ public class ProjectServiceImpl implements ProjectService {
     private ProjectResponse toResponse(
             ProjectEntity project,
             Collection<ProjectMemberEntity> leaderMemberships
+    ) {
+        List<ProjectResearchFieldEntity> researchFields = project.getId() == null
+                ? List.of()
+                : projectResearchFieldRepository.findAllWithFieldByProjectId(project.getId());
+        return toResponse(project, leaderMemberships, researchFields);
+    }
+
+    private ProjectResponse toResponse(
+            ProjectEntity project,
+            Collection<ProjectMemberEntity> leaderMemberships,
+            Collection<ProjectResearchFieldEntity> researchFields
     ) {
         UserEntity primaryLeader = project.getLeader();
         Map<String, UserEntity> leadersByUserId = new LinkedHashMap<>();
@@ -774,11 +942,14 @@ public class ProjectServiceImpl implements ProjectService {
                 .goal(project.getGoal())
                 .projectType(project.getProjectType())
                 .status(project.getStatus())
+                .publicStatus(toPublicProjectStatus(project.getStatus(), project.getIsRecruiting()))
                 .startDate(project.getStartDate())
                 .expectedEndDate(project.getExpectedEndDate())
                 .actualEndDate(project.getActualEndDate())
                 .isPublic(project.getIsPublic())
                 .isFeatured(project.getIsFeatured())
+                .isRecruiting(project.getIsRecruiting())
+                .researchFields(researchFields.stream().map(this::toResearchFieldResponse).toList())
                 .primaryLeader(primaryLeader == null ? null : toLeaderResponse(primaryLeader))
                 .leaders(leadersByUserId.values().stream().map(this::toLeaderResponse).toList())
                 .createdAt(toInstant(project.getCreatedAt()))
@@ -786,11 +957,98 @@ public class ProjectServiceImpl implements ProjectService {
                 .build();
     }
 
+    private PublicProjectDetailResponse toPublicDetailResponse(
+            ProjectEntity project,
+            Collection<ProjectMemberEntity> leaderMemberships
+    ) {
+        List<ProjectResearchFieldEntity> researchFields = projectResearchFieldRepository
+                .findAllWithFieldByProjectId(project.getId());
+        UserEntity primaryLeader = project.getLeader();
+        Map<String, UserEntity> leadersByUserId = new LinkedHashMap<>();
+        if (primaryLeader != null) {
+            leadersByUserId.put(primaryLeader.getUserId(), primaryLeader);
+        }
+        leaderMemberships.stream()
+                .map(ProjectMemberEntity::getUser)
+                .sorted(Comparator.comparing(UserEntity::getId))
+                .forEach(leader -> leadersByUserId.putIfAbsent(leader.getUserId(), leader));
+
+        return new PublicProjectDetailResponse(
+                project.getId(),
+                project.getCode(),
+                project.getName(),
+                project.getDescription(),
+                project.getGoal(),
+                project.getProjectType(),
+                toPublicProjectStatus(project.getStatus(), project.getIsRecruiting()),
+                project.getStartDate(),
+                project.getExpectedEndDate(),
+                project.getActualEndDate(),
+                project.getIsFeatured(),
+                researchFields.stream().map(this::toResearchFieldResponse).toList(),
+                primaryLeader == null ? null : toPublicLeaderResponse(primaryLeader),
+                leadersByUserId.values().stream().map(this::toPublicLeaderResponse).toList()
+        );
+    }
+
+    private ProjectResearchFieldResponse toResearchFieldResponse(ProjectResearchFieldEntity field) {
+        return ProjectResearchFieldResponse.builder()
+                .id(field.getResearchField().getId())
+                .code(field.getResearchField().getCode())
+                .name(field.getResearchField().getName())
+                .isActive(field.getResearchField().getIsActive())
+                .build();
+    }
+
+    private List<ProjectStatus> statusesFor(PublicProjectStatus status) {
+        if (status == null) {
+            return List.of(ProjectStatus.values());
+        }
+        return switch (status) {
+            case RECRUITING -> RECRUITABLE_STATUSES;
+            case UPCOMING -> List.of(ProjectStatus.PROPOSED, ProjectStatus.PREPARING);
+            case ACTIVE -> List.of(ProjectStatus.IN_PROGRESS, ProjectStatus.PAUSED);
+            case COMPLETED -> List.of(ProjectStatus.COMPLETED, ProjectStatus.CLOSED);
+        };
+    }
+
+    private PublicProjectStatus toPublicProjectStatus(ProjectStatus status, Boolean isRecruiting) {
+        if (status == null) {
+            return null;
+        }
+        if (isEffectiveRecruiting(status, isRecruiting)) {
+            return PublicProjectStatus.RECRUITING;
+        }
+        return switch (status) {
+            case PROPOSED, PREPARING -> PublicProjectStatus.UPCOMING;
+            case IN_PROGRESS, PAUSED -> PublicProjectStatus.ACTIVE;
+            case COMPLETED, CLOSED -> PublicProjectStatus.COMPLETED;
+        };
+    }
+
+    private boolean isEffectiveRecruiting(ProjectStatus status, Boolean isRecruiting) {
+        return Boolean.TRUE.equals(isRecruiting) && RECRUITABLE_STATUSES.contains(status);
+    }
+
+    private int normalizePageSize(int page, int size, int maxSize) {
+        if (page < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Page must not be negative");
+        }
+        if (size < 1) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Size must be at least 1");
+        }
+        return Math.min(size, maxSize);
+    }
+
     private ProjectLeaderResponse toLeaderResponse(UserEntity leader) {
         return ProjectLeaderResponse.builder()
                 .userId(leader.getUserId())
                 .name(leader.getName())
                 .build();
+    }
+
+    private PublicProjectLeaderResponse toPublicLeaderResponse(UserEntity leader) {
+        return new PublicProjectLeaderResponse(leader.getName());
     }
 
     private LeaderCandidateResponse toLeaderCandidateResponse(UserEntity candidate) {

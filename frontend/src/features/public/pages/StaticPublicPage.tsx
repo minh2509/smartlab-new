@@ -6,9 +6,9 @@ import type { MemberProfile, ResearchField } from '../../../shared/types/api'
 import { listPosts } from '../../posts/api'
 import type { PostFeedItem } from '../../posts/types'
 import { getMembers, getResearchFields } from '../../profile/api'
-import { listProjects } from '../../projects/api'
-import type { Project } from '../../projects/types'
-import { aboutQuickFacts, coreValues, documents, gallery, operatingSteps, posts } from '../publicData'
+import { listPublicProjects } from '../../projects/api'
+import type { PublicProjectSummary } from '../../projects/types'
+import { aboutQuickFacts, coreValues, documents, gallery, operatingSteps } from '../publicData'
 import { PublicMemberCard, PublicPostCard, PublicProjectCard, ResearchFieldCard } from '../components/PublicDataCards'
 import { PublicPageHead } from '../components/PublicPageHead'
 import { listPublicEvents } from '../../events/api'
@@ -16,7 +16,7 @@ import { listPublicEvents } from '../../events/api'
 type StaticPublicPageProps = {
   title: string
   description: string
-  kind: 'about' | 'fields' | 'members' | 'blog' | 'documents' | 'gallery' | 'contact' | 'search'
+  kind: 'about' | 'fields' | 'members' | 'documents' | 'gallery' | 'contact' | 'search'
 }
 
 export function StaticPublicPage({ title, description, kind }: StaticPublicPageProps) {
@@ -26,7 +26,6 @@ export function StaticPublicPage({ title, description, kind }: StaticPublicPageP
       {kind === 'about' ? <AboutContent /> : null}
       {kind === 'fields' ? <FieldsContent /> : null}
       {kind === 'members' ? <ApiMembersContent /> : null}
-      {kind === 'blog' ? <BlogContent /> : null}
       {kind === 'documents' ? <DocumentsContent /> : null}
       {kind === 'gallery' ? <GalleryContent /> : null}
       {kind === 'contact' ? <ContactContent /> : null}
@@ -35,29 +34,7 @@ export function StaticPublicPage({ title, description, kind }: StaticPublicPageP
   )
 }
 
-export function PostCard({ post }: { post: (typeof posts)[number] }) {
-  return (
-    <Link className="card hover postcard" to="/bai-viet">
-      <div className={`cover ph ${post.cover}`} />
-      <div className="body">
-        <div className="pmeta">
-          <span className="chip accent">{post.category}</span>
-          <span>{post.date}</span>
-          <span>·</span>
-          <span>{post.read}</span>
-        </div>
-        <h3>{post.title}</h3>
-        <p>{post.description}</p>
-        <div className="by">
-          <span className="ava xs" style={{ background: 'var(--s1)' }}>
-            {post.initials}
-          </span>
-          {post.author}
-        </div>
-      </div>
-    </Link>
-  )
-}
+
 
 function AboutContent() {
   const valueIcons = [FlaskConical, GraduationCap, BadgeCheck]
@@ -65,9 +42,9 @@ function AboutContent() {
 
   useEffect(() => {
     let active = true
-    void Promise.all([getMembers(), listProjects(null), getResearchFields(), listPublicEvents({ upcoming: true })])
+    void Promise.all([getMembers(), listPublicProjects(0, 1), getResearchFields(), listPublicEvents({ upcoming: true })])
       .then(([members, projects, fields, events]) => {
-        if (active) setCounts({ members: members.length, projects: projects.length, fields: fields.length, events: events.length })
+        if (active) setCounts({ members: members.length, projects: projects.totalElements, fields: fields.length, events: events.length })
       })
       .catch(() => undefined)
     return () => { active = false }
@@ -251,7 +228,7 @@ function FieldsContent() {
 
 function ApiMembersContent() {
   const [apiMembers, setApiMembers] = useState<MemberProfile[]>([])
-  const [publicProjects, setPublicProjects] = useState<Project[]>([])
+  const [publicProjects, setPublicProjects] = useState<PublicProjectSummary[]>([])
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -261,11 +238,11 @@ function ApiMembersContent() {
     let active = true
     setLoading(true)
     setError(null)
-    void Promise.all([getMembers(), listProjects(null).catch(() => [] as Project[])])
+    void Promise.all([getMembers(), listPublicProjects(0, 48)])
       .then(([memberResult, projectResult]) => {
         if (!active) return
         setApiMembers(memberResult)
-        setPublicProjects(projectResult)
+        setPublicProjects(projectResult.items)
       })
       .catch((reason: unknown) => {
         if (active) setError(messageOf(reason, 'Không tải được danh sách thành viên.'))
@@ -287,8 +264,8 @@ function ApiMembersContent() {
         || (member.bio ?? '').toLocaleLowerCase('vi').includes(normalized)
         || member.researchFields.some((field) => field.name.toLocaleLowerCase('vi').includes(normalized)))
   }, [apiMembers, query])
-  const publicLeaderIds = useMemo(
-    () => new Set(publicProjects.flatMap((project) => project.leaders.map((leader) => leader.userId))),
+  const publicLeaderNames = useMemo(
+    () => new Set(publicProjects.flatMap((project) => project.leaders.map((leader) => normalizePublicName(leader.name)))),
     [publicProjects],
   )
 
@@ -303,49 +280,14 @@ function ApiMembersContent() {
         </div>
         {loading ? <div className="public-empty empty tight">Đang tải danh sách thành viên...</div> : null}
         {error ? <LoadError message={error} onRetry={() => setReloadKey((value) => value + 1)} /> : null}
-        {!loading && !error && visibleMembers.length > 0 ? <div className="grid c4">{visibleMembers.map((member) => <PublicMemberCard key={member.userId} member={member} isProjectLeader={publicLeaderIds.has(member.userId)} />)}</div> : null}
+        {!loading && !error && visibleMembers.length > 0 ? <div className="grid c4">{visibleMembers.map((member) => <PublicMemberCard key={member.userId} member={member} isProjectLeader={publicLeaderNames.has(normalizePublicName(member.name))} />)}</div> : null}
         {!loading && !error && visibleMembers.length === 0 ? <div className="public-empty empty tight">{apiMembers.length === 0 ? 'Chưa có thành viên công khai.' : 'Không tìm thấy thành viên phù hợp.'}</div> : null}
       </div>
     </section>
   )
 }
 
-function BlogContent() {
-  return (
-    <>
-      <section className="section">
-        <div className="wrap">
-          <div className="sec-head">
-            <div className="kicker">Đáng chú ý</div>
-            <h2>Bài viết nổi bật</h2>
-            <p>Những nội dung được ban biên tập chọn lọc trong tháng này.</p>
-          </div>
-          <div className="grid c3">
-            {posts.slice(0, 3).map((post) => (
-              <PostCard key={post.title} post={post} />
-            ))}
-          </div>
-        </div>
-      </section>
 
-      <section className="section alt">
-        <div className="wrap">
-          <div className="sec-head">
-            <div className="kicker">Tất cả bài viết</div>
-            <h2>Mới nhất</h2>
-            <p>Lọc theo loại nội dung hoặc tìm kiếm nhanh theo từ khoá.</p>
-          </div>
-          <Toolbar placeholder="Tìm bài viết theo tiêu đề, tác giả..." />
-          <div className="grid c3">
-            {posts.map((post) => (
-              <PostCard key={post.title} post={post} />
-            ))}
-          </div>
-        </div>
-      </section>
-    </>
-  )
-}
 
 function DocumentsContent() {
   return (
@@ -431,34 +373,10 @@ function ContactContent() {
   )
 }
 
-function Toolbar({ placeholder }: { placeholder: string }) {
-  return (
-    <div className="toolbar">
-      <div className="searchbar" style={{ flex: 1, minWidth: 220 }}>
-        <Search aria-hidden="true" />
-        <input className="input" type="search" placeholder={placeholder} />
-      </div>
-      <div className="pills sp">
-        <button className="pill" type="button" aria-pressed="true">
-          Tất cả
-        </button>
-        <button className="pill" type="button" aria-pressed="false">
-          AI
-        </button>
-        <button className="pill" type="button" aria-pressed="false">
-          Robotics
-        </button>
-        <button className="pill" type="button" aria-pressed="false">
-          SE
-        </button>
-      </div>
-    </div>
-  )
-}
 
 function SearchContent() {
   const [query, setQuery] = useState('')
-  const [projects, setProjects] = useState<Project[]>([])
+  const [projects, setProjects] = useState<PublicProjectSummary[]>([])
   const [posts, setPosts] = useState<PostFeedItem[]>([])
   const [members, setMembers] = useState<MemberProfile[]>([])
   const [loading, setLoading] = useState(true)
@@ -469,10 +387,10 @@ function SearchContent() {
     let active = true
     setLoading(true)
     setError(null)
-    void Promise.all([listProjects(null), listPosts(null, undefined, 30), getMembers()])
+    void Promise.all([listPublicProjects(0, 48, { query: query.trim() }), listPosts(null, undefined, 30), getMembers()])
       .then(([projectResult, postResult, memberResult]) => {
         if (!active) return
-        setProjects(projectResult)
+        setProjects(projectResult.items)
         setPosts(postResult.items)
         setMembers(memberResult)
       })
@@ -481,7 +399,7 @@ function SearchContent() {
       })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [reloadKey])
+  }, [query, reloadKey])
 
   const normalized = query.trim().toLocaleLowerCase('vi')
   const matchingProjects = projects.filter((project) => includesQuery([
@@ -501,7 +419,7 @@ function SearchContent() {
     member.bio,
     ...member.researchFields.map((field) => field.name),
   ], normalized))
-  const publicLeaderIds = new Set(projects.flatMap((project) => project.leaders.map((leader) => leader.userId)))
+  const publicLeaderNames = new Set(projects.flatMap((project) => project.leaders.map((leader) => normalizePublicName(leader.name))))
   const total = matchingProjects.length + matchingPosts.length + matchingMembers.length
 
   return (
@@ -518,7 +436,7 @@ function SearchContent() {
         {!loading && !error && total === 0 ? <div className="public-empty empty tight">Không tìm thấy nội dung phù hợp.</div> : null}
         {!loading && !error && matchingProjects.length > 0 ? <SearchGroup title={`Dự án (${matchingProjects.length})`}><div className="grid c3">{matchingProjects.map((project) => <PublicProjectCard key={project.id} project={project} />)}</div></SearchGroup> : null}
         {!loading && !error && matchingPosts.length > 0 ? <SearchGroup title={`Bài viết (${matchingPosts.length})`}><div className="grid c3">{matchingPosts.map((post) => <PublicPostCard key={post.id} post={post} />)}</div></SearchGroup> : null}
-        {!loading && !error && matchingMembers.length > 0 ? <SearchGroup title={`Thành viên (${matchingMembers.length})`}><div className="grid c4">{matchingMembers.map((member) => <PublicMemberCard key={member.userId} member={member} isProjectLeader={publicLeaderIds.has(member.userId)} />)}</div></SearchGroup> : null}
+        {!loading && !error && matchingMembers.length > 0 ? <SearchGroup title={`Thành viên (${matchingMembers.length})`}><div className="grid c4">{matchingMembers.map((member) => <PublicMemberCard key={member.userId} member={member} isProjectLeader={publicLeaderNames.has(normalizePublicName(member.name))} />)}</div></SearchGroup> : null}
       </div>
     </section>
   )
@@ -545,6 +463,10 @@ function LoadError({ message, onRetry }: { message: string; onRetry: () => void 
 function includesQuery(values: Array<string | null | undefined>, normalizedQuery: string) {
   if (!normalizedQuery) return true
   return values.some((value) => value?.toLocaleLowerCase('vi').includes(normalizedQuery))
+}
+
+function normalizePublicName(value: string) {
+  return value.trim().toLocaleLowerCase('vi')
 }
 
 function messageOf(reason: unknown, fallback: string) {

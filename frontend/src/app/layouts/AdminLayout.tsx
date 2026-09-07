@@ -1,4 +1,4 @@
-import { Award, CalendarDays, CheckSquare, Files, FlaskConical, FolderKanban, LogOut, ShieldCheck, UserCircle, UsersRound } from 'lucide-react'
+import { Award, BookOpenText, CalendarDays, CheckSquare, Files, FlaskConical, FolderKanban, LogOut, Newspaper, ShieldCheck, Trophy, UserCircle, UsersRound } from 'lucide-react'
 import { Link, NavLink, Navigate, Outlet } from 'react-router-dom'
 import { useAuth } from '../../features/auth/authContext'
 import { Logo } from '../../shared/components/Logo'
@@ -74,6 +74,23 @@ export function AdminLayout() {
                 <UserCircle />
                 Hồ sơ thành viên
               </NavLink>}
+              {profile.roles.includes('ADMIN') && can(accessPolicies.content) && (
+                <>
+                  <span className="admin-nav-label">Nội dung</span>
+                  <NavLink to="/admin/achievements">
+                    <Trophy />
+                    Thành tựu
+                  </NavLink>
+                  <NavLink to="/admin/articles">
+                    <BookOpenText />
+                    Bài viết
+                  </NavLink>
+                  <NavLink to="/admin/news">
+                    <Newspaper />
+                    Tin tức
+                  </NavLink>
+                </>
+              )}
             </nav>
 
             <button className="admin-logout-btn admin-logout-bottom" type="button" onClick={() => void logout()}>
@@ -85,13 +102,15 @@ export function AdminLayout() {
 
         <section className="admin-workspace">
           <header className="admin-topbar">
-            <div>
+            <div className="admin-topbar-inner">
               <span>Smart Lab</span>
               <strong>{workspace.heading}</strong>
             </div>
           </header>
           <main className="admin-content">
-            <Outlet />
+            <div className="admin-content-inner">
+              <Outlet />
+            </div>
           </main>
         </section>
       </div>

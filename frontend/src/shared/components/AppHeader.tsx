@@ -31,50 +31,47 @@ export function AppHeader() {
           <Logo />
         </NavLink>
 
-        <ul className="menu public-nav">
-          <li>
-            <NavLink to="/">Trang chủ</NavLink>
-          </li>
-          <li>
-            <AboutDropdown />
-          </li>
-          {publicLinks.map((link) => (
-            <li key={link.to}>
-              <NavLink to={link.to}>{link.label}</NavLink>
+        <nav className="public-nav" aria-label="Điều hướng chính">
+          <ul className="menu">
+            <li>
+              <NavLink to="/">Trang chủ</NavLink>
             </li>
-          ))}
-          {isAuthenticated ? (
-            <>
+            <li>
+              <AboutDropdown />
+            </li>
+            {publicLinks.map((link) => (
+              <li key={link.to}>
+                <NavLink to={link.to}>{link.label}</NavLink>
+              </li>
+            ))}
+            {isAuthenticated ? (
               <li>
                 <NavLink to="/profile">Workspace</NavLink>
               </li>
-              {role ? (
-                <li>
-                  <span className="nav-role-label">{role}</span>
-                </li>
-              ) : null}
-            </>
-          ) : null}
-        </ul>
+            ) : null}
+          </ul>
+        </nav>
 
         <div className="nav-act">
           {isAuthenticated ? (
             <>
-              <NavLink
-                end
-                className={({ isActive }) => `nav-private-link${isActive ? ' is-active' : ''}`}
-                to="/posts"
-              >
-                <Newspaper size={15} aria-hidden="true" />
-                Bảng tin
-              </NavLink>
-              {canReadNotifications ? (
-                <NotificationPopover />
-              ) : null}
-              <button className="btn sm" type="button" onClick={() => void logout()}>
-                <LogOut size={15} />
-                Đăng xuất
-              </button>
+              {role ? <span className="nav-role-label nav-utility-role">{role}</span> : null}
+              {role ? <span className="nav-utility-separator" aria-hidden="true" /> : null}
+              <div className="nav-utility-actions">
+                <NavLink
+                  end
+                  className={({ isActive }) => `nav-private-link${isActive ? ' is-active' : ''}`}
+                  to="/posts"
+                >
+                  <Newspaper size={15} aria-hidden="true" />
+                  Bảng tin
+                </NavLink>
+                {canReadNotifications ? <NotificationPopover /> : null}
+                <button className="btn sm" type="button" onClick={() => void logout()}>
+                  <LogOut size={15} />
+                  Đăng xuất
+                </button>
+              </div>
             </>
           ) : (
             <>

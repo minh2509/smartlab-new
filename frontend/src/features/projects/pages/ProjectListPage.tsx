@@ -1,154 +1,136 @@
 import { ArrowRight, RotateCcw, Search, UsersRound } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
+import { Pagination } from "../../../shared/components/Pagination";
+
 import { EmptyState } from '../../../shared/components/EmptyState'
 import { Feedback } from '../../../shared/components/Feedback'
 import type { ResearchField } from '../../../shared/types/api'
 import { PopupSelect } from '../../../shared/ui/PopupSelect'
-import { useAuth } from '../../auth/authContext'
+import { ApiClientError } from '../../../lib/apiClient'
 import { getResearchFields } from '../../profile/api'
 import { PublicPageHead } from '../../public/components/PublicPageHead'
-import { listProjects } from '../api'
+import { listPublicProjects } from '../api'
 import {
-  PROJECT_STATUSES,
-  PROJECT_STATUS_BADGES,
-  PROJECT_STATUS_LABELS,
-  PROJECT_TYPES,
   PROJECT_TYPE_LABELS,
+  PROJECT_TYPES,
+  PUBLIC_PROJECT_STATUS_LABELS,
+  PUBLIC_PROJECT_STATUSES,
 } from '../types'
-import type { Project, ProjectStatus, ProjectType } from '../types'
+import type { PublicProjectSummary, ProjectType, PublicProjectStatus } from '../types'
 import './ProjectListPage.css'
 
-type TypeFilter = ProjectType | 'ALL'
-type StatusFilter = ProjectStatus | 'ALL'
-type ResearchFieldFilter = number | 'ALL'
+const PAGE_SIZE = 12
+
+type FilterValue = 'ALL' | string
 
 export function ProjectListPage() {
-  const { token } = useAuth()
-  const [projects, setProjects] = useState<Project[]>([])
-  const [researchFields, setResearchFields] = useState<ResearchField[]>([])
-  const [query, setQuery] = useState('')
-  const [typeFilter, setTypeFilter] = useState<TypeFilter>('ALL')
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL')
-  const [researchFieldFilter, setResearchFieldFilter] = useState<ResearchFieldFilter>('ALL')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [projects, setProjects] = useState<PublicProjectSummary[]>([])
+  const [totalElements, setTotalElements] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
   const [loading, setLoading] = useState(true)
-  const [fieldsLoading, setFieldsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [researchFields, setResearchFields] = useState<ResearchField[]>([])
   const [fieldsError, setFieldsError] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
 
-  useEffect(() => {
-    let active = true
-    setLoading(true)
-    setError(null)
-
-    listProjects(token, {
-      researchFieldId: researchFieldFilter === 'ALL' ? undefined : researchFieldFilter,
-    })
-      .then((result) => {
-        if (active) setProjects(result)
-      })
-      .catch((reason: unknown) => {
-        if (active) {
-          setError(reason instanceof Error ? reason.message : 'Không tải được danh sách dự án.')
-        }
-      })
-      .finally(() => {
-        if (active) setLoading(false)
-      })
-
-    return () => {
-      active = false
-    }
-  }, [reloadKey, researchFieldFilter, token])
+  const currentPage = parsePage(searchParams.get('page'))
+  const query = searchParams.get('q') ?? ''
+  const typeFilter = asProjectType(searchParams.get('projectType'))
+  const statusFilter = asPublicProjectStatus(searchParams.get('status'))
+  const fieldFilter = searchParams.get('field') ?? 'ALL'
 
   useEffect(() => {
     let active = true
-    setFieldsLoading(true)
-    setFieldsError(null)
     void getResearchFields()
       .then((result) => {
         if (active) setResearchFields(result)
       })
       .catch((reason: unknown) => {
-        if (active) {
-          setFieldsError(reason instanceof Error ? reason.message : 'Không tải được bộ lọc lĩnh vực.')
-        }
-      })
-      .finally(() => {
-        if (active) setFieldsLoading(false)
+        if (active) setFieldsError(reason instanceof Error ? reason.message : 'Không tải được bộ lọc lĩnh vực.')
       })
     return () => {
       active = false
     }
   }, [])
 
-  const visibleProjects = useMemo(() => {
-    const normalizedQuery = query.trim().toLocaleLowerCase('vi')
+  useEffect(() => {
+    const controller = new AbortController()
+    setLoading(true)
+    setError(null)
 
-    return projects.filter((project) => {
-      if (typeFilter !== 'ALL' && project.projectType !== typeFilter) return false
-      if (statusFilter !== 'ALL' && project.status !== statusFilter) return false
-      if (!normalizedQuery) return true
+    void listPublicProjects(currentPage - 1, PAGE_SIZE, {
+      query,
+      researchFieldCode: fieldFilter === 'ALL' ? undefined : fieldFilter,
+      projectType: typeFilter === 'ALL' ? undefined : typeFilter,
+      status: statusFilter === 'ALL' ? undefined : statusFilter,
+    }, controller.signal)
+      .then((result) => {
+        if (controller.signal.aborted) return
+        setProjects(result.items)
+        setTotalElements(result.totalElements)
+        setTotalPages(result.totalPages)
+      })
+      .catch((reason: unknown) => {
+        if (!controller.signal.aborted) {
+          setProjects([])
+          setTotalElements(0)
+          setTotalPages(0)
+          setError(projectListError(reason))
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false)
+      })
 
-      const searchableText = [
-        project.code,
-        project.name,
-        project.description ?? '',
-        project.goal ?? '',
-        ...project.leaders.map((leader) => leader.name),
-      ]
-        .join(' ')
-        .toLocaleLowerCase('vi')
+    return () => controller.abort()
+  }, [currentPage, fieldFilter, query, reloadKey, statusFilter, typeFilter])
 
-      return searchableText.includes(normalizedQuery)
-    })
-  }, [projects, query, statusFilter, typeFilter])
+  const hasFilters = Boolean(query.trim()) || typeFilter !== 'ALL' || statusFilter !== 'ALL' || fieldFilter !== 'ALL'
+  const fieldOptions = useMemo(() => [
+    { value: 'ALL', label: fieldsError ? 'Không tải được lĩnh vực' : 'Tất cả lĩnh vực' },
+    ...researchFields.map((field) => ({ value: field.code, label: field.name })),
+  ], [fieldsError, researchFields])
 
-  const hasActiveFilters = Boolean(query.trim())
-    || typeFilter !== 'ALL'
-    || statusFilter !== 'ALL'
-    || researchFieldFilter !== 'ALL'
-
-  const typeOptions = [
-    { value: 'ALL', label: 'Tất cả loại dự án' },
-    ...PROJECT_TYPES.map((type) => ({ value: type, label: PROJECT_TYPE_LABELS[type] })),
-  ]
-  const statusOptions = [
-    { value: 'ALL', label: 'Tất cả trạng thái' },
-    ...PROJECT_STATUSES.map((status) => ({ value: status, label: PROJECT_STATUS_LABELS[status] })),
-  ]
-  const researchFieldOptions = [
-    {
-      value: 'ALL',
-      label: fieldsLoading
-        ? 'Đang tải lĩnh vực...'
-        : fieldsError
-          ? 'Không tải được lĩnh vực'
-          : 'Tất cả lĩnh vực',
-    },
-    ...(!fieldsLoading && !fieldsError
-      ? researchFields.map((field) => ({ value: String(field.id), label: field.name }))
-      : []),
-  ]
+  function updateFilter(key: string, value: FilterValue) {
+    const next = new URLSearchParams(searchParams)
+    if (value === 'ALL' || value === '') next.delete(key)
+    else next.set(key, value)
+    next.delete('page')
+    setSearchParams(next)
+  }
 
   function resetFilters() {
-    setQuery('')
-    setTypeFilter('ALL')
-    setStatusFilter('ALL')
-    setResearchFieldFilter('ALL')
+    setSearchParams(new URLSearchParams())
+  }
+
+  function updatePage(page: number) {
+    const next = new URLSearchParams(searchParams)
+    if (page <= 1) next.delete('page')
+    else next.set('page', String(page))
+    setSearchParams(next)
   }
 
   return (
     <>
       <PublicPageHead
         title="Dự án"
-        description="Các dự án nghiên cứu và sản phẩm đang được phát triển tại Smart Lab."
+        description="Khám phá các dự án nghiên cứu và sản phẩm công khai của Smart Lab."
       />
 
       <section className="section project-directory-section">
         <div className="wrap">
-          <div className="project-directory-toolbar">
+          <div className="project-directory-intro">
+            <div>
+              <div className="kicker">PROJECT ARCHIVE</div>
+              <h2>Dự án Smart Lab</h2>
+              <p>Chọn theo lĩnh vực, trạng thái hoặc loại dự án để tìm hướng đi phù hợp.</p>
+            </div>
+            <span className="project-directory-page-size">12 dự án / trang</span>
+          </div>
+
+          <div className="project-directory-toolbar" role="search">
             <label className="project-directory-search">
               <span className="sr-only">Tìm kiếm dự án</span>
               <Search aria-hidden="true" />
@@ -156,42 +138,38 @@ export function ProjectListPage() {
                 className="input"
                 type="search"
                 value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Tìm theo mã, tên, mô tả hoặc leader..."
+                onChange={(event) => updateFilter('q', event.target.value)}
+                placeholder="Tìm theo mã, tên hoặc nội dung..."
               />
             </label>
 
             <PopupSelect
               value={typeFilter}
-              options={typeOptions}
-              onChange={(value) => setTypeFilter(value as TypeFilter)}
+              options={[{ value: 'ALL', label: 'Tất cả loại dự án' }, ...PROJECT_TYPES.map((type) => ({ value: type, label: PROJECT_TYPE_LABELS[type] }))]}
+              onChange={(value) => updateFilter('projectType', value)}
               ariaLabel="Lọc theo loại dự án"
               className="project-directory-filter"
             />
 
             <PopupSelect
-              value={String(researchFieldFilter)}
-              options={researchFieldOptions}
-              disabled={fieldsLoading || Boolean(fieldsError)}
-              onChange={(value) => setResearchFieldFilter(value === 'ALL' ? 'ALL' : Number(value))}
+              value={fieldFilter}
+              options={fieldOptions}
+              onChange={(value) => updateFilter('field', value)}
               ariaLabel="Lọc theo lĩnh vực nghiên cứu"
               className="project-directory-filter"
+              disabled={Boolean(fieldsError)}
             />
 
             <PopupSelect
               value={statusFilter}
-              options={statusOptions}
-              onChange={(value) => setStatusFilter(value as StatusFilter)}
-              ariaLabel="Lọc theo trạng thái dự án"
+              options={[{ value: 'ALL', label: 'Tất cả trạng thái' }, ...PUBLIC_PROJECT_STATUSES.map((status) => ({ value: status, label: PUBLIC_PROJECT_STATUS_LABELS[status] }))]}
+              onChange={(value) => updateFilter('status', value)}
+              ariaLabel="Lọc theo nhóm trạng thái"
               className="project-directory-filter"
             />
 
-            {hasActiveFilters ? (
-              <button
-                className="project-directory-reset"
-                type="button"
-                onClick={resetFilters}
-              >
+            {hasFilters ? (
+              <button className="project-directory-reset" type="button" onClick={resetFilters}>
                 <RotateCcw size={15} aria-hidden="true" />
                 Đặt lại
               </button>
@@ -199,7 +177,7 @@ export function ProjectListPage() {
           </div>
 
           {error ? (
-            <div className="project-directory-request-state">
+            <div className="project-directory-request-state" role="alert">
               <Feedback error={error} />
               <button className="btn" type="button" onClick={() => setReloadKey((value) => value + 1)}>
                 Thử tải lại
@@ -207,41 +185,29 @@ export function ProjectListPage() {
             </div>
           ) : null}
 
-          {loading ? (
-            <div className="public-empty empty tight project-directory-request-state">Đang tải danh sách dự án...</div>
+          {loading && projects.length === 0 ? (
+            <div className="public-empty empty tight project-directory-request-state" aria-busy="true">Đang tải danh sách dự án...</div>
           ) : null}
 
-          {!loading && !error && visibleProjects.length > 0 ? (
+          {!loading && !error && projects.length === 0 ? (
+            <EmptyState
+              title={hasFilters ? 'Không tìm thấy dự án phù hợp' : 'Chưa có dự án công khai'}
+              description={hasFilters ? 'Thử thay đổi từ khóa hoặc bộ lọc.' : 'Các dự án công khai của Smart Lab sẽ xuất hiện tại đây.'}
+            />
+          ) : null}
+
+          {projects.length > 0 ? (
             <>
-              <p className="project-directory-summary" aria-live="polite">
-                {hasActiveFilters
-                  ? `${visibleProjects.length} kết quả${visibleProjects.length !== projects.length ? ` trong ${projects.length} dự án` : ''}`
-                  : `${projects.length} dự án`}
-              </p>
-              <div className="project-directory-grid">
-                {visibleProjects.map((project) => <ProjectCard project={project} key={project.id} />)}
+              <div className="project-directory-results-bar">
+                <p className="project-directory-summary" aria-live="polite">
+                  {formatRange(currentPage, PAGE_SIZE, totalElements)} · {totalElements} dự án
+                </p>
+                {loading ? <span className="project-directory-refreshing" aria-live="polite">Đang cập nhật...</span> : null}
               </div>
-            </>
-          ) : null}
-
-          {!loading && !error && visibleProjects.length === 0 ? (
-            <>
-              <EmptyState
-                title={projects.length === 0 ? 'Chưa có dự án bạn có thể xem' : 'Không tìm thấy dự án phù hợp'}
-                description={
-                  projects.length === 0
-                    ? 'Dự án công khai và dự án nội bộ bạn được phép xem sẽ xuất hiện tại đây.'
-                    : 'Thử thay đổi từ khóa hoặc bộ lọc.'
-                }
-              />
-              {hasActiveFilters ? (
-                <div className="project-directory-empty-action">
-                  <button className="project-directory-reset" type="button" onClick={resetFilters}>
-                    <RotateCcw size={15} aria-hidden="true" />
-                    Đặt lại
-                  </button>
-                </div>
-              ) : null}
+              <div className="project-directory-grid" aria-busy={loading}>
+                {projects.map((project) => <ProjectCard project={project} key={project.id} />)}
+              </div>
+              <Pagination page={currentPage} totalPages={totalPages} onChange={updatePage} />
             </>
           ) : null}
         </div>
@@ -250,40 +216,41 @@ export function ProjectListPage() {
   )
 }
 
-function ProjectCard({ project }: { project: Project }) {
-  const shownLeaders = project.leaders.slice(0, 3)
-  const remainingLeaderCount = project.leaders.length - shownLeaders.length
+function ProjectCard({ project }: { project: PublicProjectSummary }) {
+  const leaders = project.leaders ?? []
+  const fields = project.researchFields ?? []
+  const shownLeaders = leaders.slice(0, 3)
+  const remainingLeaderCount = leaders.length - shownLeaders.length
+  const description = project.description || project.goal || 'Thông tin chi tiết đang được cập nhật.'
+  const publicStatus = project.publicStatus
 
   return (
     <Link className="project-directory-card" to={`/du-an/${project.id}`}>
       <div className="project-directory-card-body">
         <div className="project-directory-card-topline">
           <span className="project-directory-card-code">{project.code}</span>
-          {project.isFeatured ? <span className="project-directory-card-featured">Nổi bật</span> : null}
+          <span className="project-directory-card-public-status">{PUBLIC_PROJECT_STATUS_LABELS[publicStatus]}</span>
         </div>
 
         <div className="project-directory-card-badges">
-          <span className={`badge ${PROJECT_STATUS_BADGES[project.status]}`}>
-            <span className="dot" />
-            {PROJECT_STATUS_LABELS[project.status]}
-          </span>
           <span className="project-directory-card-type">{PROJECT_TYPE_LABELS[project.projectType]}</span>
-          {!project.isPublic ? <span className="project-directory-card-internal">Nội bộ</span> : null}
+          {project.publicStatus === 'RECRUITING' ? <span className="project-directory-card-recruiting">Đang tuyển</span> : null}
         </div>
 
-        <h3 className="project-directory-card-title">{project.name}</h3>
-        <p className={`project-directory-card-description${project.description ? '' : ' is-fallback'}`}>
-          {project.description || 'Dự án chưa có mô tả.'}
-        </p>
+        <h2 className="project-directory-card-title">{project.name}</h2>
+        <p className="project-directory-card-description">{description}</p>
+
+        {fields.length > 0 ? (
+          <div className="project-directory-card-fields" aria-label="Lĩnh vực nghiên cứu">
+            {fields.slice(0, 2).map((field) => <span className="chip" key={field.id}>{field.name}</span>)}
+            {fields.length > 2 ? <span className="chip">+{fields.length - 2}</span> : null}
+          </div>
+        ) : null}
 
         <div className="project-directory-card-footer">
           {shownLeaders.length > 0 ? (
-            <span className="project-directory-card-leaders" aria-label={`${project.leaders.length} leader`}>
-              {shownLeaders.map((leader) => (
-                <span className="ava xs" title={leader.name} key={leader.userId}>
-                  {initialsOf(leader.name)}
-                </span>
-              ))}
+            <span className="project-directory-card-leaders" aria-label={`${leaders.length} leader`}>
+              {shownLeaders.map((leader, index) => <span className="ava xs" title={leader.name} key={`${leader.name}-${index}`}>{initialsOf(leader.name)}</span>)}
               {remainingLeaderCount > 0 ? <span className="ava xs">+{remainingLeaderCount}</span> : null}
             </span>
           ) : (
@@ -296,13 +263,31 @@ function ProjectCard({ project }: { project: Project }) {
   )
 }
 
+
+function asProjectType(value: string | null): ProjectType | 'ALL' {
+  return value && PROJECT_TYPES.includes(value as ProjectType) ? value as ProjectType : 'ALL'
+}
+
+function asPublicProjectStatus(value: string | null): PublicProjectStatus | 'ALL' {
+  return value && PUBLIC_PROJECT_STATUSES.includes(value as PublicProjectStatus) ? value as PublicProjectStatus : 'ALL'
+}
+
+function parsePage(value: string | null) {
+  const page = Number(value)
+  return Number.isInteger(page) && page > 0 ? page : 1
+}
+
+function formatRange(page: number, size: number, total: number) {
+  if (total === 0) return '0 / 0'
+  return `${(page - 1) * size + 1}–${Math.min(page * size, total)} / ${total}`
+}
+
+function projectListError(reason: unknown) {
+  return reason instanceof ApiClientError && reason.message
+    ? reason.message
+    : 'Không thể tải danh sách dự án. Vui lòng thử lại.'
+}
+
 function initialsOf(name: string) {
-  return name
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(-2)
-    .map((part) => part.charAt(0))
-    .join('')
-    .toLocaleUpperCase('vi')
+  return name.trim().split(/\s+/).filter(Boolean).slice(-2).map((part) => part.charAt(0)).join('').toLocaleUpperCase('vi')
 }

@@ -48,10 +48,14 @@ export type CreateEventPayload = {
 
 export type UpdateEventPayload = Omit<Partial<CreateEventPayload>, 'projectId'>
 
+export type PublicEventSort = 'LATEST'
+
 export type EventListFilters = {
   projectId?: number
   status?: EventStatus
   upcoming?: boolean
+  limit?: number
+  sort?: PublicEventSort
 }
 
 export const EVENT_MODE_LABELS: Record<EventMode, string> = {

@@ -65,7 +65,19 @@ public class SecurityConfig {
                                 "/posts",
                                 "/posts/public/*",
                                 "/posts/*/files/*",
-                                "/events/public"
+                                "/events/public",
+                                "/events/public/*",
+                                "/projects/public",
+                                "/projects/public/*",
+                                "/projects/public/recruiting",
+                                "/achievements",
+                                "/achievements/years",
+                                "/achievements/*/files/*",
+                                "/news",
+                                "/news/archive",
+                                "/articles/latest",
+                                "/articles",
+                                "/articles/*"
                         ).permitAll()
                         .requestMatchers(HttpMethod.GET, "/projects/leader-candidates").authenticated()
                         .requestMatchers(

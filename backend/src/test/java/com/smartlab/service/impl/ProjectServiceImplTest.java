@@ -8,6 +8,10 @@ import com.smartlab.dto.request.UpdateProjectLeadershipRequest;
 import com.smartlab.dto.response.LeaderCandidateResponse;
 import com.smartlab.dto.response.ProjectLeaderResponse;
 import com.smartlab.dto.response.ProjectResponse;
+import com.smartlab.dto.response.PublicProjectDetailResponse;
+import com.smartlab.dto.response.PublicProjectLeaderResponse;
+import com.smartlab.dto.response.PublicPageResponse;
+import com.smartlab.dto.response.PublicProjectSummaryResponse;
 import com.smartlab.entity.ProjectEntity;
 import com.smartlab.entity.ProjectMemberEntity;
 import com.smartlab.entity.UserEntity;
@@ -15,8 +19,10 @@ import com.smartlab.enums.ProjectMemberStatus;
 import com.smartlab.enums.ProjectRole;
 import com.smartlab.enums.ProjectStatus;
 import com.smartlab.enums.ProjectType;
+import com.smartlab.enums.PublicProjectStatus;
 import com.smartlab.repo.ProjectMemberRepository;
 import com.smartlab.repo.ProjectRepository;
+import com.smartlab.repo.ProjectResearchFieldRepository;
 import com.smartlab.repo.UserRepository;
 import com.smartlab.service.AuditService;
 import com.smartlab.service.PermissionService;
@@ -28,7 +34,10 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -41,8 +50,11 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -55,6 +67,9 @@ class ProjectServiceImplTest {
 
     @Mock
     private ProjectMemberRepository projectMemberRepository;
+
+    @Mock
+    private ProjectResearchFieldRepository projectResearchFieldRepository;
 
     @Mock
     private UserRepository userRepository;
@@ -840,6 +855,182 @@ class ProjectServiceImplTest {
         assertThat(response.getPrimaryLeader().getUserId()).isEqualTo("primary-user");
     }
 
+    @Test
+    void publicRecruitingListDelegatesEligibleStatusesAndPreservesPageMetadata() {
+        UserEntity leader = user(2L, "leader-user", "leader@smartlab.test", true);
+        ProjectEntity project = recruitingProject(7L, leader, ProjectStatus.IN_PROGRESS, true, true);
+        when(projectRepository.findPublicRecruitingProjects(any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(project), PageRequest.of(2, 4), 9));
+        when(projectMemberRepository.findActiveLeadersByProjectIds(List.of(7L))).thenReturn(List.of());
+
+        PublicPageResponse<PublicProjectSummaryResponse> response = projectService.listPublicRecruiting(2, 4);
+
+        assertThat(response.items()).extracting(PublicProjectSummaryResponse::id).containsExactly(7L);
+        assertThat(response.page()).isEqualTo(2);
+        assertThat(response.size()).isEqualTo(4);
+        assertThat(response.totalElements()).isEqualTo(9);
+        assertThat(response.totalPages()).isEqualTo(3);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<ProjectStatus>> statuses = ArgumentCaptor.forClass(List.class);
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(projectRepository).findPublicRecruitingProjects(statuses.capture(), pageable.capture());
+        assertThat(statuses.getValue()).containsExactly(
+                ProjectStatus.PROPOSED, ProjectStatus.PREPARING, ProjectStatus.IN_PROGRESS
+        );
+        assertThat(pageable.getValue().getPageNumber()).isEqualTo(2);
+        assertThat(pageable.getValue().getPageSize()).isEqualTo(4);
+    }
+
+    @Test
+    void publicArchiveMapsDedicatedSummaryWithoutInternalProjectFields() {
+        UserEntity leader = user(2L, "leader-user", "leader@smartlab.test", true);
+        ProjectEntity project = recruitingProject(7L, leader, ProjectStatus.IN_PROGRESS, true, true);
+        when(projectRepository.findPublicProjects(any(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(project), PageRequest.of(0, 12), 1));
+        when(projectMemberRepository.findActiveLeadersByProjectIds(List.of(7L))).thenReturn(List.of());
+        when(projectResearchFieldRepository.findAllWithFieldByProjectIds(List.of(7L))).thenReturn(List.of());
+
+        PublicProjectSummaryResponse response = projectService
+                .listPublic(0, 12, null, null, null, null, null)
+                .items()
+                .getFirst();
+
+        assertThat(response.id()).isEqualTo(7L);
+        assertThat(response.publicStatus()).isEqualTo(PublicProjectStatus.RECRUITING);
+        assertThat(response.leaders()).containsExactly(new PublicProjectLeaderResponse("leader-user"));
+    }
+
+    @Test
+    void publicStatusUsesEffectiveRecruitingAcrossAllLifecycleCombinations() {
+        List<PublicTaxonomyCase> cases = List.of(
+                new PublicTaxonomyCase(ProjectStatus.PROPOSED, true, PublicProjectStatus.RECRUITING),
+                new PublicTaxonomyCase(ProjectStatus.PREPARING, true, PublicProjectStatus.RECRUITING),
+                new PublicTaxonomyCase(ProjectStatus.IN_PROGRESS, true, PublicProjectStatus.RECRUITING),
+                new PublicTaxonomyCase(ProjectStatus.PROPOSED, false, PublicProjectStatus.UPCOMING),
+                new PublicTaxonomyCase(ProjectStatus.PREPARING, false, PublicProjectStatus.UPCOMING),
+                new PublicTaxonomyCase(ProjectStatus.IN_PROGRESS, false, PublicProjectStatus.ACTIVE),
+                new PublicTaxonomyCase(ProjectStatus.PAUSED, false, PublicProjectStatus.ACTIVE),
+                new PublicTaxonomyCase(ProjectStatus.PAUSED, true, PublicProjectStatus.ACTIVE),
+                new PublicTaxonomyCase(ProjectStatus.COMPLETED, true, PublicProjectStatus.COMPLETED),
+                new PublicTaxonomyCase(ProjectStatus.CLOSED, true, PublicProjectStatus.COMPLETED)
+        );
+
+        for (int index = 0; index < cases.size(); index++) {
+            PublicTaxonomyCase testCase = cases.get(index);
+            reset(projectRepository, projectMemberRepository, projectResearchFieldRepository);
+            ProjectEntity project = recruitingProject(100L + index, null, testCase.lifecycle(), true, testCase.recruiting());
+            when(projectRepository.findPublicProjects(any(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), any(), any(Pageable.class)))
+                    .thenReturn(new PageImpl<>(List.of(project), PageRequest.of(0, 12), 1));
+            when(projectMemberRepository.findActiveLeadersByProjectIds(any())).thenReturn(List.of());
+            when(projectResearchFieldRepository.findAllWithFieldByProjectIds(any())).thenReturn(List.of());
+
+            PublicProjectSummaryResponse response = projectService.listPublic(0, 12, null, null, null, null, null).items().getFirst();
+
+            assertThat(response.publicStatus())
+                    .as("%s + isRecruiting=%s", testCase.lifecycle(), testCase.recruiting())
+                    .isEqualTo(testCase.expected());
+        }
+    }
+
+    @Test
+    void publicDetailReturnsOnlyActivePublicProjectWithCanonicalPublicStatus() {
+        UserEntity leader = user(2L, "leader-user", "leader@smartlab.test", true);
+        ProjectEntity project = recruitingProject(7L, leader, ProjectStatus.IN_PROGRESS, true, true);
+        when(projectRepository.findPublicById(7L)).thenReturn(Optional.of(project));
+        when(projectMemberRepository.findActiveLeadersByProjectIds(List.of(7L))).thenReturn(List.of());
+        when(projectResearchFieldRepository.findAllWithFieldByProjectId(7L)).thenReturn(List.of());
+
+        PublicProjectDetailResponse response = projectService.getPublic(7L);
+
+        assertThat(response.id()).isEqualTo(7L);
+        assertThat(response.publicStatus()).isEqualTo(PublicProjectStatus.RECRUITING);
+        assertThat(response.name()).isEqualTo(project.getName());
+        assertThat(response.primaryLeader()).isEqualTo(new PublicProjectLeaderResponse("leader-user"));
+        verify(userRepository, never()).findByEmail(any());
+        verifyNoInteractions(permissionService);
+    }
+
+    @Test
+    void publicDetailTreatsPrivateOrDeletedProjectAsNotFoundForEveryCaller() {
+        when(projectRepository.findPublicById(7L)).thenReturn(Optional.empty());
+
+        assertStatus(() -> projectService.getPublic(7L), HttpStatus.NOT_FOUND);
+        assertStatus(() -> projectService.getPublic(7L), HttpStatus.NOT_FOUND);
+
+        verify(projectRepository, org.mockito.Mockito.times(2)).findPublicById(7L);
+        verifyNoInteractions(userRepository, permissionService, projectMemberRepository, projectResearchFieldRepository);
+    }
+
+    @Test
+    void publicStatusFiltersUseEffectiveRecruitingExclusion() {
+        for (PublicProjectStatus status : PublicProjectStatus.values()) {
+            reset(projectRepository);
+            when(projectRepository.findPublicProjects(any(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), any(), any(Pageable.class)))
+                    .thenReturn(Page.empty());
+
+            projectService.listPublic(0, 12, null, null, null, null, status);
+
+            ArgumentCaptor<Boolean> recruitingOnly = ArgumentCaptor.forClass(Boolean.class);
+            ArgumentCaptor<Boolean> excludeEffectiveRecruiting = ArgumentCaptor.forClass(Boolean.class);
+            ArgumentCaptor<List<ProjectStatus>> recruitableStatuses = ArgumentCaptor.forClass(List.class);
+            verify(projectRepository).findPublicProjects(any(), any(), any(), recruitingOnly.capture(),
+                    excludeEffectiveRecruiting.capture(), recruitableStatuses.capture(), any(), any(), any(Pageable.class));
+
+            assertThat(recruitingOnly.getValue()).isEqualTo(status == PublicProjectStatus.RECRUITING);
+            assertThat(excludeEffectiveRecruiting.getValue()).isEqualTo(status != PublicProjectStatus.RECRUITING);
+            assertThat(recruitableStatuses.getValue()).containsExactly(
+                    ProjectStatus.PROPOSED, ProjectStatus.PREPARING, ProjectStatus.IN_PROGRESS
+            );
+        }
+    }
+
+    @Test
+    void publicListNormalizesNullableSearchStringsToNonNullSentinels() {
+        when(projectRepository.findPublicProjects(any(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), any(), any(Pageable.class)))
+                .thenReturn(Page.empty(PageRequest.of(0, 12)));
+
+        projectService.listPublic(0, 12, null, null, null, null, null);
+
+        ArgumentCaptor<String> query = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<String> fieldCode = ArgumentCaptor.forClass(String.class);
+        verify(projectRepository).findPublicProjects(query.capture(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), fieldCode.capture(), any(Pageable.class));
+
+        assertThat(query.getValue()).isEmpty();
+        assertThat(fieldCode.getValue()).isEmpty();
+    }
+
+    @Test
+    void publicListTrimsNonBlankSearchStringsAndConvertsBlankToSentinel() {
+        when(projectRepository.findPublicProjects(any(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), any(), any(Pageable.class)))
+                .thenReturn(Page.empty(PageRequest.of(0, 12)));
+
+        projectService.listPublic(0, 12, "  robot  ", null, "  AI  ", null, null);
+
+        ArgumentCaptor<String> query = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<String> fieldCode = ArgumentCaptor.forClass(String.class);
+        verify(projectRepository).findPublicProjects(query.capture(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), fieldCode.capture(), any(Pageable.class));
+
+        assertThat(query.getValue()).isEqualTo("robot");
+        assertThat(fieldCode.getValue()).isEqualTo("AI");
+
+        reset(projectRepository);
+        when(projectRepository.findPublicProjects(any(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), any(), any(Pageable.class)))
+                .thenReturn(Page.empty(PageRequest.of(0, 12)));
+
+        projectService.listPublic(0, 12, "  ", null, " \t", null, null);
+
+        verify(projectRepository).findPublicProjects(eq(""), any(), any(), anyBoolean(), anyBoolean(), any(), any(), eq(""), any(Pageable.class));
+    }
+
+    @Test
+    void publicRecruitingListRejectsInvalidPageAndSizeBeforeQuerying() {
+        assertStatus(() -> projectService.listPublicRecruiting(-1, 4), HttpStatus.BAD_REQUEST);
+        assertStatus(() -> projectService.listPublicRecruiting(0, 0), HttpStatus.BAD_REQUEST);
+        assertStatus(() -> projectService.listPublicRecruiting(0, 25), HttpStatus.BAD_REQUEST);
+
+        verifyNoInteractions(projectRepository);
+    }
+
     private void stubAdmin(UserEntity admin) {
         when(userRepository.findByEmail(admin.getEmail())).thenReturn(Optional.of(admin));
         when(permissionService.getRoleCodes(admin)).thenReturn(Set.of("ADMIN"));
@@ -879,6 +1070,33 @@ class ProjectServiceImplTest {
         return project;
     }
 
+    private static ProjectEntity recruitingProject(
+            Long id,
+            UserEntity leader,
+            ProjectStatus status,
+            boolean isPublic,
+            boolean isRecruiting
+    ) {
+        ProjectEntity project = ProjectEntity.create(
+                "SL-" + id,
+                "Project " + id,
+                null,
+                null,
+                ProjectType.RESEARCH,
+                leader,
+                status,
+                LocalDate.of(2026, 8, 1),
+                LocalDate.of(2026, 12, 1),
+                null,
+                isPublic,
+                false,
+                isRecruiting,
+                user(1L, "admin-user", "admin@smartlab.test", true)
+        );
+        ReflectionTestUtils.setField(project, "id", id);
+        return project;
+    }
+
     private static UserEntity user(Long id, String userId, String email, boolean active) {
         return UserEntity.builder()
                 .id(id)
@@ -888,6 +1106,8 @@ class ProjectServiceImplTest {
                 .isActive(active)
                 .build();
     }
+
+    private record PublicTaxonomyCase(ProjectStatus lifecycle, boolean recruiting, PublicProjectStatus expected) { }
 
     private static void assertStatus(Runnable action, HttpStatus expectedStatus) {
         assertThatThrownBy(action::run)

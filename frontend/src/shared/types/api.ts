@@ -65,6 +65,7 @@ export type ResearchField = {
   code: string
   name: string
   description?: string
+  coverFileId?: number | null
   isActive: boolean
 }
 

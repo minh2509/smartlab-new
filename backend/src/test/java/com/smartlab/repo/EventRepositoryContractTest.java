@@ -13,6 +13,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.time.Instant;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -45,20 +46,51 @@ class EventRepositoryContractTest {
     }
 
     @Test
-    void publicListIsConstrainedByVisibilityAndNeverAcceptsAProjectFilter()
-            throws NoSuchMethodException {
+    void publicArchiveQuerySupportsSearchAndReturnsAPage() throws NoSuchMethodException {
         Method method = EventRepository.class.getMethod(
-                "findPublicEvents",
+                "findPublicEventsPage",
                 EventVisibility.class,
                 EventStatus.class,
                 Boolean.class,
-                Instant.class
+                String.class,
+                Instant.class,
+                org.springframework.data.domain.Pageable.class
         );
         String query = method.getAnnotation(Query.class).value();
 
-        assertThat(query).contains("e.deletedAt is null", "e.visibility = :visibility");
-        assertThat(query).doesNotContain("projectId");
-        assertThat(query).contains(":status is null", ":upcoming = true", ":upcoming = false");
+        assertThat(method.getReturnType()).isEqualTo(org.springframework.data.domain.Page.class);
+        assertThat(query).contains(
+                "e.visibility = :visibility",
+                ":status is null",
+                ":upcoming is null",
+                ":query = ''",
+                "lower(e.title)",
+                "order by e.startAt desc, e.id desc"
+        );
+        assertThat(query).doesNotContain(":query is null");
+    }
+
+    @Test
+    void boundedPublicPreviewQueriesRequirePageableAndNeverAcceptAProjectFilter()
+            throws NoSuchMethodException {
+        for (String methodName : List.of("findPublicEventsLimited", "findPublicEventsLatest")) {
+            Method method = EventRepository.class.getMethod(
+                    methodName,
+                    EventVisibility.class,
+                    EventStatus.class,
+                    Boolean.class,
+                    Instant.class,
+                    org.springframework.data.domain.Pageable.class
+            );
+            String query = method.getAnnotation(Query.class).value();
+
+            assertThat(method.getReturnType()).isEqualTo(List.class);
+            assertThat(query).contains("e.deletedAt is null", "e.visibility = :visibility");
+            assertThat(query).doesNotContain("projectId");
+            assertThat(query).contains(":status is null", ":upcoming = true", ":upcoming = false");
+        }
+        assertThat(EventRepository.class.getDeclaredMethods())
+                .noneMatch(method -> method.getName().equals("findPublicEvents"));
     }
 
     @Test

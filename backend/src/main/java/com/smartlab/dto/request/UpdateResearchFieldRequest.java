@@ -12,4 +12,8 @@ public class UpdateResearchFieldRequest {
     private String description;
 
     private Boolean isActive;
+
+    private Long coverFileId;
+
+    private Boolean removeCover;
 }

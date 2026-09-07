@@ -6,7 +6,9 @@ import com.smartlab.entity.UserEntity;
 import com.smartlab.enums.FileAccessScope;
 import com.smartlab.repo.DocumentRepository;
 import com.smartlab.repo.DocumentVersionRepository;
+import com.smartlab.repo.LabAchievementFileRepository;
 import com.smartlab.repo.ProjectRepository;
+import com.smartlab.repo.ResearchFieldRepository;
 import com.smartlab.repo.StoredFileRepository;
 import com.smartlab.repo.TaskAttachmentRepository;
 import com.smartlab.repo.MemberProfileRepository;
@@ -74,6 +76,8 @@ public class FileServiceImpl implements FileService, PostContentFileService {
     private final DocumentRepository documentRepository;
     private final DocumentVersionRepository documentVersionRepository;
     private final TaskAttachmentRepository taskAttachmentRepository;
+    private final ResearchFieldRepository researchFieldRepository;
+    private final LabAchievementFileRepository achievementFileRepository;
 
     @Value("${smartlab.file.max-size-bytes:26214400}")
     private long maxFileSizeBytes;
@@ -226,7 +230,8 @@ public class FileServiceImpl implements FileService, PostContentFileService {
                         file.getOwnerUser() == null ? null : file.getOwnerUser().getId(),
                         file.getMimeType(),
                         file.getOriginalName(),
-                        isAllowedImageMimeType(file.getMimeType())
+                        isAllowedImageMimeType(file.getMimeType()),
+                        file.getAccessScope()
                 ));
     }
 
@@ -259,6 +264,12 @@ public class FileServiceImpl implements FileService, PostContentFileService {
         }
         if (taskAttachmentRepository.existsByFile_IdAndTask_DeletedAtIsNull(id)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "File is currently attached to an active task");
+        }
+        if (researchFieldRepository.existsByCoverFile_Id(id)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "File is currently used as a research field cover");
+        }
+        if (achievementFileRepository.existsActiveReferenceForActiveAchievement(id)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "File is currently attached to an active achievement");
         }
         try {
             fileStorage.trash(entity.getStorageKey());

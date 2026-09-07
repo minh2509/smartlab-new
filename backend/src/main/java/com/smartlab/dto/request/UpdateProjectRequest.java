@@ -48,4 +48,7 @@ public class UpdateProjectRequest {
 
     @Schema(description = "Whether the project is featured", example = "true")
     private Boolean isFeatured;
+
+    @Schema(description = "Whether this project is currently recruiting members", example = "true")
+    private Boolean isRecruiting;
 }

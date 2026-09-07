@@ -8,8 +8,13 @@ import com.smartlab.dto.request.UpdateProjectLeadershipRequest;
 import com.smartlab.dto.response.LeaderCandidateResponse;
 import com.smartlab.dto.response.ProjectLeaderResponse;
 import com.smartlab.dto.response.ProjectResponse;
+import com.smartlab.dto.response.PublicProjectDetailResponse;
+import com.smartlab.dto.response.PublicProjectLeaderResponse;
+import com.smartlab.dto.response.PublicPageResponse;
+import com.smartlab.dto.response.PublicProjectSummaryResponse;
 import com.smartlab.enums.ProjectStatus;
 import com.smartlab.enums.ProjectType;
+import com.smartlab.enums.PublicProjectStatus;
 import com.smartlab.service.ProjectService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -83,6 +88,57 @@ class ProjectControllerTest {
                 .andExpect(jsonPath("$[0].code").value("SL-AI"))
                 .andExpect(jsonPath("$[0].primaryLeader.userId").value("leader-user"))
                 .andExpect(jsonPath("$[0].leaders[0].userId").value("leader-user"));
+    }
+
+    @Test
+    void listsPublicProjectsWithServerSideFiltersAndPagination() throws Exception {
+        when(projectService.listPublic(
+                1, 12, "robot", 3L, "ai", ProjectType.RESEARCH, PublicProjectStatus.RECRUITING
+        )).thenReturn(new PublicPageResponse<>(List.of(publicSummaryResponse()), 1, 12, 13, 2));
+
+        mockMvc.perform(get("/projects/public")
+                        .queryParam("page", "1")
+                        .queryParam("size", "12")
+                        .queryParam("q", "robot")
+                        .queryParam("researchFieldId", "3")
+                        .queryParam("field", "ai")
+                        .queryParam("projectType", "RESEARCH")
+                        .queryParam("status", "RECRUITING"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].id").value(7))
+                .andExpect(jsonPath("$.page").value(1))
+                .andExpect(jsonPath("$.size").value(12))
+                .andExpect(jsonPath("$.totalElements").value(13))
+                .andExpect(jsonPath("$.totalPages").value(2))
+                .andExpect(jsonPath("$.items[0].publicStatus").value("RECRUITING"))
+                .andExpect(jsonPath("$.items[0].leaders[0].name").value("Leader"))
+                .andExpect(jsonPath("$.items[0].leaders[0].userId").doesNotExist())
+                .andExpect(jsonPath("$.items[0].status").doesNotExist())
+                .andExpect(jsonPath("$.items[0].isPublic").doesNotExist())
+                .andExpect(jsonPath("$.items[0].isRecruiting").doesNotExist())
+                .andExpect(jsonPath("$.items[0].createdAt").doesNotExist())
+                .andExpect(jsonPath("$.items[0].updatedAt").doesNotExist());
+
+        verify(projectService).listPublic(1, 12, "robot", 3L, "ai", ProjectType.RESEARCH, PublicProjectStatus.RECRUITING);
+    }
+
+    @Test
+    void getsPublicProjectDetailThroughDedicatedContract() throws Exception {
+        when(projectService.getPublic(7L)).thenReturn(publicDetailResponse());
+
+        mockMvc.perform(get("/projects/public/7"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(7))
+                .andExpect(jsonPath("$.publicStatus").value("RECRUITING"))
+                .andExpect(jsonPath("$.status").doesNotExist())
+                .andExpect(jsonPath("$.isPublic").doesNotExist())
+                .andExpect(jsonPath("$.createdAt").doesNotExist())
+                .andExpect(jsonPath("$.primaryLeader.name").value("Leader"))
+                .andExpect(jsonPath("$.primaryLeader.userId").doesNotExist())
+                .andExpect(jsonPath("$.leaders[0].name").value("Leader"))
+                .andExpect(jsonPath("$.leaders[0].userId").doesNotExist());
+
+        verify(projectService).getPublic(7L);
     }
 
     @Test
@@ -382,5 +438,40 @@ class ProjectControllerTest {
                 .userId(userId)
                 .name(userId)
                 .build();
+    }
+
+    private static PublicProjectDetailResponse publicDetailResponse() {
+        PublicProjectLeaderResponse leader = new PublicProjectLeaderResponse("Leader");
+        return new PublicProjectDetailResponse(
+                7L,
+                "SL-AI",
+                "Smart Lab AI",
+                "Public description",
+                "Public goal",
+                ProjectType.RESEARCH,
+                PublicProjectStatus.RECRUITING,
+                null,
+                null,
+                null,
+                true,
+                List.of(),
+                leader,
+                List.of(leader)
+        );
+    }
+
+    private static PublicProjectSummaryResponse publicSummaryResponse() {
+        PublicProjectLeaderResponse leader = new PublicProjectLeaderResponse("Leader");
+        return new PublicProjectSummaryResponse(
+                7L,
+                "SL-AI",
+                "Smart Lab AI",
+                "Public description",
+                "Public goal",
+                ProjectType.RESEARCH,
+                PublicProjectStatus.RECRUITING,
+                List.of(),
+                List.of(leader)
+        );
     }
 }

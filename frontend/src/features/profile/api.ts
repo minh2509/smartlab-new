@@ -39,6 +39,18 @@ export function uploadAvatar(token: string, file: File) {
   })
 }
 
+export function uploadPublicImage(token: string, file: File, description = 'Public image') {
+  const body = new FormData()
+  body.append('file', file)
+  body.append('accessScope', 'PUBLIC')
+  body.append('description', description)
+  return apiClient<FileResponse>('/files/upload', {
+    method: 'POST',
+    token,
+    body,
+  })
+}
+
 export function downloadFile(token: string, fileId: number) {
   const baseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1.0'
   return fetch(`${baseUrl}/files/${fileId}`, {

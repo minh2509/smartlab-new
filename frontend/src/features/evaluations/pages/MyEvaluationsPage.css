@@ -1,5 +1,6 @@
 .my-evaluations-page {
-  width: min(100%, 1080px);
+  width: 100%;
+  min-width: 0;
 }
 
 .my-evaluations-header {

@@ -62,6 +62,9 @@ public class ProjectJoinRequestServiceImpl implements ProjectJoinRequestService 
     ) {
         ProjectEntity project = requireProjectForUpdate(projectId);
         UserEntity requester = requireRequesterAccess(project, currentEmail);
+        if (!project.isOpenForRecruitment()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "This project is not open for recruitment");
+        }
         if (projectMemberRepository.existsByProject_IdAndUser_IdAndStatus(
                 projectId,
                 requester.getId(),

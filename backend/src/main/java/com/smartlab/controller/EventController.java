@@ -3,7 +3,9 @@ package com.smartlab.controller;
 import com.smartlab.dto.request.CreateEventRequest;
 import com.smartlab.dto.request.UpdateEventRequest;
 import com.smartlab.dto.response.EventResponse;
+import com.smartlab.dto.response.PublicPageResponse;
 import com.smartlab.enums.EventStatus;
+import com.smartlab.enums.PublicEventSort;
 import com.smartlab.service.EventService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -41,9 +43,31 @@ public class EventController {
     @Operation(summary = "List public events")
     public List<EventResponse> listPublic(
             @RequestParam(required = false) EventStatus status,
-            @RequestParam(required = false) Boolean upcoming
+            @RequestParam(required = false) Boolean upcoming,
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) PublicEventSort sort
     ) {
-        return eventService.listPublic(status, upcoming);
+        return eventService.listPublic(status, upcoming, limit, sort);
+    }
+
+    @GetMapping("/public/archive")
+    @PreAuthorize("permitAll()")
+    @Operation(summary = "List public events with server-side pagination and filters")
+    public PublicPageResponse<EventResponse> listPublicArchive(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "12") int size,
+            @RequestParam(required = false) EventStatus status,
+            @RequestParam(required = false) Boolean upcoming,
+            @RequestParam(name = "q", required = false) String query
+    ) {
+        return eventService.listPublicArchive(page, size, status, upcoming, query);
+    }
+
+    @GetMapping("/public/{id}")
+    @PreAuthorize("permitAll()")
+    @Operation(summary = "Get one public event")
+    public EventResponse getPublic(@PathVariable @Positive(message = "Event id must be positive") Long id) {
+        return eventService.getPublic(id);
     }
 
     @GetMapping

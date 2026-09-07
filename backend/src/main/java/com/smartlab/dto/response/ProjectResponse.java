@@ -2,6 +2,7 @@ package com.smartlab.dto.response;
 
 import com.smartlab.enums.ProjectStatus;
 import com.smartlab.enums.ProjectType;
+import com.smartlab.enums.PublicProjectStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Data;
@@ -27,11 +28,14 @@ public class ProjectResponse {
     private String goal;
     private ProjectType projectType;
     private ProjectStatus status;
+    private PublicProjectStatus publicStatus;
     private LocalDate startDate;
     private LocalDate expectedEndDate;
     private LocalDate actualEndDate;
     private Boolean isPublic;
     private Boolean isFeatured;
+    private Boolean isRecruiting;
+    private List<ProjectResearchFieldResponse> researchFields;
 
     @Schema(description = "Primary leader retained for project ownership metadata")
     private ProjectLeaderResponse primaryLeader;
