@@ -1213,9 +1213,10 @@ select {
 }
 
 .field-admin-actions .btn.table-btn {
-  width: 36px;
-  min-height: 34px;
-  padding: 7px;
+  width: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 10px;
 }
 
 .profile-save-actions {
@@ -2002,16 +2003,21 @@ select {
 }
 
 .btn.table-btn {
-  min-height: 40px;
-  padding: 8px 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 10px 14px;
   border-radius: var(--r-sm);
   font-size: 13px;
   white-space: nowrap;
 }
 
 .btn.table-btn svg {
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
+  flex: none;
 }
 
 .pagination-bar {
