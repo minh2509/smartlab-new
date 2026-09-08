@@ -1,5 +1,5 @@
 import { ChevronDown, LogIn, LogOut, Newspaper } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../../features/auth/authContext'
 import { NotificationPopover } from '../../features/notifications/components/NotificationPopover'
@@ -107,31 +107,102 @@ function AboutDropdown() {
   const [isOpen, setOpen] = useState(false)
   const location = useLocation()
   const menuRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const rafRef = useRef<number | null>(null)
   const isActive = aboutLinks.some((link) => link.to === location.pathname)
+
+  const resetDrift = useCallback(() => {
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current)
+      rafRef.current = null
+    }
+    if (menuRef.current) {
+      menuRef.current.style.setProperty('--dropdown-drift', '0px')
+    }
+  }, [])
 
   useEffect(() => {
     setOpen(false)
-  }, [location.pathname])
+    resetDrift()
+  }, [location.pathname, resetDrift])
 
   useEffect(() => {
     function handlePointerDown(event: PointerEvent) {
       if (!menuRef.current?.contains(event.target as Node)) {
         setOpen(false)
+        resetDrift()
       }
     }
 
     document.addEventListener('pointerdown', handlePointerDown)
-    return () => document.removeEventListener('pointerdown', handlePointerDown)
-  }, [])
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current)
+      }
+    }
+  }, [resetDrift])
+
+  const handlePointerMove = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (event.pointerType === 'touch') return
+    if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+
+    const clientX = event.clientX
+    if (rafRef.current) cancelAnimationFrame(rafRef.current)
+    rafRef.current = requestAnimationFrame(() => {
+      if (!triggerRef.current || !menuRef.current) return
+      const rect = triggerRef.current.getBoundingClientRect()
+      if (rect.width <= 0) return
+
+      // Normalized X relative to trigger: left edge = -1, center = 0, right edge = +1
+      const rawNormalized = ((clientX - rect.left) / rect.width) * 2 - 1
+      const normalized = Math.max(-1, Math.min(1, rawNormalized))
+
+      // Restrained, subtle travel distance (10px max)
+      // Sine curve softens extremes and gives physical, spring-like boundary
+      const MAX_DRIFT = 10
+      const drift = Math.sin(normalized * (Math.PI / 2)) * MAX_DRIFT
+
+      // Viewport collision clamping
+      const triggerCenterX = rect.left + rect.width / 2
+      const halfMenuWidth = 146 // 292px width
+      const VIEWPORT_PADDING = 12
+      let clampedDrift = drift
+      const projectedLeft = triggerCenterX - halfMenuWidth + drift
+      const projectedRight = triggerCenterX + halfMenuWidth + drift
+
+      if (projectedLeft < VIEWPORT_PADDING) {
+        clampedDrift += (VIEWPORT_PADDING - projectedLeft)
+      } else if (projectedRight > window.innerWidth - VIEWPORT_PADDING) {
+        clampedDrift -= (projectedRight - (window.innerWidth - VIEWPORT_PADDING))
+      }
+
+      menuRef.current.style.setProperty('--dropdown-drift', `${clampedDrift.toFixed(2)}px`)
+    })
+  }
 
   return (
-    <div className={isOpen ? 'nav-dropdown open' : 'nav-dropdown'} ref={menuRef}>
+    <div
+      className={isOpen ? 'nav-dropdown open' : 'nav-dropdown'}
+      ref={menuRef}
+      onPointerLeave={resetDrift}
+    >
       <button
+        ref={triggerRef}
         className={isActive ? 'nav-dropdown-trigger active' : 'nav-dropdown-trigger'}
         type="button"
         aria-expanded={isOpen}
         aria-haspopup="true"
         onClick={() => setOpen((value) => !value)}
+        onPointerMove={handlePointerMove}
+        onPointerLeave={resetDrift}
+        onFocus={resetDrift}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            setOpen(false)
+            resetDrift()
+          }
+        }}
       >
         Giới thiệu
         <ChevronDown aria-hidden="true" />
