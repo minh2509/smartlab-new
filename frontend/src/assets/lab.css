@@ -22,26 +22,28 @@
   --accent-ink:#A83E00;   /* cam đậm — chữ trên nền cam nhạt */
 
   /* Bề mặt và chữ — Warm Architectural System */
-  --page:              #FBF9F4;   /* Nền trang ấm áp, chuyển tiếp tự nhiên với Hero */
-  --bg-base:           #F8F5EE;   /* Nền canvas phụ / workspace / auth */
-  --surface:           #FFFFFF;   /* Bề mặt nội dung trắng sắc nét */
-  --surface-card:      #FFFFFF;   /* Bề mặt thẻ / panel */
-  --surface-elevated:  #FAF7F1;   /* Bề mặt nâng cao / auth card / floating panel */
-  --surface-popup:     #FAF7F0;   /* Bề mặt menu nổi / popover / select menu */
-  --surface-modal:     #FAF7F1;   /* Bề mặt hộp thoại / dialog window */
-  --surface-2:         #F5F1E8;   /* Nền phụ ấm */
+  --page:              #FAF8F3;   /* Nền trang ấm áp, chuyển tiếp tự nhiên với Hero */
+  --bg-base:           #F4EFE6;   /* Nền canvas phụ / workspace / auth */
+  --surface:           #FDFBF7;   /* Bề mặt nội dung ấm áp, giảm chói mắt */
+  --surface-card:      #FDFBF7;   /* Bề mặt thẻ / panel ấm áp */
+  --surface-card-hover:#FFFFFF;   /* Khi tương tác hover nâng sáng */
+  --surface-elevated:  #FDFBF7;   /* Bề mặt nâng cao / auth card / floating panel */
+  --surface-popup:     #FCFAF5;   /* Bề mặt menu nổi / popover / select menu */
+  --surface-modal:     #FCFAF6;   /* Bề mặt hộp thoại / dialog window */
+  --surface-2:         #F3EFE6;   /* Nền phụ ấm */
   --surface-btn:       #FAF7F0;   /* Bề mặt nút phụ / icon button */
-  --surface-input:     #FFFFFF;   /* Bề mặt ô nhập dữ liệu */
-  --sunken:            #ECE7DC;   /* Nền lún ấm */
+  --surface-input:     #FAF7F0;   /* Bề mặt ô nhập dữ liệu nghỉ ngơi */
+  --surface-input-focus:#FFFFFF;  /* Bề mặt ô nhập khi focus */
+  --sunken:            #ECE6D8;   /* Nền lún ấm */
   --text-1:            #0A1B33;   /* Deep ink navy, đồng bộ tiêu đề Hero */
   --text-2:            #384A64;   /* Slate navy, đồng bộ lead Hero */
   --text-3:            #6E7F96;   /* Chữ phụ mờ nhẹ */
   --on-brand:          #FFFFFF;
 
-  --line:              #E6E1D6;   /* Đường viền kiến trúc ấm */
-  --line-2:            #D5CEBF;   /* Đường phân cách rõ hơn */
+  --line:              #E8E2D5;   /* Đường viền kiến trúc ấm */
+  --line-2:            #D8D0BF;   /* Đường phân cách rõ hơn */
   --line-input:        #D5CEBF;   /* Đường viền ô nhập dữ liệu */
-  --grid:              #ECE7DC;   /* Đường lưới đồ thị kỹ thuật */
+  --grid:              rgba(11, 47, 94, 0.045); /* Đường lưới đồ thị kỹ thuật */
 
   /* Màu dữ liệu — 5 slot, dùng cho lĩnh vực / avatar / biểu đồ */
   --s1: #2A78D6;  /* AI */
@@ -177,8 +179,8 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 0; }
 /* ---------------------------------------------------- 5. TIÊU ĐỀ KHỐI / SECTION */
 .section { padding: 84px 0; }
 .section.tight { padding: 56px 0; }
-.section.alt { background: var(--surface); border-block: 1px solid var(--line); }
-.section.sunk { background: var(--surface-2); border-block: 1px solid var(--line); }
+.section.alt { background: var(--surface-2); border-block: 1px solid var(--line); }
+.section.sunk { background: var(--sunken); border-block: 1px solid var(--line); }
 
 .kicker {
   display: inline-flex; align-items: center; gap: 9px;
@@ -198,11 +200,18 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 0; }
 
 /* --------------------------------------------------------------- 6. THẺ CARD */
 .card {
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg);
-  transition: border-color .18s, transform .18s, box-shadow .18s;
+  background: var(--surface-card, #FDFBF7); border: 1px solid var(--line); border-radius: var(--r-lg);
+  box-shadow: var(--sh-1);
+  transition: border-color .2s ease, transform .2s ease, box-shadow .2s ease, background-color .2s ease;
 }
 .card.pad { padding: 26px; }
-a.card:hover, .card.hover:hover { border-color: var(--line-2); transform: translateY(-3px); box-shadow: var(--sh-2); text-decoration: none; }
+a.card:hover, .card.hover:hover {
+  background: var(--surface-card-hover, #FFFFFF);
+  border-color: var(--line-2);
+  transform: translateY(-3px);
+  box-shadow: var(--sh-2);
+  text-decoration: none;
+}
 
 .grid { display: grid; gap: 22px; }
 .grid.c2 { grid-template-columns: repeat(2, 1fr); }
@@ -278,7 +287,7 @@ a.card:hover, .card.hover:hover { border-color: var(--line-2); transform: transl
 
 .submenu {
   position: absolute; top: calc(100% + 8px); left: 0; min-width: 236px; padding: 8px;
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
+  background: var(--surface-popup, #FCFAF5); border: 1px solid var(--line); border-radius: var(--r);
   box-shadow: var(--sh-3); opacity: 0; visibility: hidden; transform: translateY(-6px);
   transition: opacity .16s, transform .16s, visibility .16s; z-index: 5;
 }
@@ -375,13 +384,14 @@ a.card:hover, .card.hover:hover { border-color: var(--line-2); transform: transl
 .field .hint { font-size: 12.5px; color: var(--text-3); }
 .input, .select, .textarea {
   width: 100%; padding: 11px 13px; font: inherit; font-size: 14.5px;
-  color: var(--text-1); background: var(--surface);
-  border: 1px solid var(--line-2); border-radius: var(--r-sm);
-  transition: border-color .15s, box-shadow .15s;
+  color: var(--text-1); background: var(--surface-input, #FAF7F0);
+  border: 1px solid var(--line-input, #D5CEBF); border-radius: var(--r-sm);
+  transition: border-color .15s, box-shadow .15s, background-color .15s;
 }
 .input::placeholder, .textarea::placeholder { color: var(--text-3); }
 .input:focus, .select:focus, .textarea:focus {
-  outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+  outline: none; background: var(--surface-input-focus, #FFFFFF);
+  border-color: var(--accent); box-shadow: 0 0 0 3.5px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 .textarea { min-height: 128px; resize: vertical; }
 .select { appearance: none; cursor: pointer; padding-right: 36px;
@@ -416,10 +426,11 @@ a.card:hover, .card.hover:hover { border-color: var(--line-2); transform: transl
 .pager { display: flex; align-items: center; justify-content: center; gap: 7px; margin-top: 46px; }
 .pager a, .pager span {
   min-width: 38px; height: 38px; display: grid; place-items: center; padding: 0 12px;
-  border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--surface);
+  border-radius: var(--r-sm); border: 1px solid var(--line-2); background: var(--surface-btn, #FAF7F0);
   color: var(--text-2); font-size: 14px; font-weight: 600;
+  transition: border-color .15s, background-color .15s, color .15s;
 }
-.pager a:hover { border-color: var(--line-2); color: var(--text-1); text-decoration: none; }
+.pager a:hover { border-color: var(--text-3); background: var(--surface-2); color: var(--text-1); text-decoration: none; }
 .pager .cur { background: var(--accent); border-color: var(--accent); color: #fff; }
 .pager .gap { border: 0; background: none; }
 
@@ -566,11 +577,11 @@ a.card:hover, .card.hover:hover { border-color: var(--line-2); transform: transl
 /* --- 17.3 Thẻ lĩnh vực --- */
 .fieldcard {
   position: relative; display: block; padding: 28px 26px 26px; overflow: hidden;
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg);
+  background: var(--surface-card, #FDFBF7); border: 1px solid var(--line); border-radius: var(--r-lg);
   box-shadow: var(--sh-1);
-  transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease;
+  transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease, background-color .18s ease;
 }
-.fieldcard:hover { border-color: var(--line-2); transform: translateY(-3px); box-shadow: var(--sh-2); text-decoration: none; }
+.fieldcard:hover { background: var(--surface-card-hover, #FFFFFF); border-color: var(--line-2); transform: translateY(-3px); box-shadow: var(--sh-2); text-decoration: none; }
 .fieldcard:focus-visible { outline: 2.5px solid var(--accent); outline-offset: 2px; border-radius: var(--r-lg); }
 .fieldcard .ico {
   width: 52px; height: 52px; border-radius: 14px; display: grid; place-items: center; margin-bottom: 20px;
@@ -592,10 +603,10 @@ a.card:hover, .card.hover:hover { border-color: var(--line-2); transform: transl
 .projcard {
   display: flex; flex-direction: column; overflow: hidden;
   box-shadow: var(--sh-1); border-radius: var(--r-lg);
-  background: var(--surface); border: 1px solid var(--line);
-  transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease;
+  background: var(--surface-card, #FDFBF7); border: 1px solid var(--line);
+  transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease, background-color .18s ease;
 }
-.projcard:hover { border-color: var(--line-2); transform: translateY(-3px); box-shadow: var(--sh-2); text-decoration: none; }
+.projcard:hover { background: var(--surface-card-hover, #FFFFFF); border-color: var(--line-2); transform: translateY(-3px); box-shadow: var(--sh-2); text-decoration: none; }
 .projcard:focus-visible { outline: 2.5px solid var(--accent); outline-offset: 2px; border-radius: var(--r-lg); }
 .projcard .cover { height: 158px; position: relative; }
 .projcard .cover .lbl { position: absolute; left: 14px; top: 14px; }
@@ -609,10 +620,10 @@ a.card:hover, .card.hover:hover { border-color: var(--line-2); transform: transl
 .postcard {
   display: flex; flex-direction: column; overflow: hidden;
   box-shadow: var(--sh-1); border-radius: var(--r-lg);
-  background: var(--surface); border: 1px solid var(--line);
-  transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease;
+  background: var(--surface-card, #FDFBF7); border: 1px solid var(--line);
+  transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease, background-color .18s ease;
 }
-.postcard:hover { border-color: var(--line-2); transform: translateY(-3px); box-shadow: var(--sh-2); text-decoration: none; }
+.postcard:hover { background: var(--surface-card-hover, #FFFFFF); border-color: var(--line-2); transform: translateY(-3px); box-shadow: var(--sh-2); text-decoration: none; }
 .postcard:focus-visible { outline: 2.5px solid var(--accent); outline-offset: 2px; border-radius: var(--r-lg); }
 .postcard .cover { height: 182px; }
 .postcard .body { padding: 22px; display: flex; flex-direction: column; gap: 11px; flex: 1; }

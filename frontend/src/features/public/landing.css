@@ -680,7 +680,7 @@
 }
 
 .landing-section-alt {
-  background: var(--surface);
+  background: var(--surface-2, #F3EFE6);
   border-block: 1px solid var(--line);
 }
 
@@ -829,7 +829,7 @@
 
 .landing-field-card {
   position: relative;
-  background: var(--surface);
+  background: var(--surface-card, #FDFBF7);
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   box-shadow: var(--sh-1);
@@ -839,10 +839,11 @@
   gap: 16px;
   text-decoration: none;
   color: inherit;
-  transition: border-color .25s ease, transform .25s ease, box-shadow .25s ease;
+  transition: border-color .25s ease, transform .25s ease, box-shadow .25s ease, background-color .25s ease;
 }
 
 .landing-field-card:hover {
+  background: var(--surface-card-hover, #FFFFFF);
   border-color: var(--line-2);
   transform: translateY(-3px);
   box-shadow: var(--sh-2);
@@ -997,17 +998,18 @@
 .landing-recruit-card {
   display: flex;
   flex-direction: column;
-  background: var(--surface);
+  background: var(--surface-card, #FDFBF7);
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   box-shadow: var(--sh-1);
   overflow: hidden;
-  transition: border-color .2s ease, transform .2s ease, box-shadow .2s ease;
+  transition: border-color .2s ease, transform .2s ease, box-shadow .2s ease, background-color .2s ease;
   text-decoration: none;
   color: inherit;
 }
 
 .landing-recruit-card:hover {
+  background: var(--surface-card-hover, #FFFFFF);
   border-color: var(--line-2);
   transform: translateY(-3px);
   box-shadow: var(--sh-2);
@@ -1177,7 +1179,7 @@
   justify-content: center;
   gap: 12px;
   border-radius: var(--r-lg);
-  background: var(--surface);
+  background: var(--surface-card, #FDFBF7);
   border: 1px solid var(--line);
   box-shadow: var(--sh-1);
 }
@@ -1372,7 +1374,7 @@
 }
 
 .landing-achievement-card {
-  background: var(--surface);
+  background: var(--surface-card, #FDFBF7);
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   box-shadow: var(--sh-1);
@@ -1381,10 +1383,11 @@
   flex-direction: column;
   text-decoration: none;
   color: inherit;
-  transition: border-color .2s ease, transform .2s ease, box-shadow .2s ease;
+  transition: border-color .2s ease, transform .2s ease, box-shadow .2s ease, background-color .2s ease;
 }
 
 .landing-achievement-card:hover {
+  background: var(--surface-card-hover, #FFFFFF);
   border-color: var(--line-2);
   transform: translateY(-3px);
   box-shadow: var(--sh-2);
@@ -1582,7 +1585,7 @@
 }
 
 .landing-news-card {
-  background: var(--surface);
+  background: var(--surface-card, #FDFBF7);
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   overflow: hidden;
@@ -1590,11 +1593,15 @@
   flex-direction: column;
   text-decoration: none;
   color: inherit;
-  transition: border-color .18s;
+  box-shadow: var(--sh-1);
+  transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease, background-color .18s ease;
 }
 
 .landing-news-card:hover {
+  background: var(--surface-card-hover, #FFFFFF);
   border-color: var(--line-2);
+  transform: translateY(-3px);
+  box-shadow: var(--sh-2);
 }
 
 .landing-news-cover {
@@ -2131,18 +2138,19 @@
 .landing-media-card {
   display: flex;
   flex-direction: column;
-  background: var(--surface);
+  background: var(--surface-card, #FDFBF7);
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   box-shadow: var(--sh-1);
   overflow: hidden;
   text-decoration: none;
   color: inherit;
-  transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+  transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease, background-color .2s ease;
   height: 100%;
 }
 
 .landing-media-card:hover {
+  background: var(--surface-card-hover, #FFFFFF);
   transform: translateY(-3px);
   box-shadow: var(--sh-2);
   border-color: var(--line-2);

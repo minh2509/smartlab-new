@@ -62,7 +62,7 @@
   padding: 0 34px 0 14px;
   border: 1px solid var(--line-input, #D5CEBF);
   border-radius: var(--r-sm);
-  background-color: var(--surface-input, #FFFFFF);
+  background-color: var(--surface-input, #FAF7F0);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23384A64' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 12px center;
@@ -72,13 +72,14 @@
   font-size: 13.5px;
   font-weight: 600;
   cursor: pointer;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
 }
 
 .achievement-archive-toolbar select:focus {
-  outline: 2.5px solid var(--accent);
-  outline-offset: 2px;
+  background-color: var(--surface-input-focus, #FFFFFF);
+  outline: none;
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(242, 113, 28, 0.16);
 }
 
 .achievement-archive-count {
@@ -125,12 +126,13 @@
   padding: 22px 24px;
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
-  background: var(--surface);
+  background: var(--surface-card, #FDFBF7);
   box-shadow: var(--sh-1);
-  transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+  transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
 }
 
 .achievement-archive-row:hover {
+  background: var(--surface-card-hover, #FFFFFF);
   border-color: var(--line-2);
   transform: translateY(-2px);
   box-shadow: var(--sh-2);

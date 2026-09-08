@@ -253,8 +253,9 @@
 }
 
 .task-card:hover {
-  border-color: #cbd5e1;
-  box-shadow: 0 6px 18px rgba(7, 21, 43, 0.08);
+  border-color: var(--line-2);
+  background: var(--surface-card-hover, #FFFFFF);
+  box-shadow: var(--sh-2);
   transform: translateY(-2px);
 }
 
@@ -340,7 +341,7 @@
 }
 
 .tasks-table tbody tr:hover {
-  background: #f8fafc;
+  background: color-mix(in srgb, var(--brand-3) 45%, var(--task-surface));
 }
 
 .tasks-table td strong,
@@ -738,13 +739,13 @@
   align-items: center;
   padding: 12px 14px;
   min-height: 44px;
-  border-bottom: 1px solid #edf1f6;
+  border-bottom: 1px solid var(--line);
   cursor: pointer;
   transition: background 120ms ease;
 }
 
 .assignee-picker label:hover {
-  background: #f8fafc;
+  background: color-mix(in srgb, var(--brand-3) 45%, var(--task-surface));
 }
 
 .assignee-picker label:last-child {

@@ -117,8 +117,8 @@
   gap: 12px;
   margin-bottom: 24px;
   padding: 12px 14px;
-  background: var(--surface);
-  border: 1px solid var(--line);
+  background: var(--surface-elevated, #FAF7F1);
+  border: 1px solid var(--line-2, #D5CEBF);
   border-radius: var(--r-lg);
   box-shadow: var(--sh-1);
 }
@@ -132,13 +132,14 @@
   min-height: 40px;
   padding: 0 13px;
   color: var(--text-3);
-  border: 1px solid var(--line-2);
+  border: 1px solid var(--line-input, #D5CEBF);
   border-radius: var(--r-sm);
-  background: var(--surface);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  background: var(--surface-input, #FAF7F0);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
 }
 
 .public-events-search:focus-within {
+  background: var(--surface-input-focus, #FFFFFF);
   border-color: var(--accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
 }
@@ -201,17 +202,18 @@
   gap: 20px;
   padding: 18px 20px;
   color: var(--text-1);
-  background: var(--surface);
+  background: var(--surface-card, #FDFBF7);
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   font: inherit;
   text-align: left;
   cursor: pointer;
   box-shadow: var(--sh-1);
-  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease, background-color 0.16s ease;
 }
 
 .event-directory-row:hover {
+  background: var(--surface-card-hover, #FFFFFF);
   border-color: var(--line-2);
   box-shadow: var(--sh-2);
   transform: translateY(-2px);
