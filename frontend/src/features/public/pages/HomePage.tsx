@@ -13,6 +13,7 @@ import { Link } from 'react-router-dom'
 import type { ResearchField } from '../../../shared/types/api'
 import '../../../assets/lab.css'
 import '../landing.css'
+import { SmartLabHero } from '../components/SmartLabHero'
 import { listPublicEvents } from '../../events/api'
 import type { LabEvent } from '../../events/types'
 import { listLatestNews } from '../newsApi'
@@ -236,36 +237,7 @@ export function HomePage() {
       {/* ═══════════════════════════════════════════════════════════
           1. HERO
           ═══════════════════════════════════════════════════════════ */}
-      <section className="landing-hero" aria-label="Giới thiệu Smart Lab">
-        <div className="landing-hero-in">
-
-          {/* Left — copy */}
-          <div className="landing-hero-copy">
-            <h1 className="landing-hero-title">
-              <span className="landing-hero-brand">SMART LAB</span>
-              <span className="landing-hero-headline">
-                Nghiên cứu thật.<br />
-                Dự án thật.<br />
-                Sản phẩm thật.
-              </span>
-            </h1>
-
-            <p className="landing-hero-lead">
-              Phòng nghiên cứu về AI, Robotics và Software Engineering,
-              nơi sinh viên cùng mentor xây dựng các dự án và sản phẩm thực tế.
-            </p>
-
-            <div className="landing-hero-cta">
-              <Link className="btn primary lg" to="/linh-vuc">
-                Khám phá lĩnh vực <ArrowRight size={17} />
-              </Link>
-              <Link className="btn outline-light lg" to="/du-an?status=RECRUITING">
-                Xem dự án đang tuyển
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
+      <SmartLabHero />
 
       {/* ═══════════════════════════════════════════════════════════
           2. RESEARCH AREAS
