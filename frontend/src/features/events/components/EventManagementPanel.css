@@ -23,10 +23,15 @@
 
 .event-scope-panel {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 560px);
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 480px);
   align-items: center;
   gap: 16px 28px;
-  padding: 18px 20px;
+  padding: 0 0 18px 0;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  box-shadow: none;
+  margin-bottom: 24px;
 }
 
 .event-scope-copy h2 {
@@ -57,6 +62,10 @@
 
 .event-list-panel {
   min-width: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
 }
 
 .event-list-head {
@@ -91,7 +100,9 @@
   grid-template-columns: minmax(260px, 1fr) minmax(170px, 210px) minmax(170px, 210px) auto;
   align-items: end;
   gap: 12px;
-  margin: 14px 0 12px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  margin: 14px 0 16px;
 }
 
 .event-search-field {

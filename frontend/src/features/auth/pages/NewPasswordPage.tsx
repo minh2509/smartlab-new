@@ -48,51 +48,51 @@ export function NewPasswordPage() {
   }
 
   return (
-    <section className="auth auth-shell">
-      <div className="auth-side">
-        <h2>Đặt mật khẩu mới</h2>
-        <p>Sau khi đổi mật khẩu, backend sẽ thu hồi toàn bộ phiên đăng nhập cũ của tài khoản.</p>
-      </div>
-
-      <div className="auth-form">
-        <form className="auth-box card pad" onSubmit={handleSubmit}>
+    <div className="auth-form-wrapper">
+      <form className="auth-form-console" onSubmit={handleSubmit}>
+        <div className="auth-mobile-brand">
           <Logo />
-          <div>
-            <h1>Mật khẩu mới</h1>
-            <p className="muted">Bước 3/3 · Email: {email}</p>
-          </div>
-          <Feedback error={error} />
-          <label className="field">
-            <span>Mật khẩu mới</span>
-            <input
-              className="input"
-              type="password"
-              autoComplete="new-password"
-              value={newPassword}
-              onChange={(event) => setNewPassword(event.target.value)}
-              required
-            />
-          </label>
-          <label className="field">
-            <span>Nhập lại mật khẩu</span>
-            <input
-              className="input"
-              type="password"
-              autoComplete="new-password"
-              value={confirmPassword}
-              onChange={(event) => setConfirmPassword(event.target.value)}
-              required
-            />
-          </label>
-          <button className="btn primary block" type="submit" disabled={isSubmitting}>
-            <KeyRound />
-            {isSubmitting ? 'Đang đổi...' : 'Đổi mật khẩu'}
-          </button>
-          <Link className="muted-link" to="/forgot-password/otp">
-            Quay lại nhập OTP
+        </div>
+        <div className="auth-console-header">
+          <span className="auth-console-eyebrow">Xác thực khôi phục · Bước 3/3</span>
+          <h1>Đặt mật khẩu mới</h1>
+          <p>Thiết lập mật khẩu an toàn mới cho tài khoản <strong>{email}</strong>.</p>
+        </div>
+        <Feedback error={error} />
+        <label className="field">
+          <span>Mật khẩu mới</span>
+          <input
+            className="input"
+            type="password"
+            autoComplete="new-password"
+            placeholder="Tối thiểu 6 ký tự"
+            value={newPassword}
+            onChange={(event) => setNewPassword(event.target.value)}
+            required
+          />
+        </label>
+        <label className="field">
+          <span>Nhập lại mật khẩu mới</span>
+          <input
+            className="input"
+            type="password"
+            autoComplete="new-password"
+            placeholder="Nhập lại mật khẩu trên"
+            value={confirmPassword}
+            onChange={(event) => setConfirmPassword(event.target.value)}
+            required
+          />
+        </label>
+        <button className="btn primary block auth-submit-btn" type="submit" disabled={isSubmitting}>
+          <KeyRound size={18} />
+          {isSubmitting ? 'Đang đổi...' : 'Cập nhật mật khẩu mới'}
+        </button>
+        <div className="auth-console-actions">
+          <Link className="auth-sublink" to="/forgot-password/otp">
+            ← Quay lại nhập OTP
           </Link>
-        </form>
-      </div>
-    </section>
+        </div>
+      </form>
+    </div>
   )
 }

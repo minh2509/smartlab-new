@@ -58,192 +58,365 @@ select {
   background: var(--bg-base, #F8F5EE);
 }
 
-.login-screen {
-  position: relative;
+/* ═══════════════════════════════════════════════════════════════════
+   ARCHITECTURAL AUTH SPLIT-SCREEN GATEWAY
+   ═══════════════════════════════════════════════════════════════════ */
+.auth-split-layout {
   display: grid;
+  grid-template-columns: minmax(420px, 1.15fr) minmax(380px, 1fr);
   min-height: 100vh;
-  place-items: center;
-  overflow: hidden;
-  padding: 40px 20px;
-  background:
-    radial-gradient(circle at 50% 12%, rgba(255, 116, 38, 0.08) 0%, transparent 55%),
-    radial-gradient(circle at 50% 88%, rgba(7, 21, 43, 0.05) 0%, transparent 60%),
-    var(--bg-base, #F8F5EE);
+  background: var(--page, #FAF8F3);
 }
 
-.login-screen::before {
-  content: "";
+/* ─── Left Dossier Showcase ───────────────────────────────────────── */
+.auth-dossier {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: clamp(36px, 5vw, 64px);
+  background:
+    radial-gradient(ellipse at 20% 15%, rgba(18, 70, 127, 0.45), transparent 60%),
+    radial-gradient(circle at 80% 85%, rgba(242, 113, 28, 0.12), transparent 50%),
+    linear-gradient(160deg, #07152B 0%, #050E1D 100%);
+  color: #FFFFFF;
+  overflow: hidden;
+}
+
+.auth-dossier-grid-bg {
   position: absolute;
   inset: 0;
   pointer-events: none;
   background-image:
-    linear-gradient(rgba(7, 21, 43, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(7, 21, 43, 0.035) 1px, transparent 1px);
-  background-size: 32px 32px;
-  mask-image: radial-gradient(circle at center, black 0 45%, transparent 78%);
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 36px 36px;
+  mask-image: radial-gradient(ellipse at center, black 40%, transparent 85%);
 }
 
-.login-card-wrap {
+.auth-dossier-content {
   position: relative;
   z-index: 1;
-  width: min(100%, 460px);
-}
-
-.login-card {
-  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 22px;
-  padding: clamp(32px, 5vw, 44px) clamp(24px, 5vw, 38px);
-  border: 1px solid var(--line-2, #D8D0BF);
-  border-radius: var(--r-lg, 20px);
-  background: var(--surface-card, #FDFBF7);
-  box-shadow:
-    0 1px 2px rgba(10, 27, 51, 0.03),
-    0 8px 24px -4px rgba(10, 27, 51, 0.08),
-    0 24px 60px -12px rgba(10, 27, 51, 0.12),
-    0 0 0 1px rgba(255, 255, 255, 0.9) inset;
-  overflow: hidden;
+  justify-content: space-between;
+  height: 100%;
+  gap: 40px;
 }
 
-.login-card::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: linear-gradient(90deg, var(--brand-1, #0B2F5E) 0%, var(--accent, #F2711C) 50%, var(--brand-2, #12467F) 100%);
+.auth-dossier-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
 }
 
-.login-card .logo {
-  justify-content: center;
-  margin-bottom: 2px;
+.auth-dossier-logo {
+  display: inline-flex;
+  text-decoration: none;
 }
 
-.login-card-head {
-  display: grid;
-  gap: 6px;
-  text-align: center;
+.auth-dossier-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.07em;
+  color: rgba(255, 255, 255, 0.9);
 }
 
-.login-card-head h1 {
-  font-size: 28px;
-  font-weight: 780;
-  color: var(--text-1, #0A1B33);
-  letter-spacing: -0.025em;
-  line-height: 1.25;
-  margin: 0;
+.auth-dossier-pulse {
+  color: #10b981;
+  animation: auth-pulse-dot 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
-.login-card-head span {
+@keyframes auth-pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.85); }
+}
+
+.auth-dossier-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 520px;
+}
+
+.auth-dossier-eyebrow {
   color: var(--accent, #F2711C);
   font-size: 12px;
-  font-weight: 750;
-  letter-spacing: .09em;
+  font-weight: 800;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
-.login-card .field {
+.auth-dossier-title {
+  margin: 0;
+  font-size: clamp(28px, 3.2vw, 42px);
+  font-weight: 800;
+  line-height: 1.18;
+  letter-spacing: -0.03em;
+  color: #FFFFFF;
+}
+
+.auth-dossier-desc {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.auth-dossier-tracks {
+  display: grid;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.auth-dossier-track {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(8px);
+}
+
+.auth-track-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--accent, #F2711C);
+  flex-shrink: 0;
+}
+
+.auth-track-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.auth-track-copy strong {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #FFFFFF;
+}
+
+.auth-track-copy small {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  line-height: 1.4;
+}
+
+.auth-dossier-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.auth-dossier-copyright {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.auth-dossier-backlink {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 13px;
+  font-weight: 650;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.auth-dossier-backlink:hover {
+  color: var(--accent, #F2711C);
+}
+
+/* ─── Right Auth Console ─────────────────────────────────────────── */
+.auth-console {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(32px, 5vw, 64px) clamp(20px, 4vw, 48px);
+  background: var(--page, #FAF8F3);
+}
+
+.auth-console-inner {
+  width: 100%;
+  max-width: 440px;
+}
+
+.auth-form-wrapper {
+  width: 100%;
+}
+
+.auth-form-console {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.auth-mobile-brand {
+  display: none;
+  margin-bottom: 8px;
+}
+
+.auth-console-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.auth-console-eyebrow {
+  color: var(--accent, #F2711C);
+  font-size: 12px;
+  font-weight: 780;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.auth-console-header h1 {
+  margin: 0;
+  font-size: clamp(26px, 3vw, 34px);
+  font-weight: 800;
+  color: var(--brand-1, #0B2F5E);
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+}
+
+.auth-console-header p {
+  margin: 0;
+  color: var(--text-2, #384A64);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.auth-form-console .field {
   display: flex;
   flex-direction: column;
   gap: 7px;
 }
 
-.login-card .field > span {
+.auth-form-console .field > span {
   font-size: 13.5px;
-  font-weight: 650;
-  color: var(--text-2, #384A64);
+  font-weight: 680;
+  color: var(--text-1, #0A1B33);
 }
 
-.login-card .input {
-  min-height: 46px;
-  height: 46px;
-  padding: 0 15px;
-  border: 1px solid var(--line-input, #D5CEBF);
+.auth-form-console .input {
+  min-height: 48px;
+  height: 48px;
+  padding: 0 16px;
+  border: 1.5px solid var(--line-input, #D5CEBF);
   border-radius: 10px;
   background: var(--surface-input, #FAF7F0);
   color: var(--text-1, #0A1B33);
-  font-size: 14.5px;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+  font-size: 15px;
+  transition: all 0.16s ease;
 }
 
-.login-card .input:focus {
+.auth-form-console .input:focus {
   background: var(--surface-input-focus, #FFFFFF);
   outline: none;
   border-color: var(--accent, #F2711C);
-  box-shadow: 0 0 0 3.5px rgba(242, 113, 28, 0.18);
+  box-shadow: 0 0 0 3.5px rgba(242, 113, 28, 0.16);
 }
 
-.login-card .btn.primary {
-  margin-top: 4px;
+.auth-otp-input {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 22px !important;
+  letter-spacing: 0.35em;
+  text-align: center;
+}
+
+.auth-submit-btn {
+  margin-top: 6px;
   min-height: 48px;
   height: 48px;
   border-radius: 10px;
+  font-size: 15px;
+  font-weight: 750;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   background: var(--accent, #F2711C);
   border-color: var(--accent, #F2711C);
   color: #FFFFFF;
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  box-shadow: 0 4px 14px rgba(242, 113, 28, 0.28);
+  box-shadow: 0 4px 14px rgba(242, 113, 28, 0.25);
   transition: all 0.18s ease;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
 }
 
-.login-card .btn.primary:hover:not(:disabled) {
+.auth-submit-btn:hover:not(:disabled) {
   background: var(--accent-2, #FF9147);
   border-color: var(--accent-2, #FF9147);
   transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(242, 113, 28, 0.36);
+  box-shadow: 0 6px 20px rgba(242, 113, 28, 0.35);
 }
 
-.login-card .btn.primary:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
+.auth-console-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
 }
 
-.login-card .btn.ghost {
-  min-height: 44px;
-  border-radius: 10px;
-  border: 1px solid transparent;
-  color: var(--text-2, #384A64);
-  font-size: 13.5px;
-  font-weight: 600;
-  transition: all 0.15s ease;
+.auth-sublink {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-
-.login-card .btn.ghost:hover {
-  background: rgba(242, 113, 28, 0.08);
-  color: var(--accent, #F2711C);
+  gap: 6px;
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--brand-1, #0B2F5E);
   text-decoration: none;
+  transition: color 0.15s ease;
 }
 
-.login-card .btn.ghost:focus-visible {
-  outline: 2.5px solid var(--accent, #F2711C);
-  outline-offset: 2px;
+.auth-sublink:hover {
+  color: var(--accent, #F2711C);
 }
 
-@media (max-width: 480px) {
-  .login-screen {
-    padding: 24px 16px 40px;
+/* ─── Responsive Auth Layout ──────────────────────────────────────── */
+@media (max-width: 960px) {
+  .auth-split-layout {
+    grid-template-columns: 1fr;
   }
-  .login-card {
-    padding: 28px 18px;
-    border-radius: 16px;
-    gap: 18px;
+  .auth-dossier {
+    padding: 32px 24px;
   }
-  .login-card-head h1 {
-    font-size: 24px;
+  .auth-dossier-tracks {
+    display: none;
+  }
+  .auth-dossier-title {
+    font-size: 26px;
+  }
+  .auth-console {
+    padding: 36px 20px;
+  }
+}
+
+@media (max-width: 560px) {
+  .auth-dossier {
+    display: none;
+  }
+  .auth-mobile-brand {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 12px;
   }
 }
 
@@ -974,11 +1147,13 @@ select {
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  padding: 24px 26px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  background: var(--surface);
-  box-shadow: 0 2px 8px rgba(7, 21, 43, .04);
+  padding: 0 0 24px 0;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  margin-bottom: 28px;
 }
 
 .profile-identity-main {
@@ -1262,19 +1437,29 @@ select {
 .profile-form-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.85fr) minmax(300px, 1fr);
-  gap: 20px;
+  gap: 24px;
 }
 
 .profile-form-layout .panel {
-  padding: 24px;
-  background: var(--surface-card, #FDFBF7);
+  padding: 26px 28px;
+  background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  box-shadow: var(--sh-1);
+  border-radius: var(--r-md);
+  box-shadow: none;
+}
+
+.profile-personal-panel {
+  border-top: 3px solid var(--accent) !important;
+}
+
+.profile-lab-panel {
+  border-top: 3px solid var(--navy-800) !important;
 }
 
 .profile-form-layout .panel-head {
-  margin-bottom: 20px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 22px;
 }
 
 .profile-form-layout .panel-head h2 {
@@ -1655,11 +1840,11 @@ select {
 }
 
 .panel {
-  background: var(--surface-card, #FDFBF7);
+  background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--r-lg);
+  border-radius: var(--r-md);
   padding: 24px;
-  box-shadow: var(--sh-1);
+  box-shadow: none;
 }
 
 .panel h2 {
@@ -1687,6 +1872,27 @@ select {
 
 .page-section {
   margin-top: 22px;
+}
+
+/* Architectural unboxing for admin registry data views */
+.admin-content .page-section.panel,
+.admin-content .project-list-panel,
+.admin-content .achievement-list-panel,
+.admin-content .event-list-panel {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+}
+
+.admin-content .page-section.panel > .panel-head,
+.admin-content .project-list-panel > .panel-head,
+.admin-content .achievement-list-panel > .panel-head,
+.admin-content .event-list-panel > .panel-head {
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 18px;
 }
 
 .admin-empty-page {
@@ -1860,8 +2066,9 @@ select {
   overflow-x: auto;
   max-width: 100%;
   border: 1px solid var(--line);
-  border-radius: var(--r);
+  border-radius: var(--r-md);
   background: var(--surface);
+  box-shadow: none;
 }
 
 .admin-table {
@@ -1880,11 +2087,13 @@ select {
 
 .admin-table th {
   color: var(--text-3);
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: .04em;
+  font-size: 11.5px;
+  font-weight: 750;
+  letter-spacing: .06em;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
   text-transform: uppercase;
-  background: #f8fafc;
+  background: color-mix(in srgb, var(--navy-900) 4%, var(--surface));
+  border-bottom: 1px solid var(--line-2);
 }
 
 .admin-table tbody tr:last-child td {

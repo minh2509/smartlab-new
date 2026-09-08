@@ -40,65 +40,65 @@ export function AcceptInvitePage() {
   }
 
   return (
-    <section className="auth auth-shell">
-      <div className="auth-side">
-        <h2>Hoàn tất tài khoản được cấp phát</h2>
-        <p>Mở link invite trong email, đặt mật khẩu mới và kích hoạt tài khoản Smart Lab.</p>
-      </div>
-
-      <div className="auth-form">
-        <form className="auth-box card pad" onSubmit={handleSubmit}>
+    <div className="auth-form-wrapper">
+      <form className="auth-form-console" onSubmit={handleSubmit}>
+        <div className="auth-mobile-brand">
           <Logo />
-          <div>
-            <h1>Kích hoạt tài khoản</h1>
-            <p className="muted">Invite được xác thực bằng token trong link email. Bạn chỉ cần đặt mật khẩu.</p>
+        </div>
+        <div className="auth-console-header">
+          <span className="auth-console-eyebrow">Kích hoạt tài khoản thành viên</span>
+          <h1>Kích hoạt tài khoản</h1>
+          <p>Tài khoản được xác thực bằng mã mời. Vui lòng đặt mật khẩu để hoàn tất.</p>
+        </div>
+        <Feedback error={error} />
+        {!token ? (
+          <div className="alert error">
+            <KeyRound size={16} />
+            <span>Link invite không hợp lệ. Hãy mở đúng liên kết được gửi qua email.</span>
           </div>
-          <Feedback error={error} />
-          {!token ? (
-            <div className="alert error">
-              <KeyRound />
-              <span>Link invite không hợp lệ. Hãy mở đúng link được gửi qua email.</span>
-            </div>
-          ) : null}
-          {account && (
-            <div className="alert">
-              <CheckCircle2 />
-              <span>Tài khoản {account.email} đã được kích hoạt.</span>
-            </div>
-          )}
-          <label className="field">
-            <span>Mật khẩu</span>
-            <input
-              className="input"
-              type="password"
-              autoComplete="new-password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              required
-              disabled={!token || Boolean(account)}
-            />
-          </label>
-          <label className="field">
-            <span>Nhập lại mật khẩu</span>
-            <input
-              className="input"
-              type="password"
-              autoComplete="new-password"
-              value={confirmPassword}
-              onChange={(event) => setConfirmPassword(event.target.value)}
-              required
-              disabled={!token || Boolean(account)}
-            />
-          </label>
-          <button className="btn primary block" type="submit" disabled={isSubmitting || !token || Boolean(account)}>
-            <KeyRound />
-            {isSubmitting ? 'Đang kích hoạt...' : 'Kích hoạt tài khoản'}
-          </button>
-          <Link className="muted-link" to="/login">
-            Đã kích hoạt? Đăng nhập
+        ) : null}
+        {account && (
+          <div className="alert">
+            <CheckCircle2 size={16} />
+            <span>Tài khoản {account.email} đã được kích hoạt thành công.</span>
+          </div>
+        )}
+        <label className="field">
+          <span>Mật khẩu mới</span>
+          <input
+            className="input"
+            type="password"
+            autoComplete="new-password"
+            placeholder="Tối thiểu 6 ký tự"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            required
+            disabled={!token || Boolean(account)}
+          />
+        </label>
+        <label className="field">
+          <span>Nhập lại mật khẩu</span>
+          <input
+            className="input"
+            type="password"
+            autoComplete="new-password"
+            placeholder="Nhập lại mật khẩu trên"
+            value={confirmPassword}
+            onChange={(event) => setConfirmPassword(event.target.value)}
+            required
+            disabled={!token || Boolean(account)}
+          />
+        </label>
+        <button className="btn primary block auth-submit-btn" type="submit" disabled={isSubmitting || !token || Boolean(account)}>
+          <KeyRound size={18} />
+          {isSubmitting ? 'Đang kích hoạt...' : 'Kích hoạt tài khoản'}
+        </button>
+        <div className="auth-console-actions">
+          <Link className="auth-sublink" to="/login">
+            ← Đã kích hoạt? Đăng nhập ngay
           </Link>
-        </form>
-      </div>
-    </section>
+        </div>
+      </form>
+    </div>
   )
 }

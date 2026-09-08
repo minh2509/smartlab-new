@@ -8,7 +8,9 @@
   display: grid;
   grid-template-columns: minmax(300px, 1fr) 150px 140px 180px 135px auto;
   gap: 10px;
-  margin-bottom: 12px; /* reduced gap */
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 16px;
 }
 
 .achievement-list-search {
@@ -483,21 +485,50 @@
 .admin-inline-alert .btn { flex: none; }
 
 /* Research fields admin */
+.panel-grid {
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.panel-grid > form.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--accent);
+  border-radius: var(--r-md);
+  padding: 24px;
+  box-shadow: none;
+}
+
+.panel-grid > section.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 24px;
+  box-shadow: none;
+}
+
 .research-field-admin-row {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 18px 20px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md, 14px);
-  background: var(--surface);
-  box-shadow: 0 1px 3px rgba(7, 21, 43, 0.04);
-  transition: border-color 160ms ease, box-shadow 160ms ease;
+  padding: 16px 0;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  transition: background-color 160ms ease;
 }
 
-.research-field-admin-row:hover {
-  border-color: #cbd5e1;
-  box-shadow: 0 4px 14px rgba(7, 21, 43, 0.06);
+.research-field-admin-row:first-child {
+  padding-top: 0;
+}
+
+.research-field-admin-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
 }
 
 .research-field-admin-row-head {

@@ -51,11 +51,8 @@
   justify-content: space-between;
   gap: 24px;
   margin-bottom: 22px;
-  padding: 18px 22px;
-  border: 1px solid var(--line-2, #d5cebf);
-  border-radius: var(--r-md, 14px);
-  background: var(--surface-elevated, #faf7f1);
-  box-shadow: var(--shadow-sm, 0 2px 8px rgba(7, 21, 43, 0.04));
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--line);
 }
 
 .tasks-project-picker {
@@ -625,11 +622,11 @@
 
 .tasks-workspace-state {
   padding: 56px 24px;
-  color: var(--task-muted);
-  border: 1px dashed var(--task-line);
+  color: var(--text-2);
+  border: 1px dashed var(--line-2);
   border-radius: var(--r-md, 14px);
   text-align: center;
-  background: var(--task-subtle);
+  background: transparent;
   font-size: 14px;
 }
 

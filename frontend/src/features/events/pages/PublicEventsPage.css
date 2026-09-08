@@ -116,11 +116,12 @@
   align-items: center;
   gap: 12px;
   margin-bottom: 24px;
-  padding: 12px 14px;
-  background: var(--surface-elevated, #FAF7F1);
-  border: 1px solid var(--line-2, #D5CEBF);
-  border-radius: var(--r-lg);
-  box-shadow: var(--sh-1);
+  padding: 0 0 18px 0;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .public-events-search {
@@ -129,12 +130,12 @@
   flex: 1 1 360px;
   min-width: 0;
   gap: 10px;
-  min-height: 40px;
+  min-height: 42px;
   padding: 0 13px;
   color: var(--text-3);
   border: 1px solid var(--line-input, #D5CEBF);
   border-radius: var(--r-sm);
-  background: var(--surface-input, #FAF7F0);
+  background: var(--surface);
   transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
 }
 
@@ -166,8 +167,8 @@
 }
 
 .public-events-filter .popup-select-trigger {
-  min-height: 44px;
-  height: 44px;
+  min-height: 42px;
+  height: 42px;
   border-radius: var(--r-sm);
 }
 
@@ -178,7 +179,7 @@
 
 .public-events-reset {
   flex: none;
-  min-height: 44px;
+  min-height: 42px;
 }
 
 .public-events-summary {
@@ -190,8 +191,9 @@
 }
 
 .event-directory-list {
-  display: grid;
-  gap: 12px;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--line);
 }
 
 .event-directory-row {
@@ -199,24 +201,40 @@
   width: 100%;
   grid-template-columns: 74px minmax(0, 1fr) auto;
   align-items: start;
-  gap: 20px;
-  padding: 18px 20px;
+  gap: 24px;
+  padding: 22px 12px;
   color: var(--text-1);
-  background: var(--surface-card, #FDFBF7);
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
   font: inherit;
   text-align: left;
   cursor: pointer;
-  box-shadow: var(--sh-1);
-  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease, background-color 0.16s ease;
+  box-shadow: none;
+  position: relative;
+  transition: background-color 0.16s ease;
+}
+
+.event-directory-row::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 12px;
+  bottom: 12px;
+  width: 3px;
+  background: var(--brand-1);
+  opacity: 0;
+  transition: opacity 0.16s ease;
+  border-radius: 2px;
 }
 
 .event-directory-row:hover {
   background: var(--surface-card-hover, #FFFFFF);
-  border-color: var(--line-2);
-  box-shadow: var(--sh-2);
-  transform: translateY(-2px);
+}
+
+.event-directory-row:hover::before {
+  opacity: 1;
 }
 
 .event-directory-row:focus-visible {

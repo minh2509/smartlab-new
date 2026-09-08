@@ -36,62 +36,67 @@ export function LoginPage() {
   }
 
   return (
-    <section className="login-screen">
-      <div className="login-card-wrap">
-        <form className="login-card card" onSubmit={handleSubmit}>
+    <div className="auth-form-wrapper">
+      <form className="auth-form-console" onSubmit={handleSubmit}>
+        <div className="auth-mobile-brand">
           <Logo />
-          <div className="login-card-head">
-            <h1>Đăng nhập</h1>
-            <span>Smart Lab Workspace</span>
-          </div>
-          {resetPasswordDone ? <Feedback message="Đã đổi mật khẩu. Đăng nhập lại bằng mật khẩu mới." /> : null}
-          <label className="field">
-            <span>Email</span>
-            <input
-              className={formError ? 'input invalid' : 'input'}
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(event) => {
-                setEmail(event.target.value)
-                if (formError) setFormError('')
-              }}
-              aria-invalid={Boolean(formError)}
-              aria-describedby={formError ? 'login-error' : undefined}
-              required
-            />
-          </label>
-          <label className="field">
-            <span>Mật khẩu</span>
-            <input
-              className={formError ? 'input invalid' : 'input'}
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(event) => {
-                setPassword(event.target.value)
-                if (formError) setFormError('')
-              }}
-              aria-invalid={Boolean(formError)}
-              aria-describedby={formError ? 'login-error' : undefined}
-              required
-            />
-            {formError ? (
-              <small className="field-error" id="login-error">
-                {formError}
-              </small>
-            ) : null}
-          </label>
-          <button className="btn primary block" type="submit" disabled={isSubmitting}>
-            <LogIn />
-            {isSubmitting ? 'Đang đăng nhập...' : 'Đăng nhập'}
-          </button>
-          <Link className="btn ghost block" to="/forgot-password">
-            <KeyRound />
-            Quên mật khẩu
+        </div>
+        <div className="auth-console-header">
+          <span className="auth-console-eyebrow">Smart Lab Workspace</span>
+          <h1>Đăng nhập</h1>
+          <p>Nhập thông tin tài khoản được cấp để truy cập không gian nghiên cứu.</p>
+        </div>
+        {resetPasswordDone ? <Feedback message="Đã đổi mật khẩu. Đăng nhập lại bằng mật khẩu mới." /> : null}
+        <label className="field">
+          <span>Email</span>
+          <input
+            className={formError ? 'input invalid' : 'input'}
+            type="email"
+            autoComplete="email"
+            placeholder="name@smartlab.local"
+            value={email}
+            onChange={(event) => {
+              setEmail(event.target.value)
+              if (formError) setFormError('')
+            }}
+            aria-invalid={Boolean(formError)}
+            aria-describedby={formError ? 'login-error' : undefined}
+            required
+          />
+        </label>
+        <label className="field">
+          <span>Mật khẩu</span>
+          <input
+            className={formError ? 'input invalid' : 'input'}
+            type="password"
+            autoComplete="current-password"
+            placeholder="••••••••"
+            value={password}
+            onChange={(event) => {
+              setPassword(event.target.value)
+              if (formError) setFormError('')
+            }}
+            aria-invalid={Boolean(formError)}
+            aria-describedby={formError ? 'login-error' : undefined}
+            required
+          />
+          {formError ? (
+            <small className="field-error" id="login-error">
+              {formError}
+            </small>
+          ) : null}
+        </label>
+        <button className="btn primary block auth-submit-btn" type="submit" disabled={isSubmitting}>
+          <LogIn size={18} />
+          {isSubmitting ? 'Đang xác thực...' : 'Đăng nhập vào Workspace'}
+        </button>
+        <div className="auth-console-actions">
+          <Link className="auth-sublink" to="/forgot-password">
+            <KeyRound size={14} />
+            Quên mật khẩu?
           </Link>
-        </form>
-      </div>
-    </section>
+        </div>
+      </form>
+    </div>
   )
 }

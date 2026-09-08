@@ -42,40 +42,39 @@ export function VerifyResetOtpPage() {
   }
 
   return (
-    <section className="auth auth-shell">
-      <div className="auth-side">
-        <h2>Xác thực OTP</h2>
-        <p>Nhập mã OTP đã gửi tới email để tiếp tục sang bước đặt mật khẩu mới.</p>
-      </div>
-
-      <div className="auth-form">
-        <form className="auth-box card pad" onSubmit={handleSubmit}>
+    <div className="auth-form-wrapper">
+      <form className="auth-form-console" onSubmit={handleSubmit}>
+        <div className="auth-mobile-brand">
           <Logo />
-          <div>
-            <h1>Nhập OTP</h1>
-            <p className="muted">Bước 2/3 · Email: {email}</p>
-          </div>
-          <Feedback error={error} />
-          <label className="field">
-            <span>OTP</span>
-            <input
-              className="input"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              value={otp}
-              onChange={(event) => setOtp(event.target.value)}
-              required
-            />
-          </label>
-          <button className="btn primary block" type="submit" disabled={isSubmitting}>
-            <ShieldCheck />
-            {isSubmitting ? 'Đang kiểm tra...' : 'Xác nhận OTP'}
-          </button>
-          <Link className="muted-link" to="/forgot-password">
-            Đổi email
+        </div>
+        <div className="auth-console-header">
+          <span className="auth-console-eyebrow">Xác thực khôi phục · Bước 2/3</span>
+          <h1>Nhập mã OTP</h1>
+          <p>Mã bảo mật đã được gửi tới <strong>{email}</strong>.</p>
+        </div>
+        <Feedback error={error} />
+        <label className="field">
+          <span>Mã xác thực (OTP)</span>
+          <input
+            className="input auth-otp-input"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            placeholder="123456"
+            value={otp}
+            onChange={(event) => setOtp(event.target.value)}
+            required
+          />
+        </label>
+        <button className="btn primary block auth-submit-btn" type="submit" disabled={isSubmitting}>
+          <ShieldCheck size={18} />
+          {isSubmitting ? 'Đang kiểm tra...' : 'Xác nhận mã OTP'}
+        </button>
+        <div className="auth-console-actions">
+          <Link className="auth-sublink" to="/forgot-password">
+            ← Đổi địa chỉ email khác
           </Link>
-        </form>
-      </div>
-    </section>
+        </div>
+      </form>
+    </div>
   )
 }

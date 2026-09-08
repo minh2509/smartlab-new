@@ -32,44 +32,48 @@ export function ForgotPasswordPage() {
   }
 
   return (
-    <section className="login-screen">
-      <div className="login-card-wrap">
-        <form className="login-card card" onSubmit={handleSubmit}>
+    <div className="auth-form-wrapper">
+      <form className="auth-form-console" onSubmit={handleSubmit}>
+        <div className="auth-mobile-brand">
           <Logo />
-          <div className="login-card-head">
-            <h1>Quên mật khẩu</h1>
-            <span>Bước 1/3 · Nhận OTP qua email</span>
-          </div>
-          <label className="field">
-            <span>Email</span>
-            <input
-              className={emailError ? 'input invalid' : 'input'}
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(event) => {
-                setEmail(event.target.value)
-                if (emailError) setEmailError('')
-              }}
-              aria-invalid={Boolean(emailError)}
-              aria-describedby={emailError ? 'forgot-email-error' : undefined}
-              required
-            />
-            {emailError ? (
-              <small className="field-error" id="forgot-email-error">
-                {emailError}
-              </small>
-            ) : null}
-          </label>
-          <button className="btn primary block" type="submit" disabled={isSubmitting}>
-            <MailCheck />
-            {isSubmitting ? 'Đang gửi...' : 'Gửi OTP'}
-          </button>
-          <Link className="btn ghost block" to="/login">
-            Quay lại đăng nhập
+        </div>
+        <div className="auth-console-header">
+          <span className="auth-console-eyebrow">Xác thực khôi phục · Bước 1/3</span>
+          <h1>Quên mật khẩu</h1>
+          <p>Nhập email tài khoản đã đăng ký để nhận mã OTP khôi phục quyền truy cập.</p>
+        </div>
+        <label className="field">
+          <span>Email tài khoản</span>
+          <input
+            className={emailError ? 'input invalid' : 'input'}
+            type="email"
+            autoComplete="email"
+            placeholder="name@smartlab.local"
+            value={email}
+            onChange={(event) => {
+              setEmail(event.target.value)
+              if (emailError) setEmailError('')
+            }}
+            aria-invalid={Boolean(emailError)}
+            aria-describedby={emailError ? 'forgot-email-error' : undefined}
+            required
+          />
+          {emailError ? (
+            <small className="field-error" id="forgot-email-error">
+              {emailError}
+            </small>
+          ) : null}
+        </label>
+        <button className="btn primary block auth-submit-btn" type="submit" disabled={isSubmitting}>
+          <MailCheck size={18} />
+          {isSubmitting ? 'Đang gửi yêu cầu...' : 'Gửi mã xác thực OTP'}
+        </button>
+        <div className="auth-console-actions">
+          <Link className="auth-sublink" to="/login">
+            ← Quay lại đăng nhập
           </Link>
-        </form>
-      </div>
-    </section>
+        </div>
+      </form>
+    </div>
   )
 }

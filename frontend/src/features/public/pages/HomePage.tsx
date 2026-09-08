@@ -240,16 +240,21 @@ export function HomePage() {
       <SmartLabHero />
 
       {/* ═══════════════════════════════════════════════════════════
-          2. RESEARCH AREAS
+          2. RESEARCH AREAS — Architectural Research Ledger
           ═══════════════════════════════════════════════════════════ */}
       <section className="landing-section" aria-labelledby="research-heading">
         <div className="landing-wrap">
-          <div className="landing-head">
-            <div className="landing-head-eyebrow">Định hướng nghiên cứu</div>
-            <h2 id="research-heading">Lĩnh vực nghiên cứu</h2>
-            <p>
-              Các hướng nghiên cứu định hình dự án và hoạt động chuyên môn tại Smart Lab.
-            </p>
+          <div className="landing-head-row">
+            <div className="landing-head">
+              <div className="landing-head-eyebrow">Định hướng nghiên cứu</div>
+              <h2 id="research-heading">Lĩnh vực nghiên cứu</h2>
+              <p>
+                Các hướng nghiên cứu định hình dự án và hoạt động chuyên môn tại Smart Lab.
+              </p>
+            </div>
+            <Link className="landing-section-cta" to="/linh-vuc">
+              Tất cả lĩnh vực <ArrowRight size={16} />
+            </Link>
           </div>
 
           <LandingState
@@ -260,23 +265,28 @@ export function HomePage() {
           />
 
           {fields.length > 0 && (
-            <div className="landing-research-grid">
+            <div className="landing-research-ledger">
               {fields.map((field, i) => (
                 <article
-                  className="landing-field-card"
+                  className="landing-research-row"
                   key={field.id}
                 >
-                  <div className="landing-field-cover-area">
+                  <div className="landing-research-index-col">
+                    <span className="landing-research-num">{String(i + 1).padStart(2, '0')}</span>
+                    <span className="landing-research-code">{field.code}</span>
+                  </div>
+
+                  <div className="landing-research-visual-col">
                     {field.coverFileId && !failedImages[field.id] ? (
                       <img
                         src={publicFileUrl(field.coverFileId)}
                         alt={`Ảnh đại diện lĩnh vực ${field.name}`}
-                        className="landing-field-image"
+                        className="landing-research-thumb"
                         onError={() => setFailedImages(prev => ({ ...prev, [field.id]: true }))}
                       />
                     ) : (
-                      <div className="landing-field-fallback" aria-hidden="true">
-                        <span className="landing-field-geom" data-index={i}>
+                      <div className="landing-research-fallback" aria-hidden="true">
+                        <span className="landing-research-geom">
                           {i % 3 === 0 && (
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                               <path d="M4 20v-4a4 4 0 0 1 4-4h12" />
@@ -299,18 +309,17 @@ export function HomePage() {
                       </div>
                     )}
                   </div>
-                  <div className="landing-field-head">
-                    <span className="landing-field-index">{String(i + 1).padStart(2, '0')}</span>
+
+                  <div className="landing-research-main-col">
+                    <h3 className="landing-research-title">{field.name}</h3>
+                    <p className="landing-research-desc">{field.description ?? 'Thông tin chi tiết đang được cập nhật.'}</p>
                   </div>
 
-                  <div className="landing-field-body">
-                    <h3>{field.name}</h3>
-                    <p className="landing-field-desc">{field.description ?? 'Thông tin chi tiết đang được cập nhật.'}</p>
-                  </div>
-
-                  <div className="landing-field-foot">
-                    <span className="landing-field-code">{field.code}</span>
-                    <Link className="landing-field-link" to="/linh-vuc">Xem thêm <ArrowRight size={13} /></Link>
+                  <div className="landing-research-action-col">
+                    <Link className="landing-research-link" to="/linh-vuc">
+                      <span>Khám phá</span>
+                      <ArrowRight size={14} />
+                    </Link>
                   </div>
                 </article>
               ))}
@@ -320,7 +329,7 @@ export function HomePage() {
       </section>
 
       {/* ═══════════════════════════════════════════════════════════
-          3. RECRUITING PROJECTS
+          3. RECRUITING PROJECTS — Operational Recruitment Stream
           ═══════════════════════════════════════════════════════════ */}
       <section className="landing-section landing-section-alt" aria-labelledby="recruit-heading">
         <div className="landing-wrap">
@@ -343,48 +352,62 @@ export function HomePage() {
           />
 
           {recruitItems.length > 0 && (
-            <div className="landing-recruit-grid">
+            <div className="landing-recruit-stream">
+              <div className="landing-recruit-stream-header" aria-hidden="true">
+                <span className="col-proj">Dự án nghiên cứu</span>
+                <span className="col-meta">Phân loại &amp; Lĩnh vực</span>
+                <span className="col-leader">Chủ nhiệm</span>
+                <span className="col-action">Thao tác</span>
+              </div>
               {recruitItems.map((project) => {
                 const shownLeaders = project.leaders.slice(0, 3)
                 const rest = project.leaders.length - shownLeaders.length
                 const desc = project.description ?? project.goal ?? 'Xem chi tiết để biết thêm thông tin về dự án này.'
                 return (
                   <Link
-                    className="landing-recruit-card"
+                    className="landing-recruit-row"
                     to={`/du-an/${project.id}`}
                     key={project.id}
                     aria-label={`Dự án ${project.name}`}
                   >
-                    <div className="landing-recruit-card-top">
-                      <span className="landing-recruit-badge">
-                        <span className="landing-recruit-badge-dot" aria-hidden="true" />
-                        Đang tuyển
-                      </span>
+                    <div className="landing-recruit-col-proj">
+                      <div className="landing-recruit-row-tags">
+                        <span className="landing-recruit-badge">
+                          <span className="landing-recruit-badge-dot" aria-hidden="true" />
+                          Đang tuyển
+                        </span>
+                        <span className="landing-recruit-code">{project.code}</span>
+                      </div>
+                      <h3 className="landing-recruit-row-title">{project.name}</h3>
+                      <p className="landing-recruit-row-desc">{shorten(desc, 140)}</p>
+                    </div>
+
+                    <div className="landing-recruit-col-meta">
                       <span className="chip accent">{PROJECT_TYPE_LABELS[project.projectType]}</span>
                       {project.researchFields && project.researchFields.length > 0 && (
                         <span className="chip muted">{project.researchFields[0].name}</span>
                       )}
                     </div>
 
-                    <div className="landing-recruit-card-body">
-                      <span className="landing-recruit-code">{project.code}</span>
-                      <h3>{project.name}</h3>
-                      <p>{shorten(desc, 160)}</p>
+                    <div className="landing-recruit-col-leader">
+                      {shownLeaders.length > 0 ? (
+                        <div className="landing-recruit-leaders-wrap">
+                          <span className="ava-stack" aria-label={`${project.leaders.length} leader`}>
+                            {shownLeaders.map((l, index) => (
+                              <span className="ava xs" title={l.name} key={`${l.name}-${index}`}>{initialsOf(l.name)}</span>
+                            ))}
+                            {rest > 0 ? <span className="ava xs">+{rest}</span> : null}
+                          </span>
+                          <span className="landing-recruit-leader-name">{shownLeaders[0].name}</span>
+                        </div>
+                      ) : (
+                        <span className="muted small"><UsersRound size={13} /> Chưa công bố</span>
+                      )}
                     </div>
 
-                    <div className="landing-recruit-card-foot">
-                      {shownLeaders.length > 0 ? (
-                        <span className="ava-stack" aria-label={`${project.leaders.length} leader`}>
-                          {shownLeaders.map((l, index) => (
-                            <span className="ava xs" title={l.name} key={`${l.name}-${index}`}>{initialsOf(l.name)}</span>
-                          ))}
-                          {rest > 0 ? <span className="ava xs">+{rest}</span> : null}
-                        </span>
-                      ) : (
-                        <span className="muted small"><UsersRound size={13} /> Chưa công bố leader</span>
-                      )}
-                      <span className="landing-recruit-link">
-                        Xem &amp; đăng ký <ArrowRight size={13} />
+                    <div className="landing-recruit-col-action">
+                      <span className="landing-recruit-action-btn">
+                        Ứng tuyển <ArrowRight size={13} />
                       </span>
                     </div>
                   </Link>
@@ -397,7 +420,7 @@ export function HomePage() {
       </section>
 
       {/* ═══════════════════════════════════════════════════════════
-          4. LAB LIFE / ANNUAL ACTIVITIES
+          4. LAB LIFE / ANNUAL ACTIVITIES — Event Horizon Timeline Rail
           ═══════════════════════════════════════════════════════════ */}
       <section className="landing-section landing-section-dark" aria-labelledby="lablife-heading">
         <div className="landing-wrap">
@@ -405,7 +428,7 @@ export function HomePage() {
             <div className="landing-head">
               <div className="landing-head-eyebrow">Văn hoá &amp; Đời sống</div>
               <h2 id="lablife-heading">Kết nối cộng đồng</h2>
-              <p>Sự cân bằng giữa sự tập trung cao độ trong nghiên cứu và một môi trường gắn kết, cởi mở. Những hoạt động giúp các thành viên phát triển bản thân và xây dựng văn hóa Smart Lab.</p>
+              <p>Sự cân bằng giữa nghiên cứu chuyên sâu và môi trường gắn kết, cởi mở.</p>
             </div>
             <Link className="landing-section-cta" to="/su-kien">
               Khám phá hoạt động của Lab <ArrowRight size={16} />
@@ -421,34 +444,36 @@ export function HomePage() {
           />
 
           {events.length > 0 && (
-            <div className="landing-events-grid">
+            <div className="landing-events-rail">
               {events.map((event) => {
                 const start = new Date(event.startAt)
                 const day = Number.isNaN(start.getTime()) ? '—' : String(start.getDate())
                 const month = Number.isNaN(start.getTime())
                   ? ''
                   : new Intl.DateTimeFormat('vi-VN', { month: 'short' }).format(start)
+                const year = Number.isNaN(start.getTime()) ? '' : String(start.getFullYear())
                 return (
-                  <div className="landing-event-card" key={event.id}>
-                    <div className="landing-event-datebox" aria-label={`Ngày ${day} ${month}`}>
-                      <span className="landing-event-datebox-day">{day}</span>
-                      <span className="landing-event-datebox-month">{month}</span>
+                  <div className="landing-event-node" key={event.id}>
+                    <div className="landing-event-date-stamp">
+                      <span className="landing-event-day">{day}</span>
+                      <span className="landing-event-month">{month}</span>
+                      <span className="landing-event-year">{year}</span>
                     </div>
-                    <div className="landing-event-info">
-                      <h3>{event.title}</h3>
-                      <div className="landing-event-meta">
-                        {event.location ? (
-                          <span><MapPin size={13} />{event.location}</span>
-                        ) : null}
-                        <span>
+                    <div className="landing-event-node-body">
+                      <div className="landing-event-node-tags">
+                        <span className="landing-event-mode-tag">
                           {event.mode === 'ONLINE'
-                            ? <><Wifi size={13} />Trực tuyến</>
-                            : <><WifiOff size={13} />Trực tiếp</>
+                            ? <><Wifi size={12} /> Trực tuyến</>
+                            : <><WifiOff size={12} /> Trực tiếp</>
                           }
                         </span>
+                        {event.location ? (
+                          <span className="landing-event-loc-tag"><MapPin size={12} /> {event.location}</span>
+                        ) : null}
                       </div>
+                      <h3 className="landing-event-node-title">{event.title}</h3>
                       {event.content ? (
-                        <p className="landing-event-excerpt">{shorten(event.content, 120)}</p>
+                        <p className="landing-event-node-desc">{shorten(event.content, 140)}</p>
                       ) : null}
                     </div>
                   </div>
@@ -460,7 +485,7 @@ export function HomePage() {
       </section>
 
       {/* ═══════════════════════════════════════════════════════════
-          5. RESEARCH ACHIEVEMENTS / PUBLICATIONS
+          5. ACHIEVEMENTS — Architectural Milestone Registry
           ═══════════════════════════════════════════════════════════ */}
       <section className="landing-section" aria-labelledby="achievement-heading">
         <div className="landing-wrap">
@@ -475,29 +500,29 @@ export function HomePage() {
             </Link>
           </div>
 
-          <div className="landing-achievement-controls">
+          <div className="landing-achievement-ribbon">
             {years.length > 0 && (
-              <div className="landing-achievement-toolbar-left">
-                <select
-                  id="year-selector"
-                  className="landing-year-select"
-                  value={selectedYear ?? ''}
-                  onChange={(e) => handleYearChange(Number(e.target.value))}
-                  aria-label="Chọn năm"
-                >
-                  {years.map(({ year, count }) => (
-                    <option key={year} value={year}>
-                      {year} · {count} thành tựu
-                    </option>
-                  ))}
-                </select>
+              <div className="landing-achievement-pills" role="tablist" aria-label="Chọn năm thành tựu">
+                {years.map(({ year, count }) => (
+                  <button
+                    type="button"
+                    key={year}
+                    className={`landing-achievement-pill ${selectedYear === year ? 'is-active' : ''}`}
+                    onClick={() => handleYearChange(year)}
+                    role="tab"
+                    aria-selected={selectedYear === year}
+                  >
+                    <span className="landing-pill-year">{year}</span>
+                    <span className="landing-pill-count">{count}</span>
+                  </button>
+                ))}
               </div>
             )}
 
-            <div className="landing-achievement-toolbar-right">
-              <div className="landing-achievement-toolbar-text">
+            <div className="landing-achievement-ribbon-right">
+              <span className="landing-achievement-toolbar-text">
                 {achievementTotal > 0 ? `${achievementCurrentPage * 3 + 1}–${Math.min((achievementCurrentPage + 1) * 3, achievementTotal)} / ${achievementTotal}` : '0 / 0'}
-              </div>
+              </span>
               <div className="landing-achievement-toolbar-actions">
                 <button
                   type="button"
@@ -506,7 +531,7 @@ export function HomePage() {
                   disabled={achievementCurrentPage === 0 || achievementLoading}
                   aria-label="Trang trước"
                 >
-                  <ChevronLeft size={18} />
+                  <ChevronLeft size={16} />
                 </button>
                 <button
                   type="button"
@@ -515,7 +540,7 @@ export function HomePage() {
                   disabled={(achievementCurrentPage + 1) * 3 >= achievementTotal || achievementLoading}
                   aria-label="Trang sau"
                 >
-                  <ChevronRight size={18} />
+                  <ChevronRight size={16} />
                 </button>
               </div>
             </div>
@@ -529,60 +554,58 @@ export function HomePage() {
           />
 
           {achievementItems.length > 0 && (
-            <div className="landing-achievement-list-wrap">
-              <div className="landing-achievement-grid" aria-label="Danh sách thành tựu">
-                {achievementItems.map((item: Achievement) => {
-                  const typeLabel = ACHIEVEMENT_TYPE_LABELS[item.achievementType]
-                  return (
-                    <div className="landing-achievement-card" key={item.id}>
-                      <div className="landing-achievement-cover" data-type={item.achievementType}>
-                        <div className="landing-achievement-cover-grid" />
-                      </div>
-                      <div className="landing-achievement-card-body">
-                        <div className="landing-achievement-card-meta">
-                          <span className="landing-achievement-card-type">{typeLabel}</span>
-                          {(item.achievementDate || item.achievementYear) ? (
-                            <span className="landing-achievement-card-date">
-                              • {item.achievementDate ? formatDate(item.achievementDate) : item.achievementYear}
-                            </span>
-                          ) : null}
-                        </div>
-                        <h3 className="landing-achievement-card-title">
-                          {item.title}
-                        </h3>
-                        {item.summary ? (
-                          <div className="landing-achievement-card-summary">{item.summary}</div>
-                        ) : null}
-                        {item.relatedProject ? (
-                          <div className="landing-achievement-card-project">
-                            Liên quan: {item.relatedProject.name}
-                          </div>
-                        ) : null}
-                        <div className="landing-achievement-card-footer">
-                          {item.evidenceUrl ? (
-                            <a
-                              className="landing-achievement-card-action"
-                              href={item.evidenceUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              aria-label="Xem minh chứng"
-                            >
-                              Xem minh chứng ↗
-                            </a>
-                          ) : null}
-                        </div>
-                      </div>
+            <div className="landing-achievement-ledger" aria-label="Danh sách thành tựu">
+              {achievementItems.map((item: Achievement) => {
+                const typeLabel = ACHIEVEMENT_TYPE_LABELS[item.achievementType]
+                const dateStr = item.achievementDate ? formatDate(item.achievementDate) : item.achievementYear
+                return (
+                  <div className="landing-achievement-row" key={item.id}>
+                    <div className="landing-achievement-type-col">
+                      <span className="landing-achievement-type-badge" data-type={item.achievementType}>
+                        {typeLabel}
+                      </span>
+                      {dateStr ? (
+                        <span className="landing-achievement-date-text">{dateStr}</span>
+                      ) : null}
                     </div>
-                  )
-                })}
-              </div>
+
+                    <div className="landing-achievement-body-col">
+                      <h3 className="landing-achievement-title">{item.title}</h3>
+                      {item.summary ? (
+                        <p className="landing-achievement-summary">{item.summary}</p>
+                      ) : null}
+                      {item.relatedProject ? (
+                        <span className="landing-achievement-project-tag">
+                          Dự án: {item.relatedProject.name}
+                        </span>
+                      ) : null}
+                    </div>
+
+                    <div className="landing-achievement-action-col">
+                      {item.evidenceUrl ? (
+                        <a
+                          className="landing-achievement-evidence-btn"
+                          href={item.evidenceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label="Xem minh chứng"
+                        >
+                          Minh chứng ↗
+                        </a>
+                      ) : (
+                        <span className="landing-achievement-verified-tag">Đã ghi nhận</span>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
       </section>
 
       {/* ═══════════════════════════════════════════════════════════
-          6. UNIFIED ARTICLES & MEDIA
+          6. UNIFIED ARTICLES & MEDIA — Magazine Asymmetric Feature + Stack
           ═══════════════════════════════════════════════════════════ */}
       <section className="landing-section landing-section-alt" aria-labelledby="media-heading">
         <div className="landing-wrap">
@@ -626,11 +649,11 @@ export function HomePage() {
 
             {mediaTab === 'ARTICLE' ? (
               <Link className="landing-media-archive-link" to="/bai-viet">
-                Xem bài viết <ArrowRight size={16} />
+                Xem tất cả bài viết <ArrowRight size={16} />
               </Link>
             ) : (
               <Link className="landing-media-archive-link" to="/tin-tuc">
-                Xem tin tức <ArrowRight size={16} />
+                Xem tất cả tin tức <ArrowRight size={16} />
               </Link>
             )}
           </div>
@@ -643,71 +666,107 @@ export function HomePage() {
           />
 
           {mediaTab === 'ARTICLE' && articleItems.length > 0 && (
-            <div className="landing-media-grid" id="landing-article-panel" role="tabpanel" aria-labelledby={MEDIA_TAB_IDS.ARTICLE}>
-              {articleItems.map((article) => (
-                <Link className="landing-media-card hover is-article" to={`/bai-viet/${encodeURIComponent(article.slug)}`} key={article.id}>
-                  <div className="landing-media-cover is-article">
-                    <div className="landing-media-cover-grid" />
+            <div className="landing-editorial-layout" id="landing-article-panel" role="tabpanel" aria-labelledby={MEDIA_TAB_IDS.ARTICLE}>
+              {articleItems[0] && (
+                <Link className="landing-editorial-lead" to={`/bai-viet/${encodeURIComponent(articleItems[0].slug)}`}>
+                  <div className="landing-editorial-lead-header">
+                    <span className="landing-editorial-badge">Bài viết tiêu điểm</span>
+                    {articleItems[0].publishedAt ? (
+                      <span className="landing-editorial-date">
+                        {formatDate(articleItems[0].publishedAt, { dateStyle: 'medium' })}
+                      </span>
+                    ) : null}
                   </div>
-                  <div className="landing-media-card-body">
-                    <div className="landing-media-card-meta">
+                  <h3 className="landing-editorial-lead-title">{articleItems[0].title}</h3>
+                  {articleItems[0].excerpt ? (
+                    <p className="landing-editorial-lead-desc">{shorten(articleItems[0].excerpt, 220)}</p>
+                  ) : null}
+                  <div className="landing-editorial-lead-foot">
+                    <span className="landing-editorial-action-btn">Đọc toàn bộ bài viết <ArrowRight size={14} /></span>
+                  </div>
+                </Link>
+              )}
+
+              {articleItems.length > 1 && (
+                <div className="landing-editorial-stack">
+                  {articleItems.slice(1).map((article) => (
+                    <Link className="landing-editorial-stack-item" to={`/bai-viet/${encodeURIComponent(article.slug)}`} key={article.id}>
                       {article.publishedAt ? (
-                        <span className="landing-media-card-date">
+                        <span className="landing-editorial-date">
                           {formatDate(article.publishedAt, { dateStyle: 'short' })}
                         </span>
                       ) : null}
-                    </div>
-                    <h3 className="landing-media-card-title">
-                      {article.title}
-                    </h3>
-                    {article.excerpt ? (
-                      <div className="landing-media-card-excerpt">{shorten(article.excerpt, 150)}</div>
-                    ) : null}
-                    <div className="landing-media-card-foot">
-                      <span className="landing-media-card-action">Đọc bài viết &rarr;</span>
-                    </div>
-                  </div>
-                </Link>
-              ))}
+                      <h4 className="landing-editorial-stack-title">{article.title}</h4>
+                      {article.excerpt ? (
+                        <p className="landing-editorial-stack-desc">{shorten(article.excerpt, 110)}</p>
+                      ) : null}
+                      <span className="landing-editorial-stack-link">Chi tiết <ArrowRight size={12} /></span>
+                    </Link>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
           {mediaTab === 'NEWS' && newsItems.length > 0 && (
-            <div className="landing-media-grid" id="landing-news-panel" role="tabpanel" aria-labelledby={MEDIA_TAB_IDS.NEWS}>
-              {newsItems.map((news) => (
-                <div className="landing-media-card hover is-news" key={news.id}>
-                  <div className="landing-media-cover is-news">
-                    <div className="landing-media-cover-grid" />
-                  </div>
-                  <div className="landing-media-card-body">
-                    <div className="landing-media-card-meta">
-                      <span className="landing-media-card-source">{news.sourceName}</span>
-                      {news.publishedAt ? (
-                        <span className="landing-media-card-date">
-                          &bull; {formatDate(news.publishedAt, { dateStyle: 'short' })}
-                        </span>
-                      ) : null}
-                    </div>
-                    <h3 className="landing-media-card-title">
-                      {news.title}
-                    </h3>
-                    {news.excerpt ? (
-                      <div className="landing-media-card-excerpt">{shorten(news.excerpt, 150)}</div>
+            <div className="landing-editorial-layout" id="landing-news-panel" role="tabpanel" aria-labelledby={MEDIA_TAB_IDS.NEWS}>
+              {newsItems[0] && (
+                <div className="landing-editorial-lead is-news">
+                  <div className="landing-editorial-lead-header">
+                    <span className="landing-editorial-badge news-badge">{newsItems[0].sourceName}</span>
+                    {newsItems[0].publishedAt ? (
+                      <span className="landing-editorial-date">
+                        {formatDate(newsItems[0].publishedAt, { dateStyle: 'medium' })}
+                      </span>
                     ) : null}
-                    <div className="landing-media-card-foot">
+                  </div>
+                  <h3 className="landing-editorial-lead-title">{newsItems[0].title}</h3>
+                  {newsItems[0].excerpt ? (
+                    <p className="landing-editorial-lead-desc">{shorten(newsItems[0].excerpt, 220)}</p>
+                  ) : null}
+                  <div className="landing-editorial-lead-foot">
+                    <a
+                      className="landing-editorial-action-btn"
+                      href={newsItems[0].sourceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={`Xem chi tiết bài viết trên ${newsItems[0].sourceName}`}
+                    >
+                      Xem nguồn bài viết ↗
+                    </a>
+                  </div>
+                </div>
+              )}
+
+              {newsItems.length > 1 && (
+                <div className="landing-editorial-stack">
+                  {newsItems.slice(1).map((news) => (
+                    <div className="landing-editorial-stack-item" key={news.id}>
+                      <div className="landing-editorial-stack-meta">
+                        <span className="landing-editorial-source-name">{news.sourceName}</span>
+                        {news.publishedAt ? (
+                          <span className="landing-editorial-date">
+                            • {formatDate(news.publishedAt, { dateStyle: 'short' })}
+                          </span>
+                        ) : null}
+                      </div>
+                      <h4 className="landing-editorial-stack-title">{news.title}</h4>
+                      {news.excerpt ? (
+                        <p className="landing-editorial-stack-desc">{shorten(news.excerpt, 110)}</p>
+                      ) : null}
                       <a
-                        className="landing-media-card-action"
+                        className="landing-editorial-stack-link"
                         href={news.sourceUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        aria-label={`Xem chi tiết bài viết trên ${news.sourceName}`}
+                        aria-label={`Xem bài viết trên ${news.sourceName}`}
                       >
-                        Xem chi tiết &rarr;
+                        Nguồn tin ↗
                       </a>
                     </div>
-                  </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
           )}
         </div>
