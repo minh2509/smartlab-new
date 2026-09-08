@@ -15,25 +15,25 @@
   /* Thương hiệu */
   --brand-1:   #0B2F5E;   /* navy — nền tảng, chữ tiêu đề */
   --brand-2:   #12467F;   /* navy nhạt hơn — hover, gradient */
-  --brand-3:   #E8EEF7;   /* navy rất nhạt — nền khối */
+  --brand-3:   #EDF2F9;   /* navy rất nhạt — nền khối */
   --accent:    #F2711C;   /* cam — hành động chính, nhấn */
   --accent-2:  #FF9147;   /* cam sáng — gradient */
-  --accent-3:  #FDF0E6;   /* cam rất nhạt — nền badge */
+  --accent-3:  #FDF2E9;   /* cam rất nhạt — nền badge */
   --accent-ink:#A83E00;   /* cam đậm — chữ trên nền cam nhạt */
 
-  /* Bề mặt và chữ */
-  --page:      #F6F8FB;
+  /* Bề mặt và chữ — Warm Editorial Canvas */
+  --page:      #FBF9F4;   /* Nền trang ấm áp, chuyển tiếp tự nhiên với Hero */
   --surface:   #FFFFFF;
-  --surface-2: #F1F4F9;
-  --sunken:    #E9EEF5;
-  --text-1:    #10203A;
-  --text-2:    #4A5A72;
-  --text-3:    #7C8AA0;
+  --surface-2: #F5F1E8;   /* Nền phụ ấm */
+  --sunken:    #ECE7DC;   /* Nền lún ấm */
+  --text-1:    #0A1B33;   /* Deep ink navy, đồng bộ tiêu đề Hero */
+  --text-2:    #384A64;   /* Slate navy, đồng bộ lead Hero */
+  --text-3:    #6E7F96;   /* Chữ phụ mờ nhẹ */
   --on-brand:  #FFFFFF;
 
-  --line:      #DFE6EF;
-  --line-2:    #C9D4E2;
-  --grid:      #E4EAF2;
+  --line:      #E6E1D6;   /* Đường viền kiến trúc ấm */
+  --line-2:    #D5CEBF;   /* Đường phân cách rõ hơn */
+  --grid:      #ECE7DC;   /* Đường lưới đồ thị kỹ thuật */
 
   /* Màu dữ liệu — 5 slot, dùng cho lĩnh vực / avatar / biểu đồ */
   --s1: #2A78D6;  /* AI */
@@ -52,16 +52,16 @@
   --info:     #1C6BC4;
   --info-bg:  #E6F0FC;
 
-  /* Đổ bóng */
-  --sh-1: 0 1px 2px rgba(16,32,58,.06);
-  --sh-2: 0 1px 3px rgba(16,32,58,.07), 0 6px 16px rgba(16,32,58,.06);
-  --sh-3: 0 2px 6px rgba(16,32,58,.08), 0 18px 40px rgba(16,32,58,.10);
-  --sh-brand: 0 6px 18px rgba(242,113,28,.28);
+  /* Đổ bóng mịn đa tầng */
+  --sh-1: 0 1px 3px rgba(10, 27, 51, 0.04), 0 1px 2px rgba(10, 27, 51, 0.02);
+  --sh-2: 0 3px 10px -1px rgba(10, 27, 51, 0.06), 0 8px 24px -4px rgba(10, 27, 51, 0.07);
+  --sh-3: 0 6px 18px -2px rgba(10, 27, 51, 0.08), 0 20px 48px -6px rgba(10, 27, 51, 0.12);
+  --sh-brand: 0 6px 20px rgba(242, 113, 28, 0.24);
 
   /* Hình học */
-  --r-xs: 4px;  --r-sm: 6px;  --r: 10px;  --r-lg: 14px;  --r-xl: 20px;
+  --r-xs: 4px;  --r-sm: 8px;  --r: 12px;  --r-lg: 16px;  --r-xl: 24px;
   --maxw: 1200px;
-  --nav-h: 68px;
+  --nav-h: 70px;
 
   /* Chữ */
   --font: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -234,9 +234,11 @@ a.card:hover, .card.hover:hover { border-color: var(--line-2); transform: transl
 
 .site-nav {
   position: sticky; top: 0; z-index: 90;
-  background: color-mix(in srgb, var(--surface) 92%, transparent);
-  backdrop-filter: saturate(160%) blur(12px);
+  background: rgba(251, 249, 244, 0.90);
+  backdrop-filter: saturate(180%) blur(16px);
+  -webkit-backdrop-filter: saturate(180%) blur(16px);
   border-bottom: 1px solid var(--line);
+  box-shadow: 0 1px 3px rgba(10, 27, 51, 0.02);
 }
 .nav-in { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; height: var(--nav-h); display: flex; align-items: center; gap: 18px; }
 
@@ -247,16 +249,21 @@ a.card:hover, .card.hover:hover { border-color: var(--line-2); transform: transl
 .logo-txt b { font-size: 17.5px; font-weight: 800; letter-spacing: -.02em; color: var(--brand-1); }
 .logo-txt small { font-size: 10px; font-weight: 600; letter-spacing: .1em; color: var(--text-3); margin-top: 2px; }
 
-.menu { display: flex; align-items: center; gap: 2px; margin-left: auto; }
+.menu { display: flex; align-items: center; gap: 4px; margin-left: auto; }
 .menu > li { list-style: none; position: relative; }
 .menu > li > a {
-  display: flex; align-items: center; gap: 5px; padding: 9px 13px; border-radius: var(--r-sm);
-  font-size: 14.5px; font-weight: 600; color: var(--text-2); white-space: nowrap;
+  display: flex; align-items: center; gap: 5px; padding: 8px 14px; border-radius: var(--r-sm);
+  font-size: 14px; font-weight: 600; color: var(--text-2); white-space: nowrap;
+  transition: color .15s ease, background-color .15s ease;
 }
 .menu > li > a:hover { background: var(--surface-2); color: var(--brand-1); text-decoration: none; }
-.menu > li > a[aria-current="page"] { color: var(--accent); }
+.menu > li > a[aria-current="page"] {
+  color: var(--brand-1);
+  background: var(--surface-2);
+  font-weight: 700;
+}
 .menu > li > a[aria-current="page"]::after {
-  content: ""; position: absolute; left: 13px; right: 13px; bottom: -1px; height: 2.5px;
+  content: ""; position: absolute; left: 14px; right: 14px; bottom: 0px; height: 2px;
   background: var(--accent); border-radius: 2px;
 }
 .menu .caret { width: 12px; height: 12px; opacity: .6; }
