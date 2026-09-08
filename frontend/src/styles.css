@@ -273,8 +273,9 @@ select {
   flex: none;
   gap: 9px;
   min-width: 120px;
-  height: 40px;
-  padding: 0 16px 0 10px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0 18px 0 10px;
   border: 1px solid var(--line-2);
   border-radius: 999px;
   background: var(--surface);

@@ -12,10 +12,11 @@
 
 .project-directory-intro h2 {
   margin-top: 8px;
-  color: var(--brand-1);
-  font-size: clamp(28px, 3vw, 40px);
+  color: var(--text-1);
+  font-size: clamp(28px, 3.2vw, 40px);
   letter-spacing: -.03em;
   line-height: 1.15;
+  font-weight: 800;
 }
 
 .project-directory-intro p {
@@ -23,17 +24,19 @@
   margin: 10px 0 0;
   color: var(--text-2);
   line-height: 1.65;
+  font-size: 16px;
 }
 
 .project-directory-page-size {
   flex: none;
-  padding: 8px 11px;
+  padding: 8px 12px;
   border: 1px solid var(--line);
   border-radius: var(--r-sm);
   color: var(--text-2);
   font-size: 12.5px;
   font-weight: 650;
   white-space: nowrap;
+  background: var(--surface);
 }
 
 .project-directory-toolbar {
@@ -42,10 +45,11 @@
   gap: 12px;
   align-items: center;
   margin-bottom: 28px;
-  padding: 13px;
+  padding: 14px 16px;
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   background: var(--surface);
+  box-shadow: var(--sh-1);
 }
 
 .project-directory-search {
@@ -68,6 +72,18 @@
   width: 100%;
   min-height: 40px;
   padding-left: 40px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line-2);
+  background: var(--surface);
+  color: var(--text-1);
+  font-size: 14px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.project-directory-search .input:focus {
+  outline: 2.5px solid var(--accent);
+  outline-offset: 2px;
+  border-color: var(--accent);
 }
 
 .project-directory-filter {
@@ -76,31 +92,37 @@
 
 .project-directory-reset {
   display: inline-flex;
-  min-height: 40px;
+  min-height: 44px;
   align-items: center;
   justify-content: center;
   gap: 7px;
-  padding: 8px 11px;
-  border: 1px solid transparent;
+  padding: 8px 14px;
+  border: 1px solid var(--line-2);
   border-radius: var(--r-sm);
-  background: transparent;
+  background: var(--surface);
   color: var(--text-2);
   font: inherit;
   font-size: 13.5px;
   font-weight: 650;
   white-space: nowrap;
   cursor: pointer;
+  box-shadow: var(--sh-1);
   transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease;
 }
 
 .project-directory-reset:hover {
-  border-color: var(--line);
+  border-color: var(--brand-1);
   background: var(--surface-2);
-  color: var(--text-1);
+  color: var(--brand-1);
 }
 
 .project-directory-reset:active {
   transform: translateY(1px);
+}
+
+.project-directory-reset:focus-visible {
+  outline: 2.5px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .project-directory-request-state {
@@ -130,7 +152,7 @@
 .project-directory-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 20px;
+  gap: 24px;
 }
 
 .project-directory-card {
@@ -142,6 +164,7 @@
   background: var(--surface);
   color: inherit;
   overflow: hidden;
+  box-shadow: var(--sh-1);
   transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
 }
 
@@ -149,19 +172,20 @@
   border-color: var(--line-2);
   box-shadow: var(--sh-2);
   text-decoration: none;
-  transform: translateY(-2px);
+  transform: translateY(-3px);
 }
 
 .project-directory-card:focus-visible {
-  outline: 3px solid color-mix(in srgb, var(--accent) 34%, transparent);
-  outline-offset: 3px;
+  outline: 2.5px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-lg);
 }
 
 .project-directory-card-body {
   display: flex;
   width: 100%;
   flex-direction: column;
-  padding: 20px;
+  padding: 22px;
 }
 
 .project-directory-card-topline,
@@ -195,15 +219,29 @@
   font-weight: 700;
 }
 
-.project-directory-card-public-status,
-.project-directory-card-recruiting {
-  color: var(--brand-2);
-  font-size: 12px;
+.project-directory-card-public-status {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11.5px;
   font-weight: 700;
+  padding: 2px 8px;
+  border-radius: var(--r-xs);
+  background: var(--surface-2);
+  color: var(--text-2);
+  border: 1px solid var(--line);
 }
 
 .project-directory-card-recruiting {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: var(--r-xs);
+  background: var(--accent-3);
   color: var(--accent-ink);
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent);
 }
 
 .project-directory-card-badges {
@@ -217,13 +255,14 @@
   display: inline-flex;
   align-items: center;
   min-height: 25px;
-  padding: 3px 8px;
+  padding: 3px 9px;
   border: 1px solid var(--line);
   border-radius: var(--r-xs);
   color: var(--text-2);
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
+  background: var(--surface-2);
 }
 
 .project-directory-card-internal {
@@ -234,30 +273,31 @@
 
 .project-directory-card-title {
   display: -webkit-box;
-  margin: 16px 0 0;
+  margin: 14px 0 0;
   overflow: hidden;
   color: var(--brand-1);
-  font-size: 18px;
+  font-size: 18.5px;
   font-weight: 750;
   letter-spacing: -.018em;
-  line-height: 1.38;
+  line-height: 1.35;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
 
 .project-directory-card-description {
   display: -webkit-box;
-  margin: 10px 0 20px;
+  margin: 10px 0 18px;
   overflow: hidden;
   color: var(--text-2);
   font-size: 14px;
-  line-height: 1.55;
+  line-height: 1.6;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
 }
 
 .project-directory-card-description.is-fallback {
   color: var(--text-3);
+  font-style: italic;
 }
 
 .project-directory-card-fields {
@@ -309,12 +349,18 @@
 .project-directory-card-detail {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   margin-left: auto;
-  color: var(--brand-2);
+  color: var(--brand-1);
   font-size: 13px;
   font-weight: 700;
   white-space: nowrap;
+  transition: color 0.15s ease, gap 0.15s ease;
+}
+
+.project-directory-card:hover .project-directory-card-detail {
+  color: var(--accent);
+  gap: 7px;
 }
 
 .project-directory-empty-action {
@@ -327,44 +373,49 @@
   display: flex;
   justify-content: center;
   gap: 6px;
-  margin-top: 28px;
+  margin-top: 32px;
 }
 
 .project-directory-page-button {
   display: inline-grid;
-  width: 36px;
-  height: 36px;
+  width: 38px;
+  height: 38px;
   place-items: center;
   padding: 0;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-2);
   border-radius: var(--r-sm);
   background: var(--surface);
   color: var(--text-2);
   font: inherit;
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 700;
   cursor: pointer;
+  box-shadow: var(--sh-1);
+  transition: all 0.15s ease;
 }
 
 .project-directory-page-button:hover:not(:disabled) {
-  border-color: var(--brand-2);
-  color: var(--brand-2);
+  border-color: var(--brand-1);
+  color: var(--brand-1);
+  background: var(--surface-2);
 }
 
 .project-directory-page-button:focus-visible {
-  outline: 3px solid color-mix(in srgb, var(--accent) 34%, transparent);
+  outline: 2.5px solid var(--accent);
   outline-offset: 2px;
 }
 
 .project-directory-page-button.is-current {
-  border-color: var(--brand-2);
-  background: var(--brand-2);
+  border-color: var(--brand-1);
+  background: var(--brand-1);
   color: #fff;
+  box-shadow: 0 2px 8px rgba(11, 47, 94, 0.25);
 }
 
 .project-directory-page-button:disabled {
   cursor: not-allowed;
-  opacity: .42;
+  opacity: 0.35;
+  box-shadow: none;
 }
 
 @media (max-width: 1100px) {
@@ -381,7 +432,7 @@
   }
 }
 
-@media (max-width: 700px) {
+@media (max-width: 768px) {
   .project-directory-intro {
     align-items: flex-start;
     flex-direction: column;
@@ -401,7 +452,7 @@
   .project-directory-toolbar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
-    padding: 11px;
+    padding: 12px;
   }
 
   .project-directory-reset {
@@ -411,7 +462,7 @@
 
   .project-directory-grid {
     grid-template-columns: 1fr;
-    gap: 16px;
+    gap: 18px;
   }
 }
 
@@ -432,7 +483,9 @@
 
 @media (prefers-reduced-motion: reduce) {
   .project-directory-card,
-  .project-directory-reset {
-    transition: none;
+  .project-directory-reset,
+  .project-directory-page-button {
+    transition: none !important;
+    transform: none !important;
   }
 }

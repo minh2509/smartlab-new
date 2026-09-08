@@ -1,28 +1,288 @@
-.achievement-archive-section { padding: 56px 0 72px; }
-.achievement-archive-intro { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 28px; }
-.achievement-archive-intro h2 { margin-top: 8px; color: var(--brand-1); font-size: clamp(28px, 3vw, 40px); letter-spacing: -.03em; line-height: 1.15; }
-.achievement-archive-intro p { max-width: 64ch; margin: 10px 0 0; color: var(--text-2); line-height: 1.65; }
-.achievement-archive-page-size { flex: none; padding: 8px 11px; border: 1px solid var(--line); border-radius: var(--r-sm); color: var(--text-2); font-size: 12.5px; font-weight: 650; white-space: nowrap; }
-.achievement-archive-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 24px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); }
-.achievement-archive-toolbar label { color: var(--text-2); font-size: 13px; font-weight: 700; }
-.achievement-archive-toolbar select { min-height: 40px; padding: 0 34px 0 11px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface); color: var(--text-1); font: inherit; font-size: 13.5px; }
-.achievement-archive-count { margin-left: auto; color: var(--text-2); font-size: 13px; font-weight: 650; }
-.achievement-archive-error { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; padding: 14px 16px; border: 1px solid color-mix(in srgb, var(--danger) 26%, var(--line)); border-radius: var(--r); background: color-mix(in srgb, var(--danger) 7%, var(--surface)); }
-.achievement-archive-error p { margin: 0; color: var(--text-1); font-size: 13.5px; }
-.achievement-archive-error .btn { flex: none; }
-.achievement-archive-list { display: grid; gap: 12px; }
-.achievement-archive-row { display: grid; grid-template-columns: 150px minmax(0, 1fr) auto; align-items: start; gap: 22px; padding: 20px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); }
-.achievement-archive-row-meta { display: grid; gap: 7px; color: var(--brand-2); font-size: 12px; font-weight: 750; }
-.achievement-archive-row-meta time { color: var(--text-3); font-weight: 600; }
-.achievement-archive-row-content { min-width: 0; }
-.achievement-archive-row-content h2 { margin: 0; color: var(--brand-1); font-size: 18px; line-height: 1.35; }
-.achievement-archive-row-content p { margin: 8px 0 0; color: var(--text-2); line-height: 1.6; }
-.achievement-archive-organization,.achievement-archive-project { display: block; margin-top: 9px; color: var(--text-3); font-size: 12.5px; }
-.achievement-archive-evidence { display: inline-flex; align-items: center; gap: 5px; color: var(--brand-2); font-size: 13px; font-weight: 700; white-space: nowrap; }
-.achievement-archive-pagination { display: flex; justify-content: center; gap: 6px; margin-top: 28px; }
-.achievement-archive-pagination button { display: inline-grid; width: 36px; height: 36px; place-items: center; padding: 0; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface); color: var(--text-2); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
-.achievement-archive-pagination button:hover:not(:disabled) { border-color: var(--brand-2); color: var(--brand-2); }
-.achievement-archive-pagination button:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 34%, transparent); outline-offset: 2px; }
-.achievement-archive-pagination button.is-current { border-color: var(--brand-2); background: var(--brand-2); color: #fff; }
-.achievement-archive-pagination button:disabled { cursor: not-allowed; opacity: .42; }
-@media (max-width: 720px) { .achievement-archive-intro { align-items: flex-start; flex-direction: column; gap: 14px; }.achievement-archive-page-size { align-self: flex-start; }.achievement-archive-toolbar { align-items: flex-start; flex-wrap: wrap; }.achievement-archive-count { width: 100%; margin-left: 0; }.achievement-archive-row { grid-template-columns: 1fr; gap: 12px; padding: 16px; }.achievement-archive-evidence { justify-self: start; } }
+.achievement-archive-section {
+  padding: 56px 0 72px;
+}
+
+.achievement-archive-intro {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 28px;
+}
+
+.achievement-archive-intro h2 {
+  margin-top: 8px;
+  color: var(--text-1);
+  font-size: clamp(28px, 3.2vw, 40px);
+  letter-spacing: -.03em;
+  line-height: 1.15;
+  font-weight: 800;
+}
+
+.achievement-archive-intro p {
+  max-width: 64ch;
+  margin: 10px 0 0;
+  color: var(--text-2);
+  line-height: 1.65;
+  font-size: 16px;
+}
+
+.achievement-archive-page-size {
+  flex: none;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 650;
+  white-space: nowrap;
+  background: var(--surface);
+}
+
+.achievement-archive-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--sh-1);
+}
+
+.achievement-archive-toolbar label {
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.achievement-archive-toolbar select {
+  min-height: 44px;
+  padding: 0 34px 0 14px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23384A64' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  appearance: none;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.achievement-archive-toolbar select:focus {
+  outline: 2.5px solid var(--accent);
+  outline-offset: 2px;
+  border-color: var(--accent);
+}
+
+.achievement-archive-count {
+  margin-left: auto;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 650;
+  font-family: ui-monospace, monospace;
+}
+
+.achievement-archive-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+  padding: 16px 20px;
+  border: 1px solid rgba(198, 47, 47, 0.25);
+  border-radius: var(--r-lg);
+  background: #FFF8F8;
+}
+
+.achievement-archive-error p {
+  margin: 0;
+  color: #9A2424;
+  font-size: 13.5px;
+  font-weight: 550;
+}
+
+.achievement-archive-error .btn {
+  flex: none;
+}
+
+.achievement-archive-list {
+  display: grid;
+  gap: 14px;
+}
+
+.achievement-archive-row {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 24px;
+  padding: 22px 24px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--sh-1);
+  transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.achievement-archive-row:hover {
+  border-color: var(--line-2);
+  transform: translateY(-2px);
+  box-shadow: var(--sh-2);
+}
+
+.achievement-archive-row-meta {
+  display: grid;
+  gap: 8px;
+  color: var(--brand-1);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.achievement-archive-row-meta time {
+  color: var(--text-3);
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.achievement-archive-row-content {
+  min-width: 0;
+}
+
+.achievement-archive-row-content h2 {
+  margin: 0;
+  color: var(--brand-1);
+  font-size: 18.5px;
+  font-weight: 750;
+  line-height: 1.35;
+  letter-spacing: -0.015em;
+}
+
+.achievement-archive-row-content p {
+  margin: 8px 0 0;
+  color: var(--text-2);
+  line-height: 1.6;
+  font-size: 14px;
+}
+
+.achievement-archive-organization,
+.achievement-archive-project {
+  display: inline-block;
+  margin-top: 10px;
+  margin-right: 12px;
+  color: var(--text-3);
+  font-size: 12.5px;
+}
+
+.achievement-archive-evidence {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--brand-1);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: color 0.15s ease, gap 0.15s ease;
+}
+
+.achievement-archive-evidence:hover {
+  color: var(--accent);
+  gap: 8px;
+  text-decoration: none;
+}
+
+.achievement-archive-pagination {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 32px;
+}
+
+.achievement-archive-pagination button {
+  display: inline-grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: var(--sh-1);
+  transition: all 0.15s ease;
+}
+
+.achievement-archive-pagination button:hover:not(:disabled) {
+  border-color: var(--brand-1);
+  color: var(--brand-1);
+  background: var(--surface-2);
+}
+
+.achievement-archive-pagination button:focus-visible {
+  outline: 2.5px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.achievement-archive-pagination button.is-current {
+  border-color: var(--brand-1);
+  background: var(--brand-1);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(11, 47, 94, 0.25);
+}
+
+.achievement-archive-pagination button:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+  box-shadow: none;
+}
+
+@media (max-width: 760px) {
+  .achievement-archive-intro {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .achievement-archive-page-size {
+    align-self: flex-start;
+  }
+
+  .achievement-archive-toolbar {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .achievement-archive-count {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .achievement-archive-row {
+    grid-template-columns: 1fr;
+    gap: 14px;
+    padding: 18px;
+  }
+
+  .achievement-archive-evidence {
+    justify-self: start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .achievement-archive-row,
+  .achievement-archive-evidence,
+  .achievement-archive-pagination button {
+    transition: none !important;
+    transform: none !important;
+  }
+}
