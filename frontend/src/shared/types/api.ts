@@ -31,6 +31,38 @@ export type InvitationResponse = {
   sentTo: string
 }
 
+export type BulkInvitationRow = {
+  fullName: string
+  email: string
+}
+
+export type BulkInvitationItemResponse = {
+  sourceRow: number
+  itemId?: string
+  fullName: string
+  email: string
+  status: string
+  failureCode?: string
+  failureMessage?: string
+  resendCount: number
+}
+
+export type BulkInvitationPreviewResponse = {
+  requestedCount: number
+  acceptedCount: number
+  rejectedCount: number
+  items: BulkInvitationItemResponse[]
+}
+
+export type BulkInvitationBatchResponse = BulkInvitationPreviewResponse & {
+  batchId: string
+  status: string
+  createdBy: string
+  createdAt: string
+  completedAt?: string
+  roleCodes: string[]
+}
+
 export type Role = {
   id: number
   code: string

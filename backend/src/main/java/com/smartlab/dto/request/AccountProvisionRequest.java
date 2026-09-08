@@ -19,6 +19,6 @@ public class AccountProvisionRequest {
     @Schema(description = "Unique email for login and invitation", example = "member@smartlab.local")
     private String email;
 
-    @Schema(description = "Initial role codes. Defaults to MEMBER when omitted.", example = "[\"MEMBER\"]")
+    @Schema(description = "Initial active role codes. At least one role is required.", example = "[\"MEMBER\"]")
     private Set<String> roleCodes;
 }

@@ -8,6 +8,8 @@ import {
   listAccounts,
   listPermissions,
   listRoles,
+  previewBulkInvitations,
+  provisionBulkInvitations,
   provisionAccount,
   removeUserPermissionOverride,
   resendInvitation,
@@ -15,10 +17,11 @@ import {
   setUserPermissionOverride,
   updateAccountRoles,
 } from '../api'
-import type { AccountResponse, PaginatedResponse, Permission, Role } from '../../../shared/types/api'
+import type { AccountResponse, BulkInvitationPreviewResponse, BulkInvitationRow, PaginatedResponse, Permission, Role } from '../../../shared/types/api'
 import { EmptyState } from '../../../shared/components/EmptyState'
 import { Feedback } from '../../../shared/components/Feedback'
 import { useToast } from '../../../shared/toast/useToast'
+import { PopupSelect } from '../../../shared/ui/PopupSelect'
 
 const PAGE_SIZE = 10
 
@@ -29,6 +32,11 @@ type EditDraft = {
   activeValue: string
   permissionCode: string
   permissionEffect: 'GRANT' | 'DENY'
+}
+
+type BulkCsvParseResult = {
+  items: BulkInvitationRow[]
+  errors: string[]
 }
 
 const emptyPage: PaginatedResponse<AccountResponse> = {
@@ -56,6 +64,12 @@ export function AdminAccountsPage() {
   const [email, setEmail] = useState('')
   const [provisionRole, setProvisionRole] = useState('')
   const [resendEmail, setResendEmail] = useState('')
+  const [isBulkDialogOpen, setBulkDialogOpen] = useState(false)
+  const [bulkCsv, setBulkCsv] = useState('')
+  const [bulkRole, setBulkRole] = useState('')
+  const [bulkPreview, setBulkPreview] = useState<BulkInvitationPreviewResponse | null>(null)
+  const [bulkError, setBulkError] = useState('')
+  const [isBulkSubmitting, setBulkSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [isLoading, setLoading] = useState(false)
 
@@ -119,12 +133,16 @@ export function AdminAccountsPage() {
   async function handleProvision(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!token) return
+    if (!provisionRole) {
+      setError('Chọn một role đang hoạt động trước khi cấp tài khoản.')
+      return
+    }
     setError('')
     try {
       await provisionAccount(token, {
         name: name.trim(),
         email: email.trim(),
-        roleCodes: provisionRole ? [provisionRole] : undefined,
+        roleCodes: [provisionRole],
       })
       setName('')
       setEmail('')
@@ -150,6 +168,73 @@ export function AdminAccountsPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không gửi lại được invite')
     }
+  }
+
+  async function handleBulkPreview() {
+    if (!token) return
+    const items = validateBulkInput()
+    if (!items) return
+    setBulkError('')
+    setBulkSubmitting(true)
+    try {
+      setBulkPreview(await previewBulkInvitations(token, items, [bulkRole]))
+    } catch (err) {
+      setBulkError(err instanceof Error ? err.message : 'Không kiểm tra được danh sách import')
+    } finally {
+      setBulkSubmitting(false)
+    }
+  }
+
+  async function handleBulkProvision() {
+    if (!token) return
+    const items = validateBulkInput()
+    if (!items) return
+    if (!bulkPreview) {
+      setBulkError('Hãy bấm “Kiểm tra danh sách” trước khi tạo batch.')
+      return
+    }
+    if (bulkPreview.acceptedCount === 0) {
+      setBulkError('Danh sách không có dòng hợp lệ để tạo batch.')
+      return
+    }
+    setBulkError('')
+    setBulkSubmitting(true)
+    try {
+      const batch = await provisionBulkInvitations(token, items, [bulkRole])
+      setBulkDialogOpen(false)
+      setBulkCsv('')
+      setBulkRole('')
+      setBulkPreview(null)
+      setBulkError('')
+      setPage(0)
+      await loadAccounts(0)
+      toast.success('Đã tạo batch mời', `${batch.acceptedCount} tài khoản được xếp hàng gửi email.`)
+    } catch (err) {
+      setBulkError(err instanceof Error ? err.message : 'Không tạo được batch mời')
+    } finally {
+      setBulkSubmitting(false)
+    }
+  }
+
+  function validateBulkInput(): BulkInvitationRow[] | null {
+    const parsed = parseBulkRows(bulkCsv)
+    if (parsed.errors.length) {
+      setBulkError(parsed.errors.join(' '))
+      return null
+    }
+    if (!parsed.items.length) {
+      setBulkError('Nhập ít nhất một dòng theo mẫu “Họ tên, email”.')
+      return null
+    }
+    if (parsed.items.length > 100) {
+      setBulkError('Mỗi batch tối đa 100 dòng. Hãy tách danh sách thành các batch nhỏ hơn.')
+      return null
+    }
+    if (!bulkRole) {
+      setBulkError('Chọn role áp dụng cho cả batch trước khi tiếp tục.')
+      return null
+    }
+    return parsed.items
   }
 
   async function handleSaveAccount(event: FormEvent<HTMLFormElement>) {
@@ -217,11 +302,15 @@ export function AdminAccountsPage() {
           <Send />
           Gửi lại invite
         </button>
+        <button className="btn primary" type="button" onClick={() => { setError(''); setBulkError(''); setBulkPreview(null); setBulkDialogOpen(true) }}>
+          <UserPlus />
+          Cấp hàng loạt
+        </button>
       </div>
 
       <AccountActionDialog
         activeDialog={activeDialog}
-        roles={roles}
+        roles={roles.filter((role) => role.isActive)}
         name={name}
         email={email}
         provisionRole={provisionRole}
@@ -233,6 +322,21 @@ export function AdminAccountsPage() {
         onResendEmailChange={setResendEmail}
         onProvision={handleProvision}
         onResend={handleResend}
+      />
+
+      <BulkInvitationDialog
+        open={isBulkDialogOpen}
+        roles={roles.filter((role) => role.isActive)}
+        csv={bulkCsv}
+        role={bulkRole}
+        preview={bulkPreview}
+        error={bulkError}
+        submitting={isBulkSubmitting}
+        onClose={() => { if (!isBulkSubmitting) { setBulkDialogOpen(false); setBulkError('') } }}
+        onCsvChange={(value) => { setBulkCsv(value); setBulkPreview(null); setBulkError('') }}
+        onRoleChange={(value) => { setBulkRole(value); setBulkPreview(null); setBulkError('') }}
+        onPreview={() => void handleBulkPreview()}
+        onProvision={() => void handleBulkProvision()}
       />
 
       <EditAccountDialog
@@ -281,6 +385,151 @@ export function AdminAccountsPage() {
       ) : null}
     </>
   )
+}
+
+function BulkInvitationDialog({
+  open, roles, csv, role, preview, error, submitting, onClose, onCsvChange, onRoleChange, onPreview, onProvision,
+}: {
+  open: boolean
+  roles: Role[]
+  csv: string
+  role: string
+  preview: BulkInvitationPreviewResponse | null
+  error: string
+  submitting: boolean
+  onClose: () => void
+  onCsvChange: (value: string) => void
+  onRoleChange: (value: string) => void
+  onPreview: () => void
+  onProvision: () => void
+}) {
+  if (!open) return null
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section className="modal-panel account-modal bulk-invitation-modal" role="dialog" aria-modal="true" aria-labelledby="bulk-invite-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="modal-head">
+          <div>
+            <h2 id="bulk-invite-title">Cấp tài khoản hàng loạt</h2>
+            <p>Dán tối đa 100 dòng theo mẫu <code>Họ tên, email</code>. Hệ thống kiểm tra trước, rồi mới tạo account và xếp mail vào hàng đợi.</p>
+          </div>
+          <button className="icon-btn modal-close" type="button" onClick={onClose} aria-label="Đóng popup" disabled={submitting}><X /></button>
+        </div>
+        <div className="form-stack">
+          <label className="field">
+            <span>Danh sách CSV</span>
+            <textarea className="textarea" rows={7} value={csv} onChange={(event) => onCsvChange(event.target.value)}
+              placeholder={'Nguyen Van A, nguyena@example.edu.vn\nTran Thi B, tranb@example.edu.vn'} disabled={submitting} />
+            <small>Một dòng một người. Dấu phẩy thừa ở cuối dòng được bỏ qua.</small>
+          </label>
+          <label className="field">
+            <span>Role áp dụng cho cả batch</span>
+            <PopupSelect
+              value={role}
+              onChange={onRoleChange}
+              disabled={submitting}
+              ariaLabel="Role áp dụng cho cả batch"
+              options={[
+                { value: '', label: 'Chọn role đang hoạt động' },
+                ...roles.map((item) => ({ value: item.code, label: roleOptionLabel(item) })),
+              ]}
+            />
+          </label>
+          {error ? <div className="alert error bulk-invitation-error" role="alert">{error}</div> : null}
+          {preview ? (
+            <section className="bulk-preview" aria-label="Kết quả kiểm tra danh sách">
+              <div className="bulk-preview-head">
+                <div>
+                  <h3>Kết quả kiểm tra</h3>
+                  <p>Kiểm tra kỹ các dòng bị từ chối trước khi tạo batch.</p>
+                </div>
+                <div className="inline-badges">
+                  <span className="badge success">{preview.acceptedCount} hợp lệ</span>
+                  <span className={preview.rejectedCount ? 'badge danger' : 'badge info'}>{preview.rejectedCount} bị bỏ qua</span>
+                </div>
+              </div>
+              <div className="admin-table-wrap bulk-preview-table-wrap">
+                <table className="admin-table bulk-preview-table">
+                  <thead><tr><th>Dòng</th><th>Họ tên</th><th>Email</th><th>Kết quả</th><th>Ghi chú</th></tr></thead>
+                  <tbody>
+                    {preview.items.slice(0, 10).map((item) => (
+                      <tr key={item.sourceRow}>
+                        <td className="row-number">{item.sourceRow}</td>
+                        <td>{item.fullName || '—'}</td>
+                        <td>{item.email || '—'}</td>
+                        <td><span className={`badge ${bulkStatusTone(item.status)}`}>{bulkStatusLabel(item.status)}</span></td>
+                        <td className="bulk-preview-message">{item.failureMessage || 'Sẵn sàng tạo account'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {preview.items.length > 10 ? <p className="bulk-preview-note">Đang hiển thị 10 / {preview.items.length} dòng. Server vẫn kiểm tra toàn bộ danh sách.</p> : null}
+            </section>
+          ) : null}
+          <div className="modal-actions">
+            <button className="btn ghost" type="button" onClick={onClose} disabled={submitting}>Hủy</button>
+            <button className="btn brand" type="button" onClick={onPreview} disabled={submitting}>Kiểm tra danh sách</button>
+            <button className="btn primary" type="button" onClick={onProvision} disabled={submitting}>
+              <Send />
+              {submitting ? 'Đang xử lý...' : 'Tạo batch và gửi mail'}
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function parseBulkRows(value: string): BulkCsvParseResult {
+  const items: BulkInvitationRow[] = []
+  const errors: string[] = []
+  value.split(/\r?\n/).forEach((rawLine, index) => {
+    const line = index === 0 ? rawLine.replace(/^\uFEFF/, '') : rawLine
+    const parsedLine = parseCsvLine(line)
+    if (parsedLine.hasUnclosedQuote) {
+      errors.push(`Dòng ${index + 1} có dấu nháy kép chưa đóng.`)
+      return
+    }
+    const columns = parsedLine.columns.map((column) => column.trim())
+    if (columns.every((column) => !column)) return
+    while (columns.length > 2 && !columns.at(-1)) columns.pop()
+    if (columns.length > 2) {
+      errors.push(`Dòng ${index + 1} chỉ được gồm Họ tên và Email.`)
+      return
+    }
+    items.push({ fullName: columns[0] ?? '', email: columns[1] ?? '' })
+  })
+  return { items, errors }
+}
+
+function parseCsvLine(line: string): { columns: string[]; hasUnclosedQuote: boolean } {
+  const columns: string[] = []
+  let current = ''
+  let quoted = false
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index]
+    if (character === '"') {
+      if (quoted && line[index + 1] === '"') { current += '"'; index += 1 } else quoted = !quoted
+    } else if (!quoted && (character === ',' || character === ';')) {
+      columns.push(current); current = ''
+    } else current += character
+  }
+  columns.push(current)
+  return { columns, hasUnclosedQuote: quoted }
+}
+
+function bulkStatusLabel(status: string) {
+  switch (status) {
+    case 'VALID': return 'Hợp lệ'
+    case 'REJECTED_INVALID': return 'Dữ liệu sai'
+    case 'REJECTED_DUPLICATE': return 'Trùng trong danh sách'
+    case 'REJECTED_ALREADY_EXISTS': return 'Email đã tồn tại'
+    default: return status
+  }
+}
+
+function bulkStatusTone(status: string) {
+  return status === 'VALID' ? 'success' : 'danger'
 }
 
 function AccountsTable({
@@ -540,10 +789,12 @@ function EditAccountDialog({
           <RoleSelect roles={roles} value={draft.roleCode} onChange={(roleCode) => onDraftChange({ roleCode })} />
           <label className="field">
             <span>Trạng thái đăng nhập</span>
-            <select className="select" value={draft.activeValue} onChange={(event) => onDraftChange({ activeValue: event.target.value })}>
-              <option value="true">Mở đăng nhập</option>
-              <option value="false">Khoá đăng nhập</option>
-            </select>
+            <PopupSelect
+              value={draft.activeValue}
+              onChange={(activeValue) => onDraftChange({ activeValue })}
+              ariaLabel="Trạng thái đăng nhập"
+              options={[{ value: 'true', label: 'Mở đăng nhập' }, { value: 'false', label: 'Khoá đăng nhập' }]}
+            />
           </label>
           <button className="btn primary full" type="submit" disabled={!draft.roleCode}>
             <Save />
@@ -571,25 +822,21 @@ function EditAccountDialog({
             <div className="permission-edit-grid">
               <label className="field">
                 <span>Permission</span>
-                <select className="select" value={draft.permissionCode} onChange={(event) => onDraftChange({ permissionCode: event.target.value })}>
-                  <option value="">Chọn permission</option>
-                  {permissionOptions.map((permission) => (
-                    <option key={permission.code} value={permission.code}>
-                      {permission.code}
-                    </option>
-                  ))}
-                </select>
+                <PopupSelect
+                  value={draft.permissionCode}
+                  onChange={(permissionCode) => onDraftChange({ permissionCode })}
+                  ariaLabel="Permission riêng"
+                  options={[{ value: '', label: 'Chọn permission' }, ...permissionOptions.map((permission) => ({ value: permission.code, label: permission.code }))]}
+                />
               </label>
               <label className="field">
                 <span>Hiệu lực</span>
-                <select
-                  className="select"
+                <PopupSelect
                   value={draft.permissionEffect}
-                  onChange={(event) => onDraftChange({ permissionEffect: event.target.value as 'GRANT' | 'DENY' })}
-                >
-                  <option value="GRANT">GRANT</option>
-                  <option value="DENY">DENY</option>
-                </select>
+                  onChange={(permissionEffect) => onDraftChange({ permissionEffect: permissionEffect as 'GRANT' | 'DENY' })}
+                  ariaLabel="Hiệu lực permission riêng"
+                  options={[{ value: 'GRANT', label: 'GRANT' }, { value: 'DENY', label: 'DENY' }]}
+                />
               </label>
             </div>
             <div className="form-actions">
@@ -625,16 +872,23 @@ function RoleSelect({
   return (
     <label className="field">
       <span>Role</span>
-      <select className="select" value={value} onChange={(event) => onChange(event.target.value)}>
-        <option value="">Chọn role</option>
-        {roles.map((role) => (
-          <option key={role.code} value={role.code}>
-            {role.code} - {role.name}
-          </option>
-        ))}
-      </select>
+      <PopupSelect
+        value={value}
+        onChange={onChange}
+        ariaLabel="Chọn role"
+        options={[
+          { value: '', label: 'Chọn role' },
+          ...roles.map((role) => ({ value: role.code, label: roleOptionLabel(role) })),
+        ]}
+      />
     </label>
   )
+}
+
+function roleOptionLabel(role: Role) {
+  return role.name.trim().toUpperCase() === role.code.toUpperCase()
+    ? role.code
+    : `${role.name} (${role.code})`
 }
 
 function createEditDraft(account: AccountResponse | null, permissions: Permission[]): EditDraft {

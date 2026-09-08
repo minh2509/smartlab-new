@@ -1,6 +1,7 @@
 package com.smartlab.service.impl;
 
 import com.smartlab.entity.AccountInvitationEntity;
+import com.smartlab.entity.EmailOutboxEntity;
 import com.smartlab.entity.MemberProfileEntity;
 import com.smartlab.entity.PermissionEntity;
 import com.smartlab.entity.RoleEntity;
@@ -8,6 +9,7 @@ import com.smartlab.entity.UserEntity;
 import com.smartlab.entity.UserPermissionOverrideEntity;
 import com.smartlab.entity.UserRoleEntity;
 import com.smartlab.enums.InvitationStatus;
+import com.smartlab.enums.EmailOutboxStatus;
 import com.smartlab.dto.request.AccountProvisionRequest;
 import com.smartlab.dto.response.AccountResponse;
 import com.smartlab.dto.request.InvitationAcceptRequest;
@@ -15,6 +17,7 @@ import com.smartlab.dto.response.InvitationResponse;
 import com.smartlab.dto.response.PageResponse;
 import com.smartlab.dto.request.PermissionOverrideRequest;
 import com.smartlab.repo.AccountInvitationRepository;
+import com.smartlab.repo.EmailOutboxRepository;
 import com.smartlab.repo.MemberProfileRepository;
 import com.smartlab.repo.PermissionRepository;
 import com.smartlab.repo.RoleRepository;
@@ -23,7 +26,6 @@ import com.smartlab.repo.UserRepository;
 import com.smartlab.repo.UserRoleRepository;
 import com.smartlab.service.AdminAccountService;
 import com.smartlab.service.AuditService;
-import com.smartlab.service.EmailService;
 import com.smartlab.service.PermissionService;
 import com.smartlab.service.TokenHashService;
 import com.smartlab.service.UserSessionService;
@@ -61,7 +63,8 @@ public class AdminAccountServiceImpl implements AdminAccountService {
     private final AccountInvitationRepository accountInvitationRepository;
     private final MemberProfileRepository memberProfileRepository;
     private final PermissionService permissionService;
-    private final EmailService emailService;
+    private final EmailOutboxRepository emailOutboxRepository;
+    private final AccountInvitationOutboxStateService outboxStateService;
     private final UserSessionService userSessionService;
     private final TokenHashService tokenHashService;
     private final PasswordEncoder passwordEncoder;
@@ -70,9 +73,6 @@ public class AdminAccountServiceImpl implements AdminAccountService {
 
     @Value("${smartlab.invite.ttl-hours:72}")
     private long inviteTtlHours;
-
-    @Value("${smartlab.frontend.base-url:http://127.0.0.1:5173}")
-    private String frontendBaseUrl;
 
     @Transactional(readOnly = true)
     @Override
@@ -102,14 +102,15 @@ public class AdminAccountServiceImpl implements AdminAccountService {
                 .build();
         UserEntity savedUser = userRepository.save(user);
         memberProfileRepository.save(MemberProfileEntity.create(savedUser));
-        assignRoles(savedUser, request.getRoleCodes() == null || request.getRoleCodes().isEmpty()
-                ? Set.of("MEMBER")
-                : request.getRoleCodes(), adminUserId);
+        if (request.getRoleCodes() == null || request.getRoleCodes().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Select at least one active role");
+        }
+        assignRoles(savedUser, request.getRoleCodes(), adminUserId);
 
-        String rawInviteToken = upsertInvite(savedUser.getEmail(), adminUserId);
+        upsertInvite(savedUser.getEmail(), adminUserId);
         AccountInvitationEntity invitation = accountInvitationRepository.findByEmail(savedUser.getEmail())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Invitation not found"));
-        sendInviteEmail(invitation, rawInviteToken);
+        queueInvitationEmail(invitation, savedUser.getEmail());
         return InvitationResponse.builder()
                 .email(savedUser.getEmail())
                 .status(InvitationStatus.PENDING)
@@ -123,10 +124,10 @@ public class AdminAccountServiceImpl implements AdminAccountService {
     public InvitationResponse resendInvite(String email, String adminUserId) {
         UserEntity user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + email));
-        String rawInviteToken = upsertInvite(user.getEmail(), adminUserId);
+        upsertInvite(user.getEmail(), adminUserId);
         AccountInvitationEntity invitation = accountInvitationRepository.findByEmail(user.getEmail())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Invitation not found"));
-        sendInviteEmail(invitation, rawInviteToken);
+        queueInvitationEmail(invitation, user.getEmail());
         return InvitationResponse.builder()
                 .email(invitation.getEmail())
                 .status(invitation.getStatus())
@@ -163,6 +164,7 @@ public class AdminAccountServiceImpl implements AdminAccountService {
         invitation.setStatus(InvitationStatus.ACCEPTED);
         invitation.setAcceptedAt(Instant.now());
         accountInvitationRepository.save(invitation);
+        outboxStateService.markActivated(invitation.getId());
         userSessionService.revokeAllByEmail(user.getEmail());
         return toResponse(user);
     }
@@ -260,8 +262,8 @@ public class AdminAccountServiceImpl implements AdminAccountService {
             normalizedCodes.add(roleCode.trim().toUpperCase());
         }
         Set<RoleEntity> roles = new HashSet<>(roleRepository.findByCodeIn(normalizedCodes));
-        if (roles.size() != normalizedCodes.size()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "One or more role codes are invalid");
+        if (roles.size() != normalizedCodes.size() || roles.stream().anyMatch(role -> !Boolean.TRUE.equals(role.getIsActive()))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "One or more role codes are invalid or inactive");
         }
 
         userRoleRepository.deleteByUserId(user.getId());
@@ -275,32 +277,33 @@ public class AdminAccountServiceImpl implements AdminAccountService {
         return roles.stream().map(RoleEntity::getCode).sorted().toList();
     }
 
-    private String upsertInvite(String email, String adminUserId) {
-        String rawInviteToken = randomToken(48);
+    private void upsertInvite(String email, String adminUserId) {
         AccountInvitationEntity invitation = accountInvitationRepository.findByEmail(email)
                 .orElseGet(() -> AccountInvitationEntity.builder()
                         .invitationId(UUID.randomUUID().toString())
                         .email(email)
                         .resendCount(0)
                         .build());
-        invitation.setTokenHash(tokenHashService.sha256(rawInviteToken));
+        // This placeholder is replaced only by the outbox worker immediately before delivery.
+        invitation.setTokenHash(tokenHashService.sha256(randomToken(48)));
         invitation.setStatus(InvitationStatus.PENDING);
         invitation.setExpiresAt(Instant.now().plus(inviteTtlHours, ChronoUnit.HOURS));
         invitation.setAcceptedAt(null);
         invitation.setInvitedBy(adminUserId);
         invitation.setResendCount(invitation.getResendCount() == null ? 0 : invitation.getResendCount() + 1);
         accountInvitationRepository.save(invitation);
-        return rawInviteToken;
     }
 
-    private void sendInviteEmail(AccountInvitationEntity invitation, String rawInviteToken) {
-        String inviteLink = frontendBaseUrl.replaceAll("/+$", "")
-                + "/accept-invite?token=" + rawInviteToken;
-        try {
-            emailService.sendInvitationEmail(invitation.getEmail(), inviteLink, invitation.getExpiresAt().toString());
-        } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Unable to send invitation email");
-        }
+    private void queueInvitationEmail(AccountInvitationEntity invitation, String email) {
+        emailOutboxRepository.save(EmailOutboxEntity.builder()
+                .messageId(UUID.randomUUID().toString())
+                .templateCode("ACCOUNT_INVITATION")
+                .recipientEmail(email)
+                .invitation(invitation)
+                .status(EmailOutboxStatus.QUEUED)
+                .attemptCount(0)
+                .nextAttemptAt(Instant.now())
+                .build());
     }
 
     private UserEntity getUserByUserId(String userId) {

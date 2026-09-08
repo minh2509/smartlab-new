@@ -1,5 +1,5 @@
 import { apiClient, toQuery } from '../../lib/apiClient'
-import type { AccountResponse, InvitationResponse, PaginatedResponse, Permission, Role } from '../../shared/types/api'
+import type { AccountResponse, BulkInvitationBatchResponse, BulkInvitationPreviewResponse, BulkInvitationRow, InvitationResponse, PaginatedResponse, Permission, Role } from '../../shared/types/api'
 
 export type ProvisionAccountPayload = {
   name: string
@@ -86,6 +86,18 @@ export function resendInvitation(token: string, email: string) {
   return apiClient<InvitationResponse>(`/admin/accounts/invitations/resend${toQuery({ email })}`, {
     method: 'POST',
     token,
+  })
+}
+
+export function previewBulkInvitations(token: string, items: BulkInvitationRow[], roleCodes: string[]) {
+  return apiClient<BulkInvitationPreviewResponse>('/admin/accounts/invitation-batches/preview', {
+    method: 'POST', token, body: JSON.stringify({ items, roleCodes }),
+  })
+}
+
+export function provisionBulkInvitations(token: string, items: BulkInvitationRow[], roleCodes: string[]) {
+  return apiClient<BulkInvitationBatchResponse>('/admin/accounts/invitation-batches', {
+    method: 'POST', token, body: JSON.stringify({ items, roleCodes }),
   })
 }
 
