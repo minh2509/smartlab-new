@@ -12,36 +12,36 @@ const TERMINAL_SCENES: TerminalLine[][] = [
   [
     { text: '> import { getResearchFields } from "@/profile/api"', type: 'cmd' },
     { text: '> await getResearchFields()', type: 'cmd' },
-    { text: 'GET /research-fields [200 OK]', type: 'info' },
-    { text: 'response received', type: 'item' },
-    { text: 'data synchronized', type: 'success' },
+    { text: 'GET /research-fields', type: 'info' },
+    { text: 'type: Promise<ResearchField[]>', type: 'item' },
+    { text: 'api contract verified', type: 'success' },
     { text: 'ready_', type: 'ready' },
   ],
   // Scene 2: Public Recruiting Projects API
   [
     { text: '> import { listPublicRecruitingProjects } from "@/projects/api"', type: 'cmd' },
     { text: '> await listPublicRecruitingProjects(0, 6)', type: 'cmd' },
-    { text: 'GET /projects/public/recruiting?page=0&size=6 [200 OK]', type: 'info' },
-    { text: 'response received', type: 'item' },
-    { text: 'data synchronized', type: 'success' },
+    { text: 'GET /projects/public/recruiting?page=0&size=6', type: 'info' },
+    { text: 'type: Promise<RecruitingPage>', type: 'item' },
+    { text: 'api contract verified', type: 'success' },
     { text: 'ready_', type: 'ready' },
   ],
   // Scene 3: Public Events API
   [
     { text: '> import { listPublicEvents } from "@/events/api"', type: 'cmd' },
     { text: '> await listPublicEvents()', type: 'cmd' },
-    { text: 'GET /events/public [200 OK]', type: 'info' },
-    { text: 'response received', type: 'item' },
-    { text: 'data synchronized', type: 'success' },
+    { text: 'GET /events/public', type: 'info' },
+    { text: 'type: Promise<LabEvent[]>', type: 'item' },
+    { text: 'api contract verified', type: 'success' },
     { text: 'ready_', type: 'ready' },
   ],
 ]
 
 const STATIC_LINES: TerminalLine[] = [
   { text: '> await getResearchFields()', type: 'cmd' },
-  { text: 'GET /research-fields [200 OK]', type: 'info' },
-  { text: 'response received', type: 'item' },
-  { text: 'data synchronized', type: 'success' },
+  { text: 'GET /research-fields', type: 'info' },
+  { text: 'type: Promise<ResearchField[]>', type: 'item' },
+  { text: 'api contract verified', type: 'success' },
   { text: 'ready_', type: 'ready' },
 ]
 
@@ -147,7 +147,7 @@ export function SmartLabHero() {
                             <span className="sl-ws-term-dot" />
                             <span>SMARTLAB TERMINAL</span>
                           </div>
-                          <div className="sl-ws-term-channel">TTY-1 // LIVE</div>
+                          <div className="sl-ws-term-channel">API WORKFLOW</div>
                         </div>
 
                         <div className="sl-ws-term-body">
