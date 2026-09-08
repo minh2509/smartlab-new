@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Calendar, Clock, BookOpen, ChevronRight, AlertCircle, RotateCcw } from 'lucide-react'
+import { ArrowLeft, Calendar, Clock, ChevronRight, AlertCircle, RotateCcw } from 'lucide-react'
 import { getArticle } from '../articleApi'
 import type { LabArticleDetail } from '../articleTypes'
 import { ArticleContent } from '../components/ArticleContent'
@@ -57,30 +57,25 @@ export function ArticleDetailPage() {
 
   if (loading) {
     return (
-      <main className="article-editorial-stage">
-        <div className="article-editorial-wrap">
-          <nav className="article-editorial-crumb" aria-label="Đường dẫn">
-            <Link to="/" className="article-crumb-link">Trang chủ</Link>
-            <ChevronRight size={13} className="article-crumb-sep" aria-hidden="true" />
-            <Link to="/bai-viet" className="article-crumb-link">Bài viết</Link>
-            <ChevronRight size={13} className="article-crumb-sep" aria-hidden="true" />
-            <span className="article-crumb-current">Đang tải...</span>
+      <main className="article-pub-stage">
+        <div className="article-pub-wrap">
+          <nav className="article-pub-nav" aria-label="Đường dẫn">
+            <Link to="/bai-viet" className="article-pub-back">
+              <ArrowLeft size={16} aria-hidden="true" />
+              <span>Tất cả bài viết</span>
+            </Link>
           </nav>
-
-          <article className="article-editorial-article" aria-busy="true">
-            <div className="article-editorial-skeleton-head">
-              <div className="article-skeleton-badge" />
-              <div className="article-skeleton-title" />
-              <div className="article-skeleton-title short" />
-              <div className="article-skeleton-meta" />
-            </div>
-            <div className="article-editorial-skeleton-body">
-              <div className="article-skeleton-line" />
-              <div className="article-skeleton-line" />
-              <div className="article-skeleton-line" />
-              <div className="article-skeleton-line short" />
-            </div>
-          </article>
+          <div className="article-pub-skeleton" aria-busy="true">
+            <div className="article-skeleton-kicker" />
+            <div className="article-skeleton-title" />
+            <div className="article-skeleton-title short" />
+            <div className="article-skeleton-byline" />
+            <div className="article-skeleton-rule" />
+            <div className="article-skeleton-line" />
+            <div className="article-skeleton-line" />
+            <div className="article-skeleton-line" />
+            <div className="article-skeleton-line short" />
+          </div>
         </div>
       </main>
     )
@@ -88,29 +83,28 @@ export function ArticleDetailPage() {
 
   if (error || !article) {
     return (
-      <main className="article-editorial-stage">
-        <div className="article-editorial-wrap">
-          <nav className="article-editorial-crumb" aria-label="Đường dẫn">
-            <Link to="/" className="article-crumb-link">Trang chủ</Link>
-            <ChevronRight size={13} className="article-crumb-sep" aria-hidden="true" />
-            <Link to="/bai-viet" className="article-crumb-link">Bài viết</Link>
+      <main className="article-pub-stage">
+        <div className="article-pub-wrap">
+          <nav className="article-pub-nav" aria-label="Đường dẫn">
+            <Link to="/bai-viet" className="article-pub-back">
+              <ArrowLeft size={16} aria-hidden="true" />
+              <span>Tất cả bài viết</span>
+            </Link>
           </nav>
-
-          <div className="article-editorial-error-card" role="alert">
-            <AlertCircle size={32} className="article-error-icon" aria-hidden="true" />
-            <h2 className="article-error-title">Không thể tải bài viết</h2>
-            <p className="article-error-desc">{error ?? 'Đường dẫn không hợp lệ hoặc bài viết không tồn tại.'}</p>
-            <div className="article-error-actions">
+          <div className="article-pub-error" role="alert">
+            <AlertCircle size={28} className="article-pub-error-icon" aria-hidden="true" />
+            <h2 className="article-pub-error-title">Không thể tải bài viết</h2>
+            <p className="article-pub-error-desc">{error ?? 'Đường dẫn không hợp lệ hoặc bài viết không tồn tại.'}</p>
+            <div className="article-pub-error-actions">
               <button
                 type="button"
-                className="article-footer-btn secondary"
+                className="article-pub-btn-primary"
                 onClick={() => setReloadKey((k) => k + 1)}
               >
                 <RotateCcw size={15} aria-hidden="true" />
                 <span>Thử tải lại</span>
               </button>
-              <Link to="/bai-viet" className="article-footer-btn tertiary">
-                <ArrowLeft size={15} aria-hidden="true" />
+              <Link to="/bai-viet" className="article-pub-btn-subtle">
                 <span>Về danh sách bài viết</span>
               </Link>
             </div>
@@ -121,113 +115,103 @@ export function ArticleDetailPage() {
   }
 
   return (
-    <main className="article-editorial-stage">
-      <div className="article-editorial-wrap">
-        {/* Navigation & Context Masthead */}
-        <div className="article-editorial-top-nav">
-          <nav className="article-editorial-crumb" aria-label="Đường dẫn">
-            <Link to="/" className="article-crumb-link">Trang chủ</Link>
-            <ChevronRight size={13} className="article-crumb-sep" aria-hidden="true" />
-            <Link to="/bai-viet" className="article-crumb-link">Bài viết</Link>
-            <ChevronRight size={13} className="article-crumb-sep" aria-hidden="true" />
-            <span className="article-crumb-current" aria-current="page">{article.title}</span>
-          </nav>
-
-          <Link to="/bai-viet" className="article-editorial-back-link">
-            <ArrowLeft size={15} aria-hidden="true" />
+    <main className="article-pub-stage">
+      <div className="article-pub-wrap">
+        {/* Editorial Top Navigation */}
+        <nav className="article-pub-nav" aria-label="Điều hướng bài viết">
+          <Link to="/bai-viet" className="article-pub-back">
+            <ArrowLeft size={16} aria-hidden="true" />
             <span>Tất cả bài viết</span>
           </Link>
-        </div>
 
-        {/* The Publication Monograph Paper */}
-        <article className="article-editorial-article">
-          <header className="article-editorial-header">
-            <div className="article-editorial-kicker">
-              <span className="article-kicker-badge">BÀI VIẾT SMART LAB</span>
-              <span className="article-kicker-sep">•</span>
-              <span className="article-kicker-topic">CHUYÊN MÔN &amp; NGHIÊN CỨU</span>
-            </div>
+          <ol className="article-pub-breadcrumbs">
+            <li>
+              <Link to="/" className="article-pub-crumb-link">Trang chủ</Link>
+            </li>
+            <li aria-hidden="true" className="article-pub-crumb-sep">
+              <ChevronRight size={12} />
+            </li>
+            <li>
+              <Link to="/bai-viet" className="article-pub-crumb-link">Bài viết</Link>
+            </li>
+            <li aria-hidden="true" className="article-pub-crumb-sep">
+              <ChevronRight size={12} />
+            </li>
+            <li className="article-pub-crumb-current" aria-current="page">
+              {article.title}
+            </li>
+          </ol>
+        </nav>
 
-            <h1 className="article-editorial-title">{article.title}</h1>
-
-            {article.excerpt ? (
-              <div className="article-editorial-standfirst">
-                <p>{article.excerpt}</p>
-              </div>
-            ) : null}
-
-            <div className="article-editorial-meta-row">
-              <div className="article-meta-author">
-                <div className="article-meta-avatar" aria-hidden="true">SL</div>
-                <div className="article-meta-author-text">
-                  <span className="article-meta-name">Phòng thí nghiệm Smart Lab</span>
-                  <span className="article-meta-org">Khoa CNTT • Đại học FPT</span>
-                </div>
-              </div>
-
-              <div className="article-meta-facts">
-                {article.publishedAt ? (
-                  <div className="article-meta-fact">
-                    <Calendar size={13} className="article-meta-icon" aria-hidden="true" />
-                    <time dateTime={article.publishedAt}>{formatDate(article.publishedAt)}</time>
-                  </div>
-                ) : null}
-
-                <div className="article-meta-fact">
-                  <Clock size={13} className="article-meta-icon" aria-hidden="true" />
-                  <span>{readingTime} phút đọc</span>
-                </div>
-
-                <div className="article-meta-fact">
-                  <BookOpen size={13} className="article-meta-icon" aria-hidden="true" />
-                  <span>Ấn phẩm chính thức</span>
-                </div>
-              </div>
-            </div>
-          </header>
-
-          <div className="article-editorial-divider" aria-hidden="true" />
-
-          {/* Reading Body */}
-          <div className="article-editorial-body-wrap">
-            <ArticleContent
-              contentJson={article.content}
-              className="article-editorial-prose"
-              bodyClassName="article-editorial-text"
-              fallbackClassName="article-editorial-fallback"
-            />
+        {/* Publication Header */}
+        <header className="article-pub-header">
+          <div className="article-pub-kicker">
+            <span>BÀI VIẾT SMART LAB</span>
           </div>
 
-          {/* Colophon & Endplate */}
-          <footer className="article-editorial-footer">
-            <div className="article-editorial-colophon">
-              <div className="article-colophon-mark" aria-hidden="true">
-                <span>SL</span>
-              </div>
-              <div className="article-colophon-text">
-                <p className="article-colophon-title">Phát hành bởi Smart Lab</p>
-                <p className="article-colophon-desc">
-                  Phòng thí nghiệm Nghiên cứu &amp; Phát triển các công nghệ Trí tuệ nhân tạo, Robot tự hành và Kỹ thuật phần mềm.
-                </p>
-              </div>
-            </div>
+          <h1 className="article-pub-title">{article.title}</h1>
 
-            <div className="article-editorial-footer-actions">
-              <Link to="/bai-viet" className="article-footer-btn secondary">
-                <ArrowLeft size={15} aria-hidden="true" />
-                <span>Quay lại danh sách</span>
-              </Link>
-              <button
-                type="button"
-                onClick={handleScrollToTop}
-                className="article-footer-btn tertiary"
-                aria-label="Cuộn về đầu trang"
-              >
-                <span>Về đầu trang ↑</span>
-              </button>
-            </div>
-          </footer>
-        </article>
+          {article.excerpt ? (
+            <p className="article-pub-standfirst">{article.excerpt}</p>
+          ) : null}
+
+          <div className="article-pub-byline">
+            <span className="article-pub-byline-author">Ban Biên tập SmartLab</span>
+            {article.publishedAt ? (
+              <>
+                <span className="article-pub-dot" aria-hidden="true">•</span>
+                <span className="article-pub-byline-item">
+                  <Calendar size={13} aria-hidden="true" />
+                  <time dateTime={article.publishedAt}>{formatDate(article.publishedAt)}</time>
+                </span>
+              </>
+            ) : null}
+            <span className="article-pub-dot" aria-hidden="true">•</span>
+            <span className="article-pub-byline-item">
+              <Clock size={13} aria-hidden="true" />
+              <span>{readingTime} phút đọc</span>
+            </span>
+          </div>
+        </header>
+
+        {/* Editorial Rule */}
+        <hr className="article-pub-divider" aria-hidden="true" />
+
+        {/* Article Reading Body */}
+        <div className="article-pub-body">
+          <ArticleContent
+            contentJson={article.content}
+            className="article-pub-prose"
+            bodyClassName="article-pub-text"
+            fallbackClassName="article-pub-fallback"
+          />
+        </div>
+
+        {/* Publication Sign-off & Footer Actions */}
+        <footer className="article-pub-footer">
+          <div className="article-pub-colophon">
+            <span className="article-pub-colophon-mark" aria-hidden="true">◆</span>
+            <p className="article-pub-colophon-note">
+              Cổng thông tin &amp; Nghiên cứu Smart Lab
+            </p>
+          </div>
+
+          <div className="article-pub-actions">
+            <Link to="/bai-viet" className="article-pub-btn-primary">
+              <ArrowLeft size={15} aria-hidden="true" />
+              <span>Quay lại danh sách bài viết</span>
+            </Link>
+
+            <button
+              type="button"
+              onClick={handleScrollToTop}
+              className="article-pub-btn-ghost"
+              aria-label="Cuộn về đầu trang"
+            >
+              <span>Về đầu trang ↑</span>
+            </button>
+          </div>
+        </footer>
       </div>
     </main>
   )
