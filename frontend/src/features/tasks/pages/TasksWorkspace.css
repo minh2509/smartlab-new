@@ -2,9 +2,9 @@
   --task-navy: var(--brand-navy, #07152b);
   --task-ink: var(--text-1, #0f1928);
   --task-muted: var(--text-2, #52627a);
-  --task-line: var(--line, #e2e8f0);
-  --task-surface: var(--surface, #ffffff);
-  --task-subtle: var(--surface-2, #f7f9fc);
+  --task-line: var(--line, #e3dccf);
+  --task-surface: var(--surface-card, #ffffff);
+  --task-subtle: var(--surface-2, #f5f1e8);
   color: var(--task-ink);
 }
 
@@ -52,9 +52,9 @@
   gap: 24px;
   margin-bottom: 22px;
   padding: 18px 22px;
-  border: 1px solid var(--task-line);
+  border: 1px solid var(--line-2, #d5cebf);
   border-radius: var(--r-md, 14px);
-  background: var(--task-surface);
+  background: var(--surface-elevated, #faf7f1);
   box-shadow: var(--shadow-sm, 0 2px 8px rgba(7, 21, 43, 0.04));
 }
 
@@ -638,9 +638,9 @@
   max-height: calc(100dvh - 32px);
   padding: 0;
   overflow: hidden;
-  border: 1px solid var(--task-line);
+  border: 1px solid var(--line-2, #d5cebf);
   border-radius: var(--r-lg, 16px);
-  background: var(--task-surface);
+  background: var(--surface-modal, #faf7f1);
   box-shadow: 0 24px 60px rgba(7, 21, 43, 0.25);
 }
 

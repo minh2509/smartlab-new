@@ -30,13 +30,13 @@
 .project-directory-page-size {
   flex: none;
   padding: 8px 12px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-2, #D5CEBF);
   border-radius: var(--r-sm);
   color: var(--text-2);
   font-size: 12.5px;
   font-weight: 650;
   white-space: nowrap;
-  background: var(--surface);
+  background: var(--surface-btn, #FAF7F0);
 }
 
 .project-directory-toolbar {
@@ -46,9 +46,9 @@
   align-items: center;
   margin-bottom: 28px;
   padding: 14px 16px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-2, #D5CEBF);
   border-radius: var(--r-lg);
-  background: var(--surface);
+  background: var(--surface-elevated, #FAF7F1);
   box-shadow: var(--sh-1);
 }
 
@@ -73,8 +73,8 @@
   min-height: 40px;
   padding-left: 40px;
   border-radius: var(--r-sm);
-  border: 1px solid var(--line-2);
-  background: var(--surface);
+  border: 1px solid var(--line-input, #D5CEBF);
+  background: var(--surface-input, #FFFFFF);
   color: var(--text-1);
   font-size: 14px;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
@@ -97,9 +97,9 @@
   justify-content: center;
   gap: 7px;
   padding: 8px 14px;
-  border: 1px solid var(--line-2);
+  border: 1px solid var(--line-2, #D5CEBF);
   border-radius: var(--r-sm);
-  background: var(--surface);
+  background: var(--surface-btn, #FAF7F0);
   color: var(--text-2);
   font: inherit;
   font-size: 13.5px;

@@ -21,19 +21,27 @@
   --accent-3:  #FDF2E9;   /* cam rất nhạt — nền badge */
   --accent-ink:#A83E00;   /* cam đậm — chữ trên nền cam nhạt */
 
-  /* Bề mặt và chữ — Warm Editorial Canvas */
-  --page:      #FBF9F4;   /* Nền trang ấm áp, chuyển tiếp tự nhiên với Hero */
-  --surface:   #FFFFFF;
-  --surface-2: #F5F1E8;   /* Nền phụ ấm */
-  --sunken:    #ECE7DC;   /* Nền lún ấm */
-  --text-1:    #0A1B33;   /* Deep ink navy, đồng bộ tiêu đề Hero */
-  --text-2:    #384A64;   /* Slate navy, đồng bộ lead Hero */
-  --text-3:    #6E7F96;   /* Chữ phụ mờ nhẹ */
-  --on-brand:  #FFFFFF;
+  /* Bề mặt và chữ — Warm Architectural System */
+  --page:              #FBF9F4;   /* Nền trang ấm áp, chuyển tiếp tự nhiên với Hero */
+  --bg-base:           #F8F5EE;   /* Nền canvas phụ / workspace / auth */
+  --surface:           #FFFFFF;   /* Bề mặt nội dung trắng sắc nét */
+  --surface-card:      #FFFFFF;   /* Bề mặt thẻ / panel */
+  --surface-elevated:  #FAF7F1;   /* Bề mặt nâng cao / auth card / floating panel */
+  --surface-popup:     #FAF7F0;   /* Bề mặt menu nổi / popover / select menu */
+  --surface-modal:     #FAF7F1;   /* Bề mặt hộp thoại / dialog window */
+  --surface-2:         #F5F1E8;   /* Nền phụ ấm */
+  --surface-btn:       #FAF7F0;   /* Bề mặt nút phụ / icon button */
+  --surface-input:     #FFFFFF;   /* Bề mặt ô nhập dữ liệu */
+  --sunken:            #ECE7DC;   /* Nền lún ấm */
+  --text-1:            #0A1B33;   /* Deep ink navy, đồng bộ tiêu đề Hero */
+  --text-2:            #384A64;   /* Slate navy, đồng bộ lead Hero */
+  --text-3:            #6E7F96;   /* Chữ phụ mờ nhẹ */
+  --on-brand:          #FFFFFF;
 
-  --line:      #E6E1D6;   /* Đường viền kiến trúc ấm */
-  --line-2:    #D5CEBF;   /* Đường phân cách rõ hơn */
-  --grid:      #ECE7DC;   /* Đường lưới đồ thị kỹ thuật */
+  --line:              #E6E1D6;   /* Đường viền kiến trúc ấm */
+  --line-2:            #D5CEBF;   /* Đường phân cách rõ hơn */
+  --line-input:        #D5CEBF;   /* Đường viền ô nhập dữ liệu */
+  --grid:              #ECE7DC;   /* Đường lưới đồ thị kỹ thuật */
 
   /* Màu dữ liệu — 5 slot, dùng cho lĩnh vực / avatar / biểu đồ */
   --s1: #2A78D6;  /* AI */
@@ -107,7 +115,7 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 0; }
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   padding: 10px 20px; border-radius: var(--r-sm); border: 1px solid var(--line-2);
-  background: var(--surface); color: var(--text-1);
+  background: var(--surface-btn, #FAF7F0); color: var(--text-1);
   font: inherit; font-size: 14.5px; font-weight: 600; cursor: pointer;
   white-space: nowrap; transition: background .15s, border-color .15s, transform .15s, box-shadow .15s;
 }
@@ -135,10 +143,10 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 0; }
 .icon-btn {
   width: 44px; height: 44px; min-width: 44px; min-height: 44px; display: grid; place-items: center; flex: none;
   border-radius: var(--r-sm); border: 1px solid var(--line);
-  background: var(--surface); color: var(--text-2); cursor: pointer;
-  transition: background .15s, color .15s;
+  background: var(--surface-btn, #FAF7F0); color: var(--text-2); cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
 }
-.icon-btn:hover { background: var(--surface-2); color: var(--text-1); }
+.icon-btn:hover { background: var(--surface-2); color: var(--text-1); border-color: var(--line-2); }
 .icon-btn svg { width: 18px; height: 18px; }
 
 /* ------------------------------------------------------ 4. NHÃN / CHIP / TAG */
@@ -392,14 +400,14 @@ a.card:hover, .card.hover:hover { border-color: var(--line-2); transform: transl
 /* --------------------------------------------------------- 13. LỌC / PHÂN TRANG */
 .toolbar {
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-  padding: 16px 18px; background: var(--surface); border: 1px solid var(--line);
+  padding: 16px 18px; background: var(--surface-elevated, #FAF7F1); border: 1px solid var(--line);
   border-radius: var(--r); margin-bottom: 30px;
 }
 .toolbar .sp { margin-left: auto; }
 .pills { display: flex; gap: 8px; flex-wrap: wrap; }
 .pill {
   padding: 7px 15px; border-radius: 999px; border: 1px solid var(--line-2);
-  background: var(--surface); color: var(--text-2); font-size: 13.5px; font-weight: 600;
+  background: var(--surface-btn, #FAF7F0); color: var(--text-2); font-size: 13.5px; font-weight: 600;
   cursor: pointer; font-family: inherit; transition: all .15s; white-space: nowrap;
 }
 .pill:hover { border-color: var(--text-3); color: var(--text-1); text-decoration: none; }
@@ -818,12 +826,13 @@ a.card:hover, .card.hover:hover { border-color: var(--line-2); transform: transl
 
 .auth-box.card.pad {
   padding: clamp(32px, 5vw, 42px) clamp(24px, 5vw, 36px);
-  border: 1px solid var(--line-2, #E2DBD0);
+  border: 1px solid var(--line-2, #DED7CA);
   border-radius: var(--r-lg, 20px);
-  background: #FFFFFF;
+  background: var(--surface-elevated, #FAF7F1);
   box-shadow:
-    0 24px 64px -12px rgba(7, 21, 43, 0.12),
-    0 8px 24px -4px rgba(7, 21, 43, 0.06);
+    0 24px 64px -12px rgba(7, 21, 43, 0.14),
+    0 8px 24px -4px rgba(7, 21, 43, 0.08),
+    0 0 0 1px rgba(255, 255, 255, 0.8) inset;
 }
 
 .auth-box .logo {
@@ -865,9 +874,9 @@ a.card:hover, .card.hover:hover { border-color: var(--line-2); transform: transl
   min-height: 46px;
   height: 46px;
   padding: 0 15px;
-  border: 1px solid var(--line-2, #E2DBD0);
+  border: 1px solid var(--line-input, #D5CEBF);
   border-radius: 10px;
-  background: #FFFFFF;
+  background: var(--surface-input, #FFFFFF);
   color: var(--c-ink, #07152B);
   font-size: 14.5px;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;

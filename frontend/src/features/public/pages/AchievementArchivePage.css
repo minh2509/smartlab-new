@@ -30,13 +30,13 @@
 .achievement-archive-page-size {
   flex: none;
   padding: 8px 12px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-2, #D5CEBF);
   border-radius: var(--r-sm);
   color: var(--text-2);
   font-size: 12.5px;
   font-weight: 650;
   white-space: nowrap;
-  background: var(--surface);
+  background: var(--surface-btn, #FAF7F0);
 }
 
 .achievement-archive-toolbar {
@@ -45,9 +45,9 @@
   gap: 12px;
   margin-bottom: 24px;
   padding: 12px 16px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-2, #D5CEBF);
   border-radius: var(--r-lg);
-  background: var(--surface);
+  background: var(--surface-elevated, #FAF7F1);
   box-shadow: var(--sh-1);
 }
 
@@ -60,9 +60,9 @@
 .achievement-archive-toolbar select {
   min-height: 44px;
   padding: 0 34px 0 14px;
-  border: 1px solid var(--line-2);
+  border: 1px solid var(--line-input, #D5CEBF);
   border-radius: var(--r-sm);
-  background: var(--surface);
+  background-color: var(--surface-input, #FFFFFF);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23384A64' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 12px center;

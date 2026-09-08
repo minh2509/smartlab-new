@@ -94,12 +94,13 @@ select {
   flex-direction: column;
   gap: 22px;
   padding: clamp(32px, 5vw, 44px) clamp(24px, 5vw, 38px);
-  border: 1px solid var(--line-2, #E2DBD0);
+  border: 1px solid var(--line-2, #DED7CA);
   border-radius: var(--r-lg, 20px);
-  background: #FFFFFF;
+  background: var(--surface-elevated, #FAF7F1);
   box-shadow:
-    0 24px 64px -12px rgba(7, 21, 43, 0.12),
-    0 8px 24px -4px rgba(7, 21, 43, 0.06);
+    0 24px 64px -12px rgba(7, 21, 43, 0.14),
+    0 8px 24px -4px rgba(7, 21, 43, 0.08),
+    0 0 0 1px rgba(255, 255, 255, 0.8) inset;
 }
 
 .login-card .logo {
@@ -146,9 +147,9 @@ select {
   min-height: 46px;
   height: 46px;
   padding: 0 15px;
-  border: 1px solid var(--line-2, #E2DBD0);
+  border: 1px solid var(--line-input, #D5CEBF);
   border-radius: 10px;
-  background: #FFFFFF;
+  background: var(--surface-input, #FFFFFF);
   color: var(--c-ink, #07152B);
   font-size: 14.5px;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
@@ -380,7 +381,7 @@ select {
   padding: 0 18px 0 10px;
   border: 1px solid var(--line-2);
   border-radius: 999px;
-  background: var(--surface);
+  background: var(--surface-btn, #FAF7F0);
   color: var(--brand-1);
   font-size: 13.5px;
   font-weight: 700;
@@ -406,7 +407,7 @@ select {
   height: 26px;
   place-items: center;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  background: color-mix(in srgb, var(--accent) 12%, #FAF7F0);
   color: var(--accent);
 }
 
@@ -478,10 +479,10 @@ select {
   display: grid;
   gap: 2px;
   padding: 16px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-2, #D5CEBF);
   border-radius: var(--r);
-  background: var(--surface);
-  box-shadow: var(--sh-2);
+  background: var(--surface-popup, #FAF7F0);
+  box-shadow: 0 16px 40px -6px rgba(10, 27, 51, 0.14), 0 4px 12px -2px rgba(10, 27, 51, 0.06);
   opacity: 0;
   pointer-events: none;
   transform: translateY(6px);
@@ -518,7 +519,7 @@ select {
 
 .menu .nav-dropdown-item:hover,
 .menu .nav-dropdown-item[aria-current="page"] {
-  background: var(--surface-2);
+  background: var(--sunken, #EDE7DC);
   text-decoration: none;
 }
 
@@ -4568,10 +4569,10 @@ select {
   width: 380px;
   max-width: calc(100vw - 24px);
   overflow: hidden;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-2, #D5CEBF);
   border-radius: var(--r-lg);
-  background: var(--surface);
-  box-shadow: var(--sh-3);
+  background: var(--surface-popup, #FAF7F0);
+  box-shadow: 0 16px 40px -6px rgba(10, 27, 51, .16), 0 4px 12px -2px rgba(10, 27, 51, .08);
 }
 
 .notification-popover-head {
@@ -4580,6 +4581,7 @@ select {
   justify-content: space-between;
   gap: 14px;
   padding: 16px 17px 14px;
+  background: var(--surface-elevated, #FAF7F1);
   border-bottom: 1px solid var(--line);
 }
 
@@ -5264,8 +5266,8 @@ button.notification-popover-main:hover {
   min-height: 42px;
   padding: 9px 13px;
   color: var(--text-1);
-  background: var(--surface);
-  border: 1px solid var(--line);
+  background: var(--surface-btn, #FAF7F0);
+  border: 1px solid var(--line-2, #D5CEBF);
   border-radius: var(--r-sm);
   font: inherit;
   font-size: 14px;
@@ -5275,8 +5277,8 @@ button.notification-popover-main:hover {
 }
 
 .popup-select-trigger:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
-  background: color-mix(in srgb, var(--surface-2) 60%, var(--surface));
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--line-2));
+  background: var(--surface-2, #F5F1E8);
 }
 
 .popup-select-trigger:focus-visible {
@@ -5295,10 +5297,10 @@ button.notification-popover-main:hover {
   z-index: 1200;
   overflow: auto;
   padding: 6px;
-  background: var(--surface);
-  border: 1px solid var(--line);
+  background: var(--surface-popup, #FAF7F0);
+  border: 1px solid var(--line-2, #D5CEBF);
   border-radius: var(--r-md);
-  box-shadow: 0 14px 36px rgba(7, 21, 43, .14);
+  box-shadow: 0 16px 40px -6px rgba(10, 27, 51, .16), 0 4px 12px -2px rgba(10, 27, 51, .08);
   animation: popup-surface-in 150ms ease-out;
 }
 
@@ -5341,7 +5343,7 @@ button.notification-popover-main:hover {
 
 .popup-select-option.is-active,
 .popup-select-option:hover {
-  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface-popup, #FAF7F0));
 }
 
 .popup-select-option[aria-selected='true'] {
@@ -5363,10 +5365,10 @@ button.notification-popover-main:hover {
   margin: auto;
   padding: 0;
   overflow: hidden;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-2, #D5CEBF);
   border-radius: var(--r-lg);
-  background: var(--surface);
-  box-shadow: 0 20px 50px rgba(7, 21, 43, .2);
+  background: var(--surface-modal, #FAF7F1);
+  box-shadow: 0 24px 70px rgba(7, 21, 43, .24);
   animation: popup-surface-in 150ms ease-out;
 }
 
@@ -5407,11 +5409,13 @@ button.notification-popover-main:hover {
 }
 
 .confirm-dialog footer {
-  grid-column: 2;
+  grid-column: 1 / -1;
   display: flex;
   justify-content: flex-end;
   gap: 10px;
-  margin-top: 8px;
+  padding: 14px 24px;
+  background: var(--surface-2, #F5F1E8);
+  border-top: 1px solid var(--line);
 }
 
 .confirm-dialog footer .btn {

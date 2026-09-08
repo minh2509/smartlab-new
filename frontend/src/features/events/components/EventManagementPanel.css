@@ -275,11 +275,11 @@
   margin: auto;
   padding: 0;
   overflow: hidden;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-2, #D5CEBF);
   border-radius: 16px;
-  background: var(--surface);
+  background: var(--surface-modal, #FAF7F1);
   color: var(--text-1);
-  box-shadow: 0 20px 56px rgba(5, 22, 48, .28);
+  box-shadow: 0 24px 60px rgba(5, 22, 48, .28);
 }
 
 .event-dialog::backdrop {
@@ -302,7 +302,7 @@
   gap: 20px;
   padding: 20px 24px;
   border-bottom: 1px solid var(--line);
-  background: var(--surface);
+  background: var(--surface-modal, #FAF7F1);
 }
 
 .event-dialog-heading {
@@ -356,9 +356,9 @@
   height: 38px;
   padding: 0;
   place-items: center;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-2, #D5CEBF);
   border-radius: 50%;
-  background: var(--surface);
+  background: var(--surface-btn, #FAF7F0);
   color: var(--text-2);
   cursor: pointer;
 }
@@ -504,7 +504,7 @@
   gap: 16px;
   padding: 12px 24px;
   border-top: 1px solid var(--line);
-  background: var(--surface);
+  background: var(--surface-2, #F5F1E8);
 }
 
 .event-dialog-footer-actions {
