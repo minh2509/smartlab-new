@@ -3668,6 +3668,7 @@ select {
   display: inline-flex;
   align-items: center;
   gap: 7px;
+  min-height: 44px;
 }
 
 .post-review-back svg {
@@ -3900,8 +3901,8 @@ select {
 }
 
 .review-actions .btn {
-  min-height: 40px;
-  padding: 9px 15px;
+  min-height: 44px;
+  padding: 10px 18px;
 }
 
 .post-review-form fieldset:disabled .review-choice {
@@ -3975,7 +3976,13 @@ select {
 
 @media (max-width: 1200px) {
   .nav-in > .logo {
-    width: 40px;
+    min-width: 44px;
+    min-height: 44px;
+    width: 44px;
+    height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     overflow: hidden;
   }
 
