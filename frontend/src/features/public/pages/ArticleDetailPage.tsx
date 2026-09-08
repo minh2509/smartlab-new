@@ -4,6 +4,7 @@ import { getArticle } from '../articleApi'
 import type { LabArticleDetail } from '../articleTypes'
 import { ArticleContent } from '../components/ArticleContent'
 import { PublicPageHead } from '../components/PublicPageHead'
+import '../landing.css'
 
 export function ArticleDetailPage() {
   const { slug } = useParams<{ slug: string }>()
