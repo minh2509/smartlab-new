@@ -176,10 +176,10 @@
 }
 
 .achievement-action-menu .table-btn {
-  min-width: 38px;
-  width: 38px;
-  height: 38px;
-  min-height: 0;
+  min-width: 44px;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
   padding: 0;
   display: grid;
   place-items: center;
@@ -216,7 +216,7 @@
   z-index: 20;
   display: flex;
   flex-direction: column;
-  min-width: 180px;
+  min-width: 190px;
   padding: 6px;
   background: var(--surface);
   border: 1px solid var(--line);
@@ -227,9 +227,10 @@
 .achievement-action-menu-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   width: 100%;
-  padding: 9px 12px;
+  min-height: 44px;
+  padding: 10px 14px;
   border: 0;
   border-radius: var(--r-sm);
   background: transparent;
@@ -639,7 +640,7 @@
   .col-updated { display: none; }
 }
 
-@media (max-width: 980px) {
+@media (max-width: 1140px) {
   .achievement-list-toolbar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -806,6 +807,15 @@
 }
 
 .admin-content-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--r-sm, 8px);
   white-space: nowrap;
 }
 
