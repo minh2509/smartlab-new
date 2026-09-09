@@ -299,10 +299,13 @@
 .sl-ws-crt-screen {
   position: relative;
   width: 100%;
-  min-height: 260px;
+  height: var(--sl-crt-height, 292px) !important;
+  min-height: var(--sl-crt-height, 292px) !important;
+  max-height: var(--sl-crt-height, 292px) !important;
   background: radial-gradient(ellipse at 50% 40%, #151D2A 0%, #0B0E14 90%);
   border-radius: 10px;
   overflow: hidden;
+  box-sizing: border-box;
   box-shadow:
     inset 0 0 16px rgba(0, 0, 0, 0.95),
     inset 0 0 4px rgba(56, 189, 248, 0.08);
@@ -676,6 +679,7 @@
    ───────────────────────────────────────────────────────────────── */
 .landing-section {
   position: relative;
+  scroll-margin-top: 84px;
   padding: 88px 0;
 }
 
@@ -2032,11 +2036,26 @@
   }
 
   .sl-ws-crt-screen {
-    min-height: 210px;
+    height: var(--sl-crt-height, 292px) !important;
+    min-height: var(--sl-crt-height, 292px) !important;
+    max-height: var(--sl-crt-height, 292px) !important;
   }
 
   .sl-ws-terminal {
-    padding: 10px 12px;
+    padding: 8px 10px;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .sl-ws-term-header {
+    margin-bottom: 6px;
+    padding-bottom: 6px;
+  }
+
+  .sl-ws-term-footer {
+    padding-top: 6px;
+    font-size: 8.5px;
   }
 
   .sl-term-line {

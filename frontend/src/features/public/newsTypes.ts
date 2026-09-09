@@ -6,3 +6,5 @@ export interface LabNewsArticle {
   sourceUrl: string
   publishedAt: string
 }
+
+export type PublicNewsSort = 'LATEST' | 'OLDEST'

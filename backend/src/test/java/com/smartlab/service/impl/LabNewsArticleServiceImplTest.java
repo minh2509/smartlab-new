@@ -5,6 +5,7 @@ import com.smartlab.dto.request.UpdateLabNewsArticleRequest;
 import com.smartlab.dto.response.LabNewsArticleResponse;
 import com.smartlab.dto.response.PublicPageResponse;
 import com.smartlab.entity.LabNewsArticleEntity;
+import com.smartlab.enums.PublicNewsSort;
 import com.smartlab.repo.LabNewsArticleRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -15,6 +16,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
@@ -84,6 +86,31 @@ class LabNewsArticleServiceImplTest {
         assertBadRequest(() -> service.listPublicArchive(0, 0));
         assertBadRequest(() -> service.listPublicArchive(0, 49));
         verifyNoInteractions(articleRepository);
+    }
+
+    @Test void publicArchiveForwardsNormalizedFiltersAndSortsInDatabase() {
+        when(articleRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(), PageRequest.of(1, 12), 0));
+
+        PublicPageResponse<LabNewsArticleResponse> result = service.listPublicArchive("  Robot ", " VnExpress ", 2026,
+                PublicNewsSort.OLDEST, 1, 12);
+
+        assertThat(result.items()).isEmpty();
+        ArgumentCaptor<Pageable> page = ArgumentCaptor.forClass(Pageable.class);
+        verify(articleRepository).findAll(any(Specification.class), page.capture());
+        assertThat(page.getValue().getPageNumber()).isEqualTo(1);
+        assertThat(page.getValue().getPageSize()).isEqualTo(12);
+        assertThat(page.getValue().getSort().getOrderFor("publishedAt").getDirection()).isEqualTo(org.springframework.data.domain.Sort.Direction.ASC);
+        assertThat(page.getValue().getSort().getOrderFor("id").getDirection()).isEqualTo(org.springframework.data.domain.Sort.Direction.ASC);
+    }
+
+    @Test void publicOptionsTrimDeduplicateCaseInsensitivelyAndPreserveDescendingYears() {
+        when(articleRepository.findPublicSources()).thenReturn(List.of(" VnExpress ", "vnexpress", "SmartLab", " "));
+        when(articleRepository.findPublicYears()).thenReturn(List.of(2026, 2025));
+
+        assertThat(service.listPublicSources()).containsExactly("SmartLab", "VnExpress");
+        assertThat(service.listPublicYears()).containsExactly(2026, 2025);
+        verify(articleRepository).findPublicSources();
+        verify(articleRepository).findPublicYears();
     }
 
     @Test void adminReadUsesDatabasePaginationAndIncludesBothVisibilityStates() {

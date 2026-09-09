@@ -17,6 +17,7 @@ database:
 9. `sql/009_achievement_editor_v2.sql`
 10. `sql/010_research_publications_to_lab_achievements.sql`
 11. `sql/011_achievement_editor_v2_repair.sql`
+12. `sql/012_gallery_system.sql`
 
 These are manual, operator-executed SQL migrations. The repository does not
 contain Flyway, Liquibase, or another automatic numbered migration runner.
@@ -47,6 +48,10 @@ The later migrations extend that foundation:
 - `010` migrates historical `research_publications` rows into
   `lab_achievements` while retaining the source table for rollback and audit.
 - `011` verifies and repairs partial achievement editor v2 installations.
+- `012` creates the Gallery item ownership/publication contract, the
+  `GALLERY_MANAGE` permission, and the ADMIN mapping. It creates no gallery
+  rows or sample files. Apply it only after a verified backup and target
+  lineage check; deploy the backend schema before enabling Gallery UI.
 
 ### Migration 010 prerequisite and lineage decision
 

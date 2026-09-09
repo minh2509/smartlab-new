@@ -5,6 +5,7 @@ import com.smartlab.dto.request.UpdateLabArticleRequest;
 import com.smartlab.dto.response.PublicPageResponse;
 import com.smartlab.entity.LabArticleEntity;
 import com.smartlab.enums.LabArticleStatus;
+import com.smartlab.enums.PublicArticleSort;
 import com.smartlab.repo.LabArticleRepository;
 import com.smartlab.service.LabArticleSlugGenerator;
 import org.junit.jupiter.api.Test;
@@ -28,6 +29,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -41,22 +43,39 @@ class LabArticleServiceImplTest {
 
     @Test void publicReadsUseDatabaseLimitsPaginationAndOnlyRepositoryPublishedMethods() {
         when(articleRepository.findNewestPublished(any(Pageable.class))).thenReturn(List.of(article(3L, LabArticleStatus.PUBLISHED, "2026-08-22T00:00:00Z")));
-        when(articleRepository.findPublishedArchive(any(Pageable.class))).thenReturn(new PageImpl<>(
+        when(articleRepository.findPublishedArchive(any(String.class), any(Integer.class), any(Pageable.class))).thenReturn(new PageImpl<>(
                 List.of(article(2L, LabArticleStatus.PUBLISHED, "2026-08-21T00:00:00Z")), PageRequest.of(2, 12), 1));
         assertThat(service.listLatest(3)).hasSize(1);
-        PublicPageResponse<?> archive = service.listArchive(2, 12);
+        PublicPageResponse<?> archive = service.listArchive("  Robot  ", 2026, PublicArticleSort.OLDEST, 2, 12);
         assertThat(archive.page()).isEqualTo(2);
         ArgumentCaptor<Pageable> latest = ArgumentCaptor.forClass(Pageable.class);
         verify(articleRepository).findNewestPublished(latest.capture());
         assertThat(latest.getValue().getPageNumber()).isZero(); assertThat(latest.getValue().getPageSize()).isEqualTo(3);
         ArgumentCaptor<Pageable> page = ArgumentCaptor.forClass(Pageable.class);
-        verify(articleRepository).findPublishedArchive(page.capture());
+        verify(articleRepository).findPublishedArchive(eq("Robot"), eq(2026), page.capture());
         assertThat(page.getValue().getPageNumber()).isEqualTo(2); assertThat(page.getValue().getPageSize()).isEqualTo(12);
+        assertThat(page.getValue().getSort().getOrderFor("publishedAt").getDirection()).isEqualTo(org.springframework.data.domain.Sort.Direction.ASC);
+        assertThat(page.getValue().getSort().getOrderFor("id").getDirection()).isEqualTo(org.springframework.data.domain.Sort.Direction.ASC);
+    }
+
+    @Test void archiveNormalizesBlankQueryAndDefaultsToLatest() {
+        when(articleRepository.findPublishedArchive(any(String.class), any(Integer.class), any(Pageable.class))).thenReturn(new PageImpl<>(List.of()));
+        service.listArchive("   ", null, PublicArticleSort.LATEST, 0, 12);
+        ArgumentCaptor<Pageable> page = ArgumentCaptor.forClass(Pageable.class);
+        verify(articleRepository).findPublishedArchive(eq(""), eq(0), page.capture());
+        assertThat(page.getValue().getSort().getOrderFor("publishedAt").getDirection()).isEqualTo(org.springframework.data.domain.Sort.Direction.DESC);
+        assertThat(page.getValue().getSort().getOrderFor("id").getDirection()).isEqualTo(org.springframework.data.domain.Sort.Direction.DESC);
+    }
+
+    @Test void archiveYearsComeFromPublishedRepositoryQuery() {
+        when(articleRepository.findPublishedYears()).thenReturn(List.of(2026, 2025));
+        assertThat(service.listPublishedYears()).containsExactly(2026, 2025);
     }
 
     @Test void publicAndAdminPagingRejectInvalidBoundsBeforeQuerying() {
         assertBadRequest(() -> service.listLatest(0)); assertBadRequest(() -> service.listLatest(13));
-        assertBadRequest(() -> service.listArchive(-1, 12)); assertBadRequest(() -> service.listArchive(0, 49));
+        assertBadRequest(() -> service.listArchive(null, null, PublicArticleSort.LATEST, -1, 12)); assertBadRequest(() -> service.listArchive(null, null, PublicArticleSort.LATEST, 0, 49));
+        assertBadRequest(() -> service.listArchive(null, 1900, PublicArticleSort.LATEST, 0, 12));
         assertBadRequest(() -> service.listAdmin(-1, 20)); assertBadRequest(() -> service.listAdmin(0, 101));
         verifyNoInteractions(articleRepository);
     }

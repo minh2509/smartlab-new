@@ -14,7 +14,6 @@ const publicLinks = [
 
 const aboutLinks = [
   { to: '/gioi-thieu', title: 'Về phòng Lab', description: 'Tổng quan, mục tiêu, định hướng' },
-  { to: '/linh-vuc', title: 'Lĩnh vực nghiên cứu', description: 'AI · Robotics · Kỹ thuật phần mềm' },
   { to: '/thu-vien-anh', title: 'Hình ảnh hoạt động', description: 'Thư viện ảnh của Lab' },
 ]
 
@@ -109,7 +108,7 @@ function AboutDropdown() {
   const menuRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const rafRef = useRef<number | null>(null)
-  const isActive = aboutLinks.some((link) => link.to === location.pathname)
+  const isActive = aboutLinks.some((link) => link.to === `${location.pathname}${location.hash}`)
 
   const resetDrift = useCallback(() => {
     if (rafRef.current) {
@@ -209,7 +208,12 @@ function AboutDropdown() {
       </button>
       <div className="nav-dropdown-menu">
         {aboutLinks.map((link) => (
-          <NavLink className="nav-dropdown-item" to={link.to} key={link.to}>
+          <NavLink
+            className="nav-dropdown-item"
+            to={link.to}
+            key={link.to}
+            onClick={() => setOpen(false)}
+          >
             <span>{link.title}</span>
             <small>{link.description}</small>
           </NavLink>

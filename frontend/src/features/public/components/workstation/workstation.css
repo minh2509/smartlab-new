@@ -1,0 +1,1100 @@
+/* ─────────────────────────────────────────────────────────────────
+   SMARTLAB WORKSTATION OS — RETRO CRT & INTERACTION STYLES
+   Tightly scoped inside the CRT screen & physical workstation controls.
+   Does NOT alter the approved exterior workstation geometry.
+   ───────────────────────────────────────────────────────────────── */
+
+:root {
+  --sl-crt-height: 292px;
+}
+
+@media (max-width: 640px) {
+  :root {
+    --sl-crt-height: 292px;
+  }
+}
+
+/* Focus state for CRT screen */
+.sl-ws-crt-screen {
+  outline: none;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  height: var(--sl-crt-height, 292px) !important;
+  min-height: var(--sl-crt-height, 292px) !important;
+  max-height: var(--sl-crt-height, 292px) !important;
+  box-sizing: border-box;
+  overflow: hidden;
+  transition: box-shadow 0.25s ease;
+}
+
+.sl-ws-crt-screen:focus-visible,
+.sl-ws-crt-screen.is-crt-focused {
+  box-shadow:
+    inset 0 0 20px rgba(0, 0, 0, 0.95),
+    inset 0 0 10px rgba(56, 189, 248, 0.35),
+    0 0 12px rgba(56, 189, 248, 0.4);
+}
+
+.sl-ws-crt-screen.is-crt-off {
+  background: #05070A !important;
+}
+
+/* CRT Status Bar Header inside screen */
+.sl-crt-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 10px;
+  background: rgba(0, 0, 0, 0.45);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  z-index: 10;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.sl-crt-status-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sl-status-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #64748B;
+}
+
+.sl-status-dot.is-on {
+  background: #22C55E;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.8);
+}
+
+.sl-status-dot.is-off {
+  background: #EF4444;
+  box-shadow: none;
+}
+
+.sl-status-mode {
+  color: #94A3B8;
+  font-weight: 700;
+}
+
+.sl-crt-status-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sl-status-toggle {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+  color: #94A3B8;
+  font-size: 8.5px;
+  font-family: inherit;
+  padding: 1px 5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sl-status-toggle:hover {
+  color: #F8FAFC;
+  border-color: rgba(56, 189, 248, 0.6);
+  background: rgba(56, 189, 248, 0.1);
+}
+
+.sl-status-focus-badge {
+  font-size: 8px;
+  font-weight: 700;
+  color: #64748B;
+  border: 1px solid transparent;
+  background: none;
+  font-family: inherit;
+  cursor: default;
+}
+
+.sl-status-focus-badge.is-active {
+  color: #38BDF8;
+  border-color: rgba(56, 189, 248, 0.4);
+  background: rgba(56, 189, 248, 0.12);
+  border-radius: 3px;
+  padding: 1px 5px;
+  cursor: pointer;
+}
+
+.sl-status-focus-badge.is-active:hover {
+  background: rgba(56, 189, 248, 0.25);
+  color: #FFF;
+}
+
+/* Viewport for CRT Modes */
+.sl-crt-content-viewport {
+  flex: 1 1 0;
+  min-height: 0;
+  height: calc(100% - 24px);
+  position: relative;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.sl-ws-terminal {
+  flex: 1 1 0;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.sl-ws-term-header {
+  flex-shrink: 0;
+}
+
+.sl-ws-term-body {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Terminal Footer Prompt */
+.sl-ws-term-footer {
+  flex-shrink: 0;
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 9.5px;
+  color: #64748B;
+}
+
+.sl-term-footer-prompt {
+  color: #38BDF8;
+  font-weight: 700;
+}
+
+.sl-term-footer-text b {
+  color: #F8FAFC;
+}
+
+.sl-ws-term-right-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sl-ws-header-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 3px;
+  color: #CBD5E1;
+  font-family: ui-monospace, monospace;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sl-ws-header-btn:hover {
+  background: #38BDF8;
+  color: #0B0E14;
+  border-color: #38BDF8;
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.6);
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   SYSTEM MENU STYLES
+   ───────────────────────────────────────────────────────────────── */
+.sl-ws-menu-container {
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  height: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
+.sl-ws-menu-title {
+  font-size: 10px;
+  font-weight: 800;
+  color: #F59E0B;
+  letter-spacing: 0.08em;
+  margin-bottom: 6px;
+  text-align: center;
+  text-shadow: 0 0 6px rgba(245, 158, 11, 0.5);
+  flex-shrink: 0;
+}
+
+.sl-ws-menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 2px;
+}
+
+.sl-ws-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 9.5px;
+  color: #94A3B8;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  flex-shrink: 0;
+}
+
+.sl-ws-menu-item:hover,
+.sl-ws-menu-item.is-selected {
+  background: rgba(56, 189, 248, 0.12);
+  border-color: rgba(56, 189, 248, 0.4);
+  color: #F8FAFC;
+}
+
+.sl-menu-key {
+  color: #F97316;
+  font-weight: 700;
+}
+
+.sl-menu-cursor {
+  color: #38BDF8;
+  width: 10px;
+  font-weight: 900;
+}
+
+.sl-menu-label {
+  flex: 1;
+}
+
+.sl-menu-badge {
+  font-size: 8px;
+  font-weight: 800;
+  padding: 1px 4px;
+  border-radius: 2px;
+  background: #334155;
+  color: #38BDF8;
+}
+
+.sl-ws-menu-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 8.5px;
+  color: #64748B;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   DIAGNOSTICS MODE STYLES
+   ───────────────────────────────────────────────────────────────── */
+.sl-ws-diag-container {
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  height: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  font-family: ui-monospace, monospace;
+}
+
+.sl-diag-content {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+}
+
+.sl-diag-ascii {
+  font-size: 7.5px;
+  line-height: 1.1;
+  color: #38BDF8;
+  white-space: pre;
+  font-weight: 700;
+  text-align: center;
+  opacity: 0.85;
+  flex-shrink: 0;
+}
+
+.sl-diag-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  padding: 6px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+
+.sl-diag-col {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.sl-diag-item {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+}
+
+.sl-diag-label {
+  color: #64748B;
+  font-weight: 700;
+}
+
+.sl-diag-val {
+  color: #CBD5E1;
+}
+
+.sl-text-ok {
+  color: #4ADE80;
+  font-weight: 700;
+}
+
+.sl-diag-nodes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.sl-diag-section-title {
+  font-size: 9px;
+  font-weight: 700;
+  color: #F59E0B;
+}
+
+.sl-diag-node-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.sl-diag-node {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 8.5px;
+  color: #94A3B8;
+}
+
+.sl-node-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+}
+
+.sl-dot-green {
+  background: #22C55E;
+  box-shadow: 0 0 4px #22C55E;
+}
+
+.sl-dot-orange {
+  background: #F97316;
+  box-shadow: 0 0 4px #F97316;
+}
+
+.sl-dot-cyan {
+  background: #38BDF8;
+  box-shadow: 0 0 4px #38BDF8;
+}
+
+.sl-dot-yellow {
+  background: #FCD34D;
+  box-shadow: 0 0 4px #FCD34D;
+}
+
+.sl-ws-diag-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: auto;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 8.5px;
+  color: #64748B;
+  flex-shrink: 0;
+}
+
+.sl-diag-action-btn {
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  color: #38BDF8;
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.sl-diag-action-btn:hover {
+  background: #38BDF8;
+  color: #070B14;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   ARCADE LAUNCHER STYLES
+   ───────────────────────────────────────────────────────────────── */
+.sl-ws-arcade-container {
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  height: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  font-family: ui-monospace, monospace;
+}
+
+.sl-arcade-disk-info {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 8.5px;
+  color: #F59E0B;
+  font-weight: 700;
+  margin-bottom: 6px;
+  flex-shrink: 0;
+}
+
+.sl-arcade-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+}
+
+.sl-arcade-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 5px 8px;
+  border-radius: 4px;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  flex-shrink: 0;
+}
+
+.sl-arcade-item:hover,
+.sl-arcade-item.is-selected {
+  background: rgba(249, 115, 22, 0.12);
+  border-color: rgba(249, 115, 22, 0.5);
+}
+
+.sl-arcade-item-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+}
+
+.sl-arcade-key {
+  color: #F97316;
+  font-weight: 800;
+}
+
+.sl-arcade-cursor {
+  color: #38BDF8;
+  width: 8px;
+}
+
+.sl-arcade-title {
+  color: #F8FAFC;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.sl-arcade-genre {
+  color: #64748B;
+  font-size: 8px;
+}
+
+.sl-arcade-best {
+  margin-left: auto;
+  color: #4ADE80;
+  font-size: 8.5px;
+  font-weight: 700;
+}
+
+.sl-arcade-desc {
+  font-size: 8.5px;
+  color: #94A3B8;
+  padding-left: 20px;
+}
+
+.sl-ws-arcade-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 8.5px;
+  color: #64748B;
+  flex-shrink: 0;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   GAMES COMMON CONTAINER & CANVAS
+   ───────────────────────────────────────────────────────────────── */
+.sl-ws-game-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  height: 100%;
+  padding: 6px 10px;
+  box-sizing: border-box;
+  overflow: hidden;
+  font-family: ui-monospace, monospace;
+}
+
+.sl-ws-game-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.sl-game-canvas-wrap {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  border-radius: 4px;
+  background: #000;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 4px;
+  box-sizing: border-box;
+}
+
+.sl-game-canvas {
+  width: auto;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  aspect-ratio: 420 / 200;
+  display: block;
+  image-rendering: pixelated;
+  object-fit: contain;
+}
+
+/* On-screen touch/mobile control bar */
+.sl-game-touch-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding-top: 2px;
+}
+
+.sl-touch-btn {
+  background: #1E293B;
+  border: 1px solid #334155;
+  border-radius: 4px;
+  color: #F8FAFC;
+  font-family: inherit;
+  font-size: 8.5px;
+  font-weight: 700;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  user-select: none;
+}
+
+.sl-touch-btn:hover,
+.sl-touch-btn:active {
+  background: #38BDF8;
+  color: #070B14;
+  border-color: #38BDF8;
+}
+
+.sl-touch-jump {
+  flex: 1;
+  background: #EA580C;
+  border-color: #F97316;
+}
+
+.sl-touch-jump:hover,
+.sl-touch-jump:active {
+  background: #F97316;
+  color: #FFF;
+}
+
+.sl-touch-exit {
+  color: #94A3B8;
+  background: transparent;
+}
+
+/* Virtual D-pad for Snake */
+.sl-dpad-bar {
+  justify-content: space-between;
+}
+
+.sl-virtual-dpad {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+
+.sl-dpad-mid {
+  display: flex;
+  gap: 1px;
+}
+
+.sl-dpad-btn {
+  width: 24px;
+  height: 16px;
+  background: #1E293B;
+  border: 1px solid #334155;
+  border-radius: 3px;
+  color: #CBD5E1;
+  font-size: 7.5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.sl-dpad-btn:active {
+  background: #38BDF8;
+  color: #000;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   ACHIEVEMENTS & HIGH SCORES STYLES
+   ───────────────────────────────────────────────────────────────── */
+.sl-ws-achieve-container {
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  height: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  font-family: ui-monospace, monospace;
+}
+
+.sl-achieve-scroll {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 4px;
+}
+
+.sl-achieve-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.sl-achieve-title {
+  font-size: 10px;
+  font-weight: 800;
+  color: #F59E0B;
+}
+
+.sl-scores-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.sl-score-card {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sl-score-game {
+  font-size: 8.5px;
+  color: #64748B;
+  font-weight: 700;
+}
+
+.sl-score-val {
+  font-size: 11px;
+  color: #38BDF8;
+  font-weight: 800;
+}
+
+.sl-badges-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sl-badge-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.sl-badge-item.is-unlocked {
+  border-color: rgba(34, 197, 94, 0.3);
+  background: rgba(34, 197, 94, 0.06);
+}
+
+.sl-badge-icon {
+  font-size: 13px;
+}
+
+.sl-badge-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.sl-badge-name {
+  font-size: 9px;
+  font-weight: 700;
+  color: #CBD5E1;
+}
+
+.sl-badge-item.is-unlocked .sl-badge-name {
+  color: #4ADE80;
+}
+
+.sl-badge-tag {
+  font-size: 7.5px;
+  color: #22C55E;
+}
+
+.sl-badge-desc {
+  font-size: 8px;
+  color: #64748B;
+}
+
+.sl-ws-achieve-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: auto;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+
+.sl-achieve-reset-btn {
+  background: transparent;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #EF4444;
+  font-size: 8px;
+  font-family: inherit;
+  padding: 2px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.sl-achieve-reset-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   BOOT & OFF MODES
+   ───────────────────────────────────────────────────────────────── */
+.sl-ws-boot-container {
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  height: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  font-family: ui-monospace, monospace;
+  cursor: pointer;
+}
+
+.sl-boot-header {
+  font-size: 10px;
+  font-weight: 800;
+  color: #F8FAFC;
+  margin-bottom: 2px;
+  flex-shrink: 0;
+}
+
+.sl-boot-sub {
+  font-size: 8.5px;
+  color: #64748B;
+  margin-bottom: 8px;
+  flex-shrink: 0;
+}
+
+.sl-boot-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.sl-boot-line {
+  font-size: 10px;
+  color: #94A3B8;
+}
+
+.sl-boot-hl {
+  color: #38BDF8;
+  font-weight: 700;
+}
+
+.sl-boot-ok {
+  color: #4ADE80;
+  font-weight: 700;
+}
+
+.sl-boot-ready {
+  color: #FCD34D;
+  font-weight: 800;
+}
+
+.sl-boot-footer {
+  font-size: 8.5px;
+  color: #64748B;
+  text-align: center;
+  flex-shrink: 0;
+  margin-top: auto;
+  padding-top: 4px;
+}
+
+.sl-ws-off-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 0;
+  min-height: 0;
+  height: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  background: #05070A;
+  cursor: pointer;
+  outline: none;
+}
+
+.sl-off-screen-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.sl-off-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #334155;
+}
+
+.sl-off-msg {
+  text-align: center;
+  font-family: ui-monospace, monospace;
+}
+
+.sl-off-title {
+  font-size: 11px;
+  font-weight: 800;
+  color: #475569;
+  letter-spacing: 0.08em;
+}
+
+.sl-off-hint {
+  font-size: 8px;
+  color: #334155;
+  margin-top: 4px;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   RETRO CRT SCROLLBAR STYLING
+   Compact, futuristic cyan scrollbars for inner scrollable areas.
+   ───────────────────────────────────────────────────────────────── */
+.sl-achieve-scroll::-webkit-scrollbar,
+.sl-diag-content::-webkit-scrollbar,
+.sl-arcade-list::-webkit-scrollbar,
+.sl-ws-menu-list::-webkit-scrollbar,
+.sl-boot-body::-webkit-scrollbar,
+.sl-ws-term-body::-webkit-scrollbar {
+  width: 4px;
+}
+
+.sl-achieve-scroll::-webkit-scrollbar-track,
+.sl-diag-content::-webkit-scrollbar-track,
+.sl-arcade-list::-webkit-scrollbar-track,
+.sl-ws-menu-list::-webkit-scrollbar-track,
+.sl-boot-body::-webkit-scrollbar-track,
+.sl-ws-term-body::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 2px;
+}
+
+.sl-achieve-scroll::-webkit-scrollbar-thumb,
+.sl-diag-content::-webkit-scrollbar-thumb,
+.sl-arcade-list::-webkit-scrollbar-thumb,
+.sl-ws-menu-list::-webkit-scrollbar-thumb,
+.sl-boot-body::-webkit-scrollbar-thumb,
+.sl-ws-term-body::-webkit-scrollbar-thumb {
+  background: rgba(56, 189, 248, 0.35);
+  border-radius: 2px;
+}
+
+.sl-achieve-scroll::-webkit-scrollbar-thumb:hover,
+.sl-diag-content::-webkit-scrollbar-thumb:hover,
+.sl-arcade-list::-webkit-scrollbar-thumb:hover,
+.sl-ws-menu-list::-webkit-scrollbar-thumb:hover,
+.sl-boot-body::-webkit-scrollbar-thumb:hover,
+.sl-ws-term-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(56, 189, 248, 0.7);
+  box-shadow: 0 0 6px rgba(56, 189, 248, 0.8);
+}
+
+.sl-achieve-scroll,
+.sl-diag-content,
+.sl-arcade-list,
+.sl-ws-menu-list,
+.sl-boot-body,
+.sl-ws-term-body {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(56, 189, 248, 0.35) rgba(0, 0, 0, 0.4);
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   PHYSICAL HARDWARE CONTROLS INTERACTIVE STATES
+   Interactive enhancements without changing exterior dimensions!
+   ───────────────────────────────────────────────────────────────── */
+/* Floppy Drive Interactive Slot */
+.sl-ws-drive-slot {
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sl-ws-drive-slot:hover {
+  background: #2D333D;
+  border-color: #38BDF8;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.8), 0 0 6px rgba(56, 189, 248, 0.4);
+}
+
+.sl-ws-drive-slot.is-active-drive .sl-ws-drive-eject {
+  background: #22C55E;
+  box-shadow: 0 0 6px #22C55E;
+}
+
+/* Power Switch */
+.sl-ws-power-switch {
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+.sl-ws-power-switch:active {
+  transform: translateY(1px);
+}
+
+.sl-ws-power-switch.is-off .sl-ws-switch-notch {
+  background: #475569;
+  box-shadow: none;
+  margin-top: 3px;
+}
+
+.sl-ws-power-led.is-off {
+  background: #475569;
+  box-shadow: none;
+}
+
+/* Mechanical Keyboard Key Interactions */
+.sl-key {
+  cursor: pointer;
+  transition: transform 0.06s ease, box-shadow 0.06s ease;
+}
+
+.sl-key:hover {
+  filter: brightness(1.05);
+}
+
+.sl-key:active,
+.sl-key.is-pressed {
+  transform: translateY(1.5px);
+  box-shadow: 0 0 0 #ADA595, 0 1px 1px rgba(0, 0, 0, 0.2);
+}
+
+.sl-key.accent.enter:active,
+.sl-key.accent.enter.is-pressed {
+  transform: translateY(1.5px);
+  box-shadow: 0 0 0 #9E3A00, 0 1px 1px rgba(0, 0, 0, 0.2);
+}
+
+/* Reduced Motion Override */
+@media (prefers-reduced-motion: reduce) {
+  .sl-ws-crt-scanlines {
+    display: none;
+  }
+  .sl-key {
+    transition: none;
+  }
+}

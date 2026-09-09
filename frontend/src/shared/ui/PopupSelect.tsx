@@ -34,7 +34,7 @@ export function PopupSelect({ value, options, onChange, ariaLabel, disabled = fa
     const above = rect.top - margin
     const opensUpward = below < Math.min(desiredHeight, 180) && above > below
     const maxHeight = Math.max(96, Math.min(desiredHeight, opensUpward ? above : below))
-    const width = Math.min(Math.max(rect.width, 180), window.innerWidth - margin * 2)
+    const width = Math.min(Math.max(rect.width, 280), window.innerWidth - margin * 2)
     const left = Math.min(Math.max(margin, rect.left), window.innerWidth - width - margin)
     setPosition({ top: opensUpward ? Math.max(margin, rect.top - maxHeight - 6) : rect.bottom + 6, left, width, maxHeight })
   }, [options.length])
@@ -45,14 +45,23 @@ export function PopupSelect({ value, options, onChange, ariaLabel, disabled = fa
     const closeOnPointerDown = (event: PointerEvent) => {
       if (!triggerRef.current?.contains(event.target as Node) && !listRef.current?.contains(event.target as Node)) setOpen(false)
     }
+    const closeOnKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setOpen(false)
+        triggerRef.current?.focus()
+      }
+    }
     const reposition = () => updatePosition()
     const closeForModal = () => setOpen(false)
     window.addEventListener('pointerdown', closeOnPointerDown)
+    window.addEventListener('keydown', closeOnKeyDown)
     window.addEventListener('resize', reposition)
     window.addEventListener('scroll', reposition, true)
     window.addEventListener('smartlab:overlay-modal-open', closeForModal)
     return () => {
       window.removeEventListener('pointerdown', closeOnPointerDown)
+      window.removeEventListener('keydown', closeOnKeyDown)
       window.removeEventListener('resize', reposition)
       window.removeEventListener('scroll', reposition, true)
       window.removeEventListener('smartlab:overlay-modal-open', closeForModal)
@@ -88,12 +97,12 @@ export function PopupSelect({ value, options, onChange, ariaLabel, disabled = fa
   }
 
   return <>
-    <button ref={triggerRef} className={`popup-select-trigger ${className}`} type="button" disabled={disabled} aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open} aria-controls={`${id}-listbox`} onClick={() => open ? setOpen(false) : openList()} onKeyDown={onTriggerKeyDown}>
+    <button ref={triggerRef} className={`popup-select-trigger ${className}`} type="button" disabled={disabled} aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open} aria-controls={`${id}-listbox`} onClick={() => open ? setOpen(false) : openList()} onKeyDown={onTriggerKeyDown} title={selected?.label}>
       <span>{selected?.label}</span><ChevronDown size={16} aria-hidden="true" />
     </button>
     {open && createPortal(
       <div ref={listRef} id={`${id}-listbox`} className="popup-select-menu" role="listbox" aria-label={ariaLabel} tabIndex={-1} style={{ top: position.top, left: position.left, width: position.width, maxHeight: position.maxHeight }} onKeyDown={onListKeyDown}>
-        {options.map((option, index) => <button key={option.value} className={`popup-select-option ${index === activeIndex ? 'is-active' : ''}`} type="button" role="option" aria-selected={option.value === value} onMouseMove={() => setActiveIndex(index)} onClick={() => choose(index)}>
+        {options.map((option, index) => <button key={option.value} className={`popup-select-option ${index === activeIndex ? 'is-active' : ''}`} type="button" role="option" aria-selected={option.value === value} onMouseMove={() => setActiveIndex(index)} onClick={() => choose(index)} title={option.label}>
           <span><strong>{option.label}</strong>{option.description ? <small>{option.description}</small> : null}</span>{option.value === value ? <Check size={15} aria-hidden="true" /> : null}
         </button>)}
       </div>, portalTarget ?? document.body,

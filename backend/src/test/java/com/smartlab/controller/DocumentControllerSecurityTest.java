@@ -8,6 +8,7 @@ import com.smartlab.filter.JwtRequestFilter;
 import com.smartlab.service.AppUserDetailService;
 import com.smartlab.service.DocumentService;
 import com.smartlab.service.FileService;
+import com.smartlab.service.PublicDocumentService;
 import com.smartlab.service.UserSessionService;
 import com.smartlab.util.JwtUtil;
 import org.junit.jupiter.api.Test;
@@ -33,21 +34,27 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(DocumentController.class)
+@WebMvcTest({DocumentController.class, PublicDocumentController.class})
 @Import({SecurityConfig.class, CustomAuthenticationEntryPoint.class, JwtRequestFilter.class})
 class DocumentControllerSecurityTest {
     private static final String EMAIL = "member@smartlab.test";
 
     @Autowired private MockMvc mockMvc;
     @MockitoBean private DocumentService documentService;
+    @MockitoBean private PublicDocumentService publicDocumentService;
     @MockitoBean private AppUserDetailService appUserDetailService;
     @MockitoBean private JwtUtil jwtUtil;
     @MockitoBean private UserSessionService userSessionService;
 
     @Test
-    void anonymousCannotReachAnyDocumentEndpoint() throws Exception {
+    void anonymousCanReadPublicDocumentsButCannotReachInternalDocumentEndpoints() throws Exception {
         MockMultipartFile file = textFile();
 
+        when(publicDocumentService.list(any(), any(), any(), any(), any(), eq(0), eq(12)))
+                .thenReturn(new com.smartlab.dto.response.PublicPageResponse<>(List.of(), 0, 12, 0, 0));
+        when(publicDocumentService.years()).thenReturn(List.of(2026));
+        mockMvc.perform(get("/documents/public")).andExpect(status().isOk());
+        mockMvc.perform(get("/documents/public/years")).andExpect(status().isOk());
         mockMvc.perform(get("/projects/7/documents")).andExpect(status().isUnauthorized());
         mockMvc.perform(multipart("/projects/7/documents").file(file).param("title", "Proposal"))
                 .andExpect(status().isUnauthorized());

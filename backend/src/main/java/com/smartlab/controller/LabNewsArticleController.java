@@ -6,6 +6,7 @@ import com.smartlab.dto.response.LabNewsArticleResponse;
 import com.smartlab.dto.response.AdminLabNewsArticleResponse;
 import com.smartlab.dto.response.PublicLabNewsArticleResponse;
 import com.smartlab.dto.response.PublicPageResponse;
+import com.smartlab.enums.PublicNewsSort;
 import com.smartlab.service.LabNewsArticleService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -35,13 +36,23 @@ public class LabNewsArticleController {
 
     @GetMapping("/news/archive")
     public PublicPageResponse<PublicLabNewsArticleResponse> listArchive(
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) String source,
+            @RequestParam(required = false) Integer year,
+            @RequestParam(defaultValue = "LATEST") PublicNewsSort sort,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "12") int size
     ) {
-        PublicPageResponse<LabNewsArticleResponse> result = articleService.listPublicArchive(page, size);
+        PublicPageResponse<LabNewsArticleResponse> result = articleService.listPublicArchive(q, source, year, sort, page, size);
         return new PublicPageResponse<>(result.items().stream().map(this::toPublicResponse).toList(), result.page(),
                 result.size(), result.totalElements(), result.totalPages());
     }
+
+    @GetMapping("/news/archive/sources")
+    public List<String> sources() { return articleService.listPublicSources(); }
+
+    @GetMapping("/news/archive/years")
+    public List<Integer> years() { return articleService.listPublicYears(); }
 
     @GetMapping("/admin/news")
     @PreAuthorize("hasRole('ADMIN') and hasAuthority('PROJECT_MANAGE')")

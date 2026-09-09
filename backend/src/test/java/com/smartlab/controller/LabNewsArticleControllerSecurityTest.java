@@ -6,6 +6,7 @@ import com.smartlab.dto.request.CreateLabNewsArticleRequest;
 import com.smartlab.dto.request.UpdateLabNewsArticleRequest;
 import com.smartlab.dto.response.LabNewsArticleResponse;
 import com.smartlab.dto.response.PublicPageResponse;
+import com.smartlab.enums.PublicNewsSort;
 import com.smartlab.filter.JwtRequestFilter;
 import com.smartlab.service.AppUserDetailService;
 import com.smartlab.service.LabNewsArticleService;
@@ -45,15 +46,19 @@ class LabNewsArticleControllerSecurityTest {
 
     @Test void anonymousCanReadNewsButCannotMutate() throws Exception {
         when(articleService.listPublic(3)).thenReturn(List.of(response()));
-        when(articleService.listPublicArchive(0, 12)).thenReturn(new PublicPageResponse<>(List.of(response()), 0, 12, 1, 1));
+        when(articleService.listPublicArchive(null, null, null, PublicNewsSort.LATEST, 0, 12)).thenReturn(new PublicPageResponse<>(List.of(response()), 0, 12, 1, 1));
+        when(articleService.listPublicSources()).thenReturn(List.of("Source"));
+        when(articleService.listPublicYears()).thenReturn(List.of(2026));
         mockMvc.perform(get("/news")).andExpect(status().isOk());
         mockMvc.perform(get("/news/archive")).andExpect(status().isOk());
+        mockMvc.perform(get("/news/archive/sources")).andExpect(status().isOk());
+        mockMvc.perform(get("/news/archive/years")).andExpect(status().isOk());
         mockMvc.perform(post("/admin/news").contentType(MediaType.APPLICATION_JSON).content(BODY)).andExpect(status().isUnauthorized());
         mockMvc.perform(patch("/admin/news/7").contentType(MediaType.APPLICATION_JSON).content("{}")).andExpect(status().isUnauthorized());
         mockMvc.perform(delete("/admin/news/7")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/admin/news")).andExpect(status().isUnauthorized());
         verify(articleService).listPublic(3);
-        verify(articleService).listPublicArchive(0, 12);
+        verify(articleService).listPublicArchive(null, null, null, PublicNewsSort.LATEST, 0, 12);
     }
 
     @Test void onlyAdminWithApprovedProjectManageAuthorityCanMutate() throws Exception {

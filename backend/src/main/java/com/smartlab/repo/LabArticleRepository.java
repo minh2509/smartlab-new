@@ -21,10 +21,22 @@ public interface LabArticleRepository extends JpaRepository<LabArticleEntity, Lo
 
     @Query("""
             select article from LabArticleEntity article
-            where article.deletedAt is null and article.status = com.smartlab.enums.LabArticleStatus.PUBLISHED
-            order by article.publishedAt desc, article.createdAt desc, article.id desc
+            where article.deletedAt is null
+              and article.status = com.smartlab.enums.LabArticleStatus.PUBLISHED
+              and (:q = '' or lower(article.title) like lower(concat('%', :q, '%'))
+                   or lower(coalesce(article.excerpt, '')) like lower(concat('%', :q, '%')))
+              and (:year = 0 or year(article.publishedAt) = :year)
             """)
-    Page<LabArticleEntity> findPublishedArchive(Pageable pageable);
+    Page<LabArticleEntity> findPublishedArchive(String q, Integer year, Pageable pageable);
+
+    @Query("""
+            select distinct year(article.publishedAt) from LabArticleEntity article
+            where article.deletedAt is null
+              and article.status = com.smartlab.enums.LabArticleStatus.PUBLISHED
+              and article.publishedAt is not null
+            order by year(article.publishedAt) desc
+            """)
+    List<Integer> findPublishedYears();
 
     @Query("""
             select article from LabArticleEntity article

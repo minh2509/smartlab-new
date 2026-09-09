@@ -8,6 +8,7 @@ import com.smartlab.service.MemberProfileService;
 import com.smartlab.service.ResearchFieldService;
 import com.smartlab.service.UserSessionService;
 import com.smartlab.util.JwtUtil;
+import com.smartlab.dto.response.ResearchFieldResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -26,7 +27,9 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest({MemberProfileController.class, ResearchFieldController.class})
@@ -44,15 +47,34 @@ class MemberProfileResearchFieldSecurityTest {
     @Test
     void anonymousCannotReadMemberCollectionButCanReadPublicCollections() throws Exception {
         when(researchFieldService.listActive()).thenReturn(List.of());
+        when(researchFieldService.getActiveByCode("AI")).thenReturn(ResearchFieldResponse.builder()
+                .id(1L)
+                .code("AI")
+                .name("Artificial Intelligence")
+                .isActive(true)
+                .build());
 
         mockMvc.perform(get("/members")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/research-fields")).andExpect(status().isOk());
+        mockMvc.perform(get("/research-fields/AI"))
+                .andExpect(status().isOk());
         mockMvc.perform(get("/me/profile")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/admin/members")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/admin/research-fields")).andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/admin/research-fields")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(patch("/admin/research-fields/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(delete("/admin/research-fields/1"))
+                .andExpect(status().isUnauthorized());
 
         verifyNoInteractions(memberProfileService);
         verify(researchFieldService).listActive();
+        verify(researchFieldService).getActiveByCode("AI");
     }
 
     @Test

@@ -5,6 +5,7 @@ import com.smartlab.entity.UserEntity;
 import com.smartlab.entity.ProjectEntity;
 import com.smartlab.repo.DocumentRepository;
 import com.smartlab.repo.DocumentVersionRepository;
+import com.smartlab.repo.GalleryItemRepository;
 import com.smartlab.repo.LabAchievementFileRepository;
 import com.smartlab.repo.MemberProfileRepository;
 import com.smartlab.repo.ProjectRepository;
@@ -54,6 +55,7 @@ class FileServiceImplTest {
     @Mock TaskAttachmentRepository taskAttachmentRepository;
     @Mock ResearchFieldRepository researchFieldRepository;
     @Mock LabAchievementFileRepository achievementFileRepository;
+    @Mock GalleryItemRepository galleryItemRepository;
     @InjectMocks FileServiceImpl service;
 
     private final UserEntity owner = UserEntity.builder().id(1L).email("owner@lab.test").name("Owner").build();
@@ -253,6 +255,18 @@ class FileServiceImplTest {
         service.delete(15L, owner.getEmail(), authentication(owner.getEmail()));
         service.delete(16L, owner.getEmail(), authentication(owner.getEmail()));
         verify(fileStorage, org.mockito.Mockito.times(2)).trash("drive-id");
+    }
+
+    @Test
+    void activeGalleryOwnershipBlocksGenericFileDeletion() {
+        StoredFileEntity entity = storedFile(17L, "PRIVATE");
+        when(storedFileRepository.findByIdAndDeletedAtIsNull(17L)).thenReturn(Optional.of(entity));
+        when(galleryItemRepository.existsByFile_IdAndDeletedAtIsNull(17L)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.delete(17L, owner.getEmail(), authentication(owner.getEmail())))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+        verify(fileStorage, never()).trash(any());
     }
 
     @Test

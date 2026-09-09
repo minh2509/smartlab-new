@@ -8,17 +8,20 @@ import com.smartlab.dto.response.PublicLabArticleSummaryResponse;
 import com.smartlab.dto.response.PublicPageResponse;
 import com.smartlab.entity.LabArticleEntity;
 import com.smartlab.enums.LabArticleStatus;
+import com.smartlab.enums.PublicArticleSort;
 import com.smartlab.repo.LabArticleRepository;
 import com.smartlab.service.LabArticleService;
 import com.smartlab.service.LabArticleSlugGenerator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
+import java.time.Year;
 import java.util.List;
 import java.util.Map;
 
@@ -35,9 +38,20 @@ public class LabArticleServiceImpl implements LabArticleService {
     }
 
     @Override @Transactional(readOnly = true)
-    public PublicPageResponse<PublicLabArticleSummaryResponse> listArchive(int page, int size) {
+    public PublicPageResponse<PublicLabArticleSummaryResponse> listArchive(String q, Integer year, PublicArticleSort sort, int page, int size) {
         validatePage(page, size, 48);
-        return PublicPageResponse.from(articleRepository.findPublishedArchive(PageRequest.of(page, size)).map(this::toSummary));
+        if (year != null && (year < 2000 || year > Year.now().getValue())) throw badRequest("Year is invalid");
+        String normalizedQuery = optional(q);
+        PublicArticleSort normalizedSort = sort == null ? PublicArticleSort.LATEST : sort;
+        Sort.Direction direction = normalizedSort == PublicArticleSort.OLDEST ? Sort.Direction.ASC : Sort.Direction.DESC;
+        PageRequest pageable = PageRequest.of(page, size, Sort.by(direction, "publishedAt", "id"));
+        return PublicPageResponse.from(articleRepository.findPublishedArchive(
+                normalizedQuery == null ? "" : normalizedQuery, year == null ? 0 : year, pageable).map(this::toSummary));
+    }
+
+    @Override @Transactional(readOnly = true)
+    public List<Integer> listPublishedYears() {
+        return articleRepository.findPublishedYears();
     }
 
     @Override @Transactional(readOnly = true)

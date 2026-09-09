@@ -3,6 +3,11 @@ package com.smartlab.repo;
 import com.smartlab.entity.DocumentEntity;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -12,7 +17,25 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface DocumentRepository extends JpaRepository<DocumentEntity, Long> {
+public interface DocumentRepository extends JpaRepository<DocumentEntity, Long>, JpaSpecificationExecutor<DocumentEntity> {
+    @Override
+    @EntityGraph(attributePaths = {"currentFile", "project"})
+    Page<DocumentEntity> findAll(Specification<DocumentEntity> specification, Pageable pageable);
+
+    @Query("""
+            select distinct extract(year from d.updatedAt)
+            from DocumentEntity d
+            join d.currentFile f
+            join d.project p
+            where d.deletedAt is null
+              and f.deletedAt is null
+              and f.accessScope = 'PUBLIC'
+              and p.deletedAt is null
+              and p.isPublic = true
+              and d.updatedAt is not null
+            order by extract(year from d.updatedAt) desc
+            """)
+    List<Integer> findPublicYears();
     @Query("""
             select d
             from DocumentEntity d

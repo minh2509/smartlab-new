@@ -4,6 +4,11 @@ import com.smartlab.entity.DocumentEntity;
 import jakarta.persistence.LockModeType;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 
@@ -44,5 +49,30 @@ class DocumentRepositoryContractTest {
                 "d.project.deletedAt is null"
         );
         assertThat(write.getAnnotation(Lock.class).value()).isEqualTo(LockModeType.PESSIMISTIC_WRITE);
+    }
+
+    @Test
+    void publicArchiveUsesSpecificationWithPublicVisibilityAndEntityGraph()
+            throws NoSuchMethodException {
+        Type specificationType = DocumentRepository.class.getGenericInterfaces()[1];
+        assertThat(specificationType).isInstanceOf(ParameterizedType.class);
+        assertThat(((ParameterizedType) specificationType).getRawType()).isEqualTo(JpaSpecificationExecutor.class);
+        assertThat(((ParameterizedType) specificationType).getActualTypeArguments()).containsExactly(DocumentEntity.class);
+
+        Method findAll = DocumentRepository.class.getMethod("findAll", Specification.class, Pageable.class);
+        assertThat(findAll.getReturnType()).isEqualTo(Page.class);
+        assertThat(findAll.getAnnotation(EntityGraph.class).attributePaths())
+                .containsExactlyInAnyOrder("currentFile", "project");
+
+        Method years = DocumentRepository.class.getMethod("findPublicYears");
+        String yearsQuery = years.getAnnotation(Query.class).value();
+        assertThat(yearsQuery).contains(
+                "extract(year from d.updatedAt)",
+                "d.deletedAt is null",
+                "f.deletedAt is null",
+                "f.accessScope = 'PUBLIC'",
+                "p.deletedAt is null",
+                "p.isPublic = true"
+        );
     }
 }

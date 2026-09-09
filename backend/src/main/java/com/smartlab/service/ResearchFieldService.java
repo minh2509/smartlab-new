@@ -9,6 +9,8 @@ import java.util.List;
 public interface ResearchFieldService {
     List<ResearchFieldResponse> listActive();
 
+    ResearchFieldResponse getActiveByCode(String code);
+
     List<ResearchFieldResponse> listAll();
 
     ResearchFieldResponse create(CreateResearchFieldRequest request);

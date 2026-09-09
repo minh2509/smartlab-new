@@ -28,6 +28,11 @@ import { NewsArchivePage } from '../features/public/pages/NewsArchivePage'
 import { AchievementArchivePage } from '../features/public/pages/AchievementArchivePage'
 import { HomePage } from '../features/public/pages/HomePage'
 import { StaticPublicPage } from '../features/public/pages/StaticPublicPage'
+import { PublicDocumentsPage } from '../features/public/pages/PublicDocumentsPage'
+import { ResearchFieldDetailPage } from '../features/public/pages/ResearchFieldDetailPage'
+import { PublicGalleryPage } from '../features/public/pages/PublicGalleryPage'
+import { AdminGalleryPage } from '../features/admin/pages/AdminGalleryPage'
+import { RESEARCH_FIELDS_PATH } from '../features/public/researchFieldNavigation'
 import { RequirePermissions } from './RequirePermissions'
 import { FilesPage } from '../features/files/pages/FilesPage'
 import { ProjectListPage } from '../features/projects/pages/ProjectListPage'
@@ -57,16 +62,8 @@ export function App() {
             />
           }
         />
-        <Route
-          path="/linh-vuc"
-          element={
-            <StaticPublicPage
-              kind="fields"
-              title="Lĩnh vực nghiên cứu"
-              description="Ba hướng nghiên cứu chính của Smart Lab: AI, Robotics và Kỹ thuật phần mềm."
-            />
-          }
-        />
+        <Route path="/linh-vuc" element={<Navigate to={RESEARCH_FIELDS_PATH} replace />} />
+        <Route path="/linh-vuc/:code" element={<ResearchFieldDetailPage />} />
         <Route path="/du-an" element={<ProjectListPage />} />
         <Route path="/du-an/:id" element={<ProjectDetailPage />} />
         <Route path="/bai-viet" element={<ArticleArchivePage />} />
@@ -83,25 +80,10 @@ export function App() {
         <Route path="/posts/:slug" element={<PostDetailPage />} />
         <Route
           path="/tai-lieu"
-          element={
-            <StaticPublicPage
-              kind="documents"
-              title="Tài liệu"
-              description="Tài liệu vận hành, hướng dẫn thành viên và biểu mẫu dùng trong quá trình làm việc tại Smart Lab."
-            />
-          }
+          element={<PublicDocumentsPage />}
         />
         <Route path="/su-kien" element={<PublicEventsPage />} />
-        <Route
-          path="/thu-vien-anh"
-          element={
-            <StaticPublicPage
-              kind="gallery"
-              title="Thư viện ảnh"
-              description="Hình ảnh hoạt động, workshop, demo dự án và sinh hoạt nội bộ của Lab."
-            />
-          }
-        />
+        <Route path="/thu-vien-anh" element={<PublicGalleryPage />} />
         <Route path="/tuyen-thanh-vien" element={<Navigate to="/lien-he" replace />} />
         <Route
           path="/lien-he"
@@ -145,6 +127,7 @@ export function App() {
         <Route path="/admin/achievements" element={<RequirePermissions roles={['ADMIN']} allOf={accessPolicies.content}><AdminAchievementsPage /></RequirePermissions>} />
         <Route path="/admin/articles" element={<RequirePermissions roles={['ADMIN']} allOf={accessPolicies.content}><AdminArticlesPage /></RequirePermissions>} />
         <Route path="/admin/news" element={<RequirePermissions roles={['ADMIN']} allOf={accessPolicies.content}><AdminNewsPage /></RequirePermissions>} />
+        <Route path="/admin/gallery" element={<RequirePermissions roles={['ADMIN']} allOf={accessPolicies.gallery}><AdminGalleryPage /></RequirePermissions>} />
         <Route path="/admin/accounts" element={<RequirePermissions allOf={accessPolicies.accounts}><AdminAccountsPage /></RequirePermissions>} />
         <Route path="/admin/rbac" element={<RequirePermissions allOf={accessPolicies.rbac}><AdminRbacPage /></RequirePermissions>} />
       </Route>

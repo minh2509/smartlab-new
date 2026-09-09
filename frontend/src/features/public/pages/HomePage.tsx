@@ -9,7 +9,7 @@ import {
   WifiOff,
 } from 'lucide-react'
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import type { ResearchField } from '../../../shared/types/api'
 import '../../../assets/lab.css'
 import '../landing.css'
@@ -26,6 +26,7 @@ import { PROJECT_TYPE_LABELS } from '../../projects/types'
 import { listAchievements, listAchievementYears } from '../achievementApi'
 import type { Achievement, YearCount } from '../achievementTypes'
 import { ACHIEVEMENT_TYPE_LABELS } from '../achievementTypes'
+import { RESEARCH_FIELDS_HASH, RESEARCH_FIELDS_PATH, scrollToResearchFields } from '../researchFieldNavigation'
 
 const baseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1.0'
 const publicFileUrl = (fileId: number) => `${baseUrl}/files/${fileId}`
@@ -80,6 +81,7 @@ function LandingState({ loading, error, empty, emptyText, dark = false }: {
 // ─── main component ────────────────────────────────────────────────────────────
 
 export function HomePage() {
+  const location = useLocation()
   // ── Research fields
   const [fields, setFields] = useState<ResearchField[]>([])
   const [fieldsLoading, setFieldsLoading] = useState(true)
@@ -160,6 +162,12 @@ export function HomePage() {
     return () => { active = false }
   }, [])
 
+  useEffect(() => {
+    if (location.hash === RESEARCH_FIELDS_HASH && !fieldsLoading) {
+      scrollToResearchFields()
+    }
+  }, [fieldsLoading, location.hash])
+
   // ── Bounded recruiting preview
   useEffect(() => {
     let active = true
@@ -237,12 +245,12 @@ export function HomePage() {
       {/* ═══════════════════════════════════════════════════════════
           1. HERO
           ═══════════════════════════════════════════════════════════ */}
-      <SmartLabHero />
+      <SmartLabHero onExploreFields={scrollToResearchFields} />
 
       {/* ═══════════════════════════════════════════════════════════
           2. RESEARCH AREAS — Architectural Research Ledger
           ═══════════════════════════════════════════════════════════ */}
-      <section className="landing-section" aria-labelledby="research-heading">
+      <section id="research-fields" className="landing-section" aria-labelledby="research-heading">
         <div className="landing-wrap">
           <div className="landing-head-row">
             <div className="landing-head">
@@ -252,9 +260,6 @@ export function HomePage() {
                 Các hướng nghiên cứu định hình dự án và hoạt động chuyên môn tại Smart Lab.
               </p>
             </div>
-            <Link className="landing-section-cta" to="/linh-vuc">
-              Tất cả lĩnh vực <ArrowRight size={16} />
-            </Link>
           </div>
 
           <LandingState
@@ -316,7 +321,7 @@ export function HomePage() {
                   </div>
 
                   <div className="landing-research-action-col">
-                    <Link className="landing-research-link" to="/linh-vuc">
+                    <Link className="landing-research-link" to={`/linh-vuc/${encodeURIComponent(field.code)}`}>
                       <span>Khám phá</span>
                       <ArrowRight size={14} />
                     </Link>
@@ -780,7 +785,7 @@ export function HomePage() {
           </div>
           <div className="landing-hero-cta">
             <Link className="btn primary lg" to="/du-an?status=RECRUITING">Xem dự án đang tuyển <ArrowRight size={17} /></Link>
-            <Link className="btn outline-light lg" to="/linh-vuc">Khám phá lĩnh vực</Link>
+            <Link className="btn outline-light lg" to={RESEARCH_FIELDS_PATH} onClick={scrollToResearchFields}>Khám phá lĩnh vực</Link>
           </div>
         </div>
       </section>

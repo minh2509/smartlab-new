@@ -5,10 +5,13 @@ import com.smartlab.dto.request.UpdateLabNewsArticleRequest;
 import com.smartlab.dto.response.LabNewsArticleResponse;
 import com.smartlab.dto.response.PublicPageResponse;
 import com.smartlab.entity.LabNewsArticleEntity;
+import com.smartlab.enums.PublicNewsSort;
 import com.smartlab.repo.LabNewsArticleRepository;
 import com.smartlab.service.LabNewsArticleService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,7 +19,14 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URI;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.time.Year;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -37,6 +47,40 @@ public class LabNewsArticleServiceImpl implements LabNewsArticleService {
         if (page < 0) throw badRequest("Page must not be negative");
         if (size < 1 || size > 48) throw badRequest("Size must be between 1 and 48");
         return PublicPageResponse.from(articleRepository.findPublicArchive(PageRequest.of(page, size)).map(this::toResponse));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PublicPageResponse<LabNewsArticleResponse> listPublicArchive(String query, String source, Integer year,
+                                                                         PublicNewsSort sort, int page, int size) {
+        if (page < 0) throw badRequest("Page must not be negative");
+        if (size < 1 || size > 48) throw badRequest("Size must be between 1 and 48");
+        if (year != null && (year < 2000 || year > Year.now().getValue())) throw badRequest("Year is invalid");
+        String normalizedQuery = optional(query);
+        String normalizedSource = optional(source);
+        PublicNewsSort normalizedSort = sort == null ? PublicNewsSort.LATEST : sort;
+        Sort.Direction direction = normalizedSort == PublicNewsSort.OLDEST ? Sort.Direction.ASC : Sort.Direction.DESC;
+        Specification<LabNewsArticleEntity> specification = publicArchiveSpecification(normalizedQuery, normalizedSource, year);
+        return PublicPageResponse.from(articleRepository.findAll(specification,
+                PageRequest.of(page, size, Sort.by(direction, "publishedAt", "id"))).map(this::toResponse));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<String> listPublicSources() {
+        Set<String> seen = new HashSet<>();
+        return articleRepository.findPublicSources().stream()
+                .map(this::optional)
+                .filter(source -> source != null)
+                .filter(source -> seen.add(source.toLowerCase(Locale.ROOT)))
+                .sorted(String.CASE_INSENSITIVE_ORDER)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Integer> listPublicYears() {
+        return articleRepository.findPublicYears();
     }
 
     @Override
@@ -117,6 +161,31 @@ public class LabNewsArticleServiceImpl implements LabNewsArticleService {
 
     private ResponseStatusException badRequest(String message) {
         return new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+    }
+
+    private Specification<LabNewsArticleEntity> publicArchiveSpecification(String query, String source, Integer year) {
+        return (root, queryObject, builder) -> {
+            List<jakarta.persistence.criteria.Predicate> predicates = new ArrayList<>();
+            predicates.add(builder.isNull(root.get("deletedAt")));
+            predicates.add(builder.isTrue(root.get("isPublic")));
+            if (query != null) {
+                String pattern = "%" + query.toLowerCase(Locale.ROOT) + "%";
+                predicates.add(builder.or(
+                        builder.like(builder.lower(root.get("title")), pattern),
+                        builder.like(builder.lower(builder.coalesce(root.get("excerpt"), "")), pattern)
+                ));
+            }
+            if (source != null) {
+                predicates.add(builder.equal(builder.lower(builder.trim(root.get("sourceName"))), source.toLowerCase(Locale.ROOT)));
+            }
+            if (year != null) {
+                Instant start = LocalDate.of(year, 1, 1).atStartOfDay(ZoneOffset.UTC).toInstant();
+                Instant end = LocalDate.of(year + 1, 1, 1).atStartOfDay(ZoneOffset.UTC).toInstant();
+                predicates.add(builder.greaterThanOrEqualTo(root.get("publishedAt"), start));
+                predicates.add(builder.lessThan(root.get("publishedAt"), end));
+            }
+            return builder.and(predicates.toArray(jakarta.persistence.criteria.Predicate[]::new));
+        };
     }
 
     private LabNewsArticleResponse toResponse(LabNewsArticleEntity article) {

@@ -6,6 +6,7 @@ import com.smartlab.dto.response.AdminLabArticleResponse;
 import com.smartlab.dto.response.PublicLabArticleDetailResponse;
 import com.smartlab.dto.response.PublicLabArticleSummaryResponse;
 import com.smartlab.dto.response.PublicPageResponse;
+import com.smartlab.enums.PublicArticleSort;
 import com.smartlab.service.LabArticleService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -31,7 +32,16 @@ public class LabArticleController {
     @GetMapping("/articles/latest")
     public List<PublicLabArticleSummaryResponse> latest(@RequestParam(defaultValue = "3") int limit) { return articleService.listLatest(limit); }
     @GetMapping("/articles")
-    public PublicPageResponse<PublicLabArticleSummaryResponse> archive(@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "12") int size) { return articleService.listArchive(page, size); }
+    public PublicPageResponse<PublicLabArticleSummaryResponse> archive(
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) Integer year,
+            @RequestParam(defaultValue = "LATEST") PublicArticleSort sort,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "12") int size) {
+        return articleService.listArchive(q, year, sort, page, size);
+    }
+    @GetMapping("/articles/years")
+    public List<Integer> years() { return articleService.listPublishedYears(); }
     @GetMapping("/articles/{slug}")
     public PublicLabArticleDetailResponse detail(@PathVariable String slug) { return articleService.getPublicBySlug(slug); }
     @GetMapping("/admin/articles") @PreAuthorize("hasRole('ADMIN') and hasAuthority('PROJECT_MANAGE')")
