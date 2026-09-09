@@ -52,7 +52,6 @@ public class SecurityConfig {
                                 "/logout",
                                 "/error",
                                 "/invitations/accept",
-                                "/research-fields",
                                 "/swagger-ui",
                                 "/swagger-ui/**",
                                 "/v3/api-docs",
@@ -61,6 +60,8 @@ public class SecurityConfig {
                         ).permitAll()
                         .requestMatchers(
                                 HttpMethod.GET,
+                                "/research-fields",
+                                "/research-fields/*",
                                 "/posts",
                                 "/posts/public/*",
                                 "/posts/*/files/*",
@@ -74,9 +75,15 @@ public class SecurityConfig {
                                 "/achievements/*/files/*",
                                 "/news",
                                 "/news/archive",
+                                "/news/archive/sources",
+                                "/news/archive/years",
                                 "/articles/latest",
                                 "/articles",
-                                "/articles/*"
+                                "/articles/*",
+                                "/documents/public",
+                                "/documents/public/years",
+                                "/gallery/public",
+                                "/gallery/public/years"
                         ).permitAll()
                         .requestMatchers(HttpMethod.GET, "/members").authenticated()
                         .requestMatchers(HttpMethod.GET, "/projects/leader-candidates").authenticated()

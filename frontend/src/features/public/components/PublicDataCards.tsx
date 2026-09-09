@@ -1,11 +1,5 @@
 import { CalendarDays, UsersRound } from 'lucide-react'
-import type { CSSProperties } from 'react'
-import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import aiResearchImage from '../../../assets/fields/ai-research.webp'
-import roboticsResearchImage from '../../../assets/fields/robotics-research.webp'
-import softwareEngineeringImage from '../../../assets/fields/software-engineering.webp'
-import type { ResearchField } from '../../../shared/types/api'
 import type { PostFeedItem } from '../../posts/types'
 import {
   PUBLIC_PROJECT_STATUS_LABELS,
@@ -19,54 +13,6 @@ const PUBLIC_PROJECT_STATUS_BADGES = {
   ACTIVE: 'ok',
   COMPLETED: 'mute',
 } as const
-
-const FIELD_VISUALS = {
-  ai: {
-    color: 'var(--s1)',
-    image: aiResearchImage,
-    imageAlt: 'Minh họa nghiên cứu trí tuệ nhân tạo trong phòng lab',
-    tags: ['Computer Vision', 'NLP', 'Deep Learning'],
-  },
-  robotics: {
-    color: 'var(--s2)',
-    image: roboticsResearchImage,
-    imageAlt: 'Minh họa cánh tay robot và cảm biến trong phòng lab',
-    tags: ['Embedded', 'Control', 'ROS'],
-  },
-  software: {
-    color: 'var(--s3)',
-    image: softwareEngineeringImage,
-    imageAlt: 'Minh họa kiến trúc phần mềm và quy trình kiểm thử',
-    tags: ['Kiến trúc', 'DevOps', 'Kiểm thử'],
-  },
-} as const
-
-export function ResearchFieldCard({ field }: { field: ResearchField }) {
-  const visual = fieldVisual(field)
-  const [coverFailed, setCoverFailed] = useState(false)
-  const image = field.coverFileId && !coverFailed ? publicFileUrl(field.coverFileId) : visual.image
-
-  return (
-    <article className="fieldcard" style={{ '--c': visual.color } as CSSProperties}>
-      <span className="fieldcard-media">
-        <img
-          src={image}
-          alt={visual.imageAlt}
-          loading="lazy"
-          onError={() => {
-            if (field.coverFileId && !coverFailed) setCoverFailed(true)
-          }}
-        />
-      </span>
-      <h3>{field.name}</h3>
-      <p>{field.description || 'Thông tin chi tiết về hướng nghiên cứu này đang được cập nhật.'}</p>
-      <div className="tags">
-        <span className="chip accent">{field.code}</span>
-        {visual.tags.map((tag) => <span className="chip" key={tag}>{tag}</span>)}
-      </div>
-    </article>
-  )
-}
 
 export function PublicProjectCard({ project }: { project: PublicProjectSummary }) {
   const shownLeaders = project.leaders.slice(0, 3)
@@ -146,15 +92,6 @@ export function PublicArticleCard({ article }: { article: import('../articleType
   )
 }
 
-function fieldVisual(field: ResearchField) {
-  const key = `${field.code} ${field.name}`.toLocaleLowerCase('vi')
-  if (key.includes('robot')) return FIELD_VISUALS.robotics
-  if (key.includes('software') || key.includes('phần mềm') || /(^|\s)se(\s|$)/.test(key)) {
-    return FIELD_VISUALS.software
-  }
-  return FIELD_VISUALS.ai
-}
-
 function initialsOf(name: string | null | undefined) {
   if (!name) return '?'
   return name
@@ -165,11 +102,6 @@ function initialsOf(name: string | null | undefined) {
     .map((part) => part.charAt(0))
     .join('')
     .toLocaleUpperCase('vi')
-}
-
-function publicFileUrl(fileId: number) {
-  const baseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1.0'
-  return `${baseUrl}/files/${fileId}`
 }
 
 function formatDate(value: string) {

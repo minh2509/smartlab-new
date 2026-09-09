@@ -6,6 +6,7 @@ import com.smartlab.dto.response.PublicLabArticleDetailResponse;
 import com.smartlab.dto.response.PublicLabArticleSummaryResponse;
 import com.smartlab.dto.response.PublicPageResponse;
 import com.smartlab.enums.LabArticleStatus;
+import com.smartlab.enums.PublicArticleSort;
 import com.smartlab.service.LabArticleService;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -33,13 +34,24 @@ class LabArticleControllerTest {
 
     @Test void publicContractsForwardDefaultsAndDoNotLeakAdminFields() throws Exception {
         PublicLabArticleSummaryResponse summary = new PublicLabArticleSummaryResponse(7L, "Article", "article", "Excerpt", Instant.parse("2026-08-20T00:00:00Z"));
-        when(articleService.listLatest(3)).thenReturn(List.of(summary)); when(articleService.listArchive(0, 12)).thenReturn(new PublicPageResponse<>(List.of(summary), 0, 12, 1, 1));
+        when(articleService.listLatest(3)).thenReturn(List.of(summary)); when(articleService.listArchive(null, null, PublicArticleSort.LATEST, 0, 12)).thenReturn(new PublicPageResponse<>(List.of(summary), 0, 12, 1, 1));
+        when(articleService.listPublishedYears()).thenReturn(List.of(2026));
         when(articleService.getPublicBySlug("article")).thenReturn(new PublicLabArticleDetailResponse(7L, "Article", "article", "Excerpt", Map.of("type", "doc", "body", "Body"), Instant.now()));
         MockMvc mvc = MockMvcBuilders.standaloneSetup(controller).build();
         mvc.perform(get("/articles/latest")).andExpect(status().isOk()).andExpect(jsonPath("$[0].status").doesNotExist());
         mvc.perform(get("/articles")).andExpect(status().isOk()).andExpect(jsonPath("$.items[0].createdAt").doesNotExist());
+        mvc.perform(get("/articles/years")).andExpect(status().isOk()).andExpect(jsonPath("$[0]").value(2026));
         mvc.perform(get("/articles/article")).andExpect(status().isOk()).andExpect(jsonPath("$.status").doesNotExist()).andExpect(jsonPath("$.deletedAt").doesNotExist());
-        verify(articleService).listLatest(3); verify(articleService).listArchive(0, 12); verify(articleService).getPublicBySlug("article");
+        verify(articleService).listLatest(3); verify(articleService).listArchive(null, null, PublicArticleSort.LATEST, 0, 12); verify(articleService).listPublishedYears(); verify(articleService).getPublicBySlug("article");
+    }
+
+    @Test void archiveForwardsFiltersAndSort() throws Exception {
+        when(articleService.listArchive("Robot", 2026, PublicArticleSort.OLDEST, 2, 12))
+                .thenReturn(new PublicPageResponse<>(List.of(), 2, 12, 0, 0));
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(controller).build();
+        mvc.perform(get("/articles").param("q", "Robot").param("year", "2026").param("sort", "OLDEST").param("page", "2"))
+                .andExpect(status().isOk());
+        verify(articleService).listArchive("Robot", 2026, PublicArticleSort.OLDEST, 2, 12);
     }
 
     @Test void patchTracksExplicitNullExcerptWithoutClientSpoofablePresenceFlag() throws Exception {

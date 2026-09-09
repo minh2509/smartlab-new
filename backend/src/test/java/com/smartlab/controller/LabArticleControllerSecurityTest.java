@@ -9,6 +9,7 @@ import com.smartlab.dto.response.PublicLabArticleDetailResponse;
 import com.smartlab.dto.response.PublicLabArticleSummaryResponse;
 import com.smartlab.dto.response.PublicPageResponse;
 import com.smartlab.enums.LabArticleStatus;
+import com.smartlab.enums.PublicArticleSort;
 import com.smartlab.filter.JwtRequestFilter;
 import com.smartlab.service.AppUserDetailService;
 import com.smartlab.service.LabArticleService;
@@ -48,8 +49,8 @@ class LabArticleControllerSecurityTest {
     @MockitoBean private UserSessionService userSessionService;
 
     @Test void anonymousCanReadOnlyPublicArticleEndpoints() throws Exception {
-        when(articleService.listLatest(3)).thenReturn(List.of(summary())); when(articleService.listArchive(0, 12)).thenReturn(new PublicPageResponse<>(List.of(summary()), 0, 12, 1, 1)); when(articleService.getPublicBySlug("article")).thenReturn(detail());
-        mockMvc.perform(get("/articles/latest")).andExpect(status().isOk()); mockMvc.perform(get("/articles")).andExpect(status().isOk()); mockMvc.perform(get("/articles/article")).andExpect(status().isOk());
+        when(articleService.listLatest(3)).thenReturn(List.of(summary())); when(articleService.listArchive(null, null, PublicArticleSort.LATEST, 0, 12)).thenReturn(new PublicPageResponse<>(List.of(summary()), 0, 12, 1, 1)); when(articleService.listPublishedYears()).thenReturn(List.of(2026)); when(articleService.getPublicBySlug("article")).thenReturn(detail());
+        mockMvc.perform(get("/articles/latest")).andExpect(status().isOk()); mockMvc.perform(get("/articles")).andExpect(status().isOk()); mockMvc.perform(get("/articles/years")).andExpect(status().isOk()); mockMvc.perform(get("/articles/article")).andExpect(status().isOk());
         mockMvc.perform(get("/admin/articles")).andExpect(status().isUnauthorized()); mockMvc.perform(post("/admin/articles").contentType(MediaType.APPLICATION_JSON).content(BODY)).andExpect(status().isUnauthorized()); mockMvc.perform(patch("/admin/articles/7").contentType(MediaType.APPLICATION_JSON).content("{}")).andExpect(status().isUnauthorized()); mockMvc.perform(delete("/admin/articles/7")).andExpect(status().isUnauthorized());
     }
 

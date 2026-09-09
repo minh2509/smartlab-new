@@ -1,22 +1,21 @@
-import { BadgeCheck, FileText, FlaskConical, GraduationCap, Search } from 'lucide-react'
+import { BadgeCheck, FlaskConical, GraduationCap, Search } from 'lucide-react'
 import type { CSSProperties, ReactNode } from 'react'
 import { Fragment, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import type { ResearchField } from '../../../shared/types/api'
 import { listPosts } from '../../posts/api'
 import type { PostFeedItem } from '../../posts/types'
 import { getResearchFields } from '../../profile/api'
 import { listPublicProjects } from '../../projects/api'
 import type { PublicProjectSummary } from '../../projects/types'
-import { aboutQuickFacts, coreValues, documents, gallery, operatingSteps } from '../publicData'
-import { PublicPostCard, PublicProjectCard, ResearchFieldCard } from '../components/PublicDataCards'
+import { aboutQuickFacts, coreValues, operatingSteps } from '../publicData'
+import { PublicPostCard, PublicProjectCard } from '../components/PublicDataCards'
 import { PublicPageHead } from '../components/PublicPageHead'
 import { listPublicEvents } from '../../events/api'
 
 type StaticPublicPageProps = {
   title: string
   description: string
-  kind: 'about' | 'fields' | 'documents' | 'gallery' | 'contact' | 'search'
+  kind: 'about' | 'contact' | 'search'
 }
 
 export function StaticPublicPage({ title, description, kind }: StaticPublicPageProps) {
@@ -24,9 +23,6 @@ export function StaticPublicPage({ title, description, kind }: StaticPublicPageP
     <>
       <PublicPageHead title={title} description={description} />
       {kind === 'about' ? <AboutContent /> : null}
-      {kind === 'fields' ? <FieldsContent /> : null}
-      {kind === 'documents' ? <DocumentsContent /> : null}
-      {kind === 'gallery' ? <GalleryContent /> : null}
       {kind === 'contact' ? <ContactContent /> : null}
       {kind === 'search' ? <SearchContent /> : null}
     </>
@@ -188,79 +184,6 @@ function AboutContent() {
         </div>
       </section>
     </>
-  )
-}
-
-function FieldsContent() {
-  const [fields, setFields] = useState<ResearchField[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [reloadKey, setReloadKey] = useState(0)
-
-  useEffect(() => {
-    let active = true
-    setLoading(true)
-    setError(null)
-    void getResearchFields()
-      .then((result) => { if (active) setFields(result) })
-      .catch((reason: unknown) => {
-        if (active) setError(messageOf(reason, 'Không tải được danh sách lĩnh vực nghiên cứu.'))
-      })
-      .finally(() => { if (active) setLoading(false) })
-    return () => { active = false }
-  }, [reloadKey])
-
-  return (
-    <section className="section">
-      <div className="wrap">
-        {loading ? <div className="public-empty empty tight">Đang tải lĩnh vực nghiên cứu...</div> : null}
-        {error ? <LoadError message={error} onRetry={() => setReloadKey((value) => value + 1)} /> : null}
-        {!loading && !error && fields.length === 0 ? <div className="public-empty empty tight">Chưa có lĩnh vực nghiên cứu công khai.</div> : null}
-        {!loading && !error && fields.length > 0 ? <div className="grid c3">{fields.map((field) => <ResearchFieldCard key={field.id} field={field} />)}</div> : null}
-      </div>
-    </section>
-  )
-}
-
-function DocumentsContent() {
-  return (
-    <section className="section">
-      <div className="wrap">
-        <div className="grid c3">
-          {documents.map((document) => (
-            <article className="fieldcard" style={{ '--c': 'var(--s3)' } as CSSProperties} key={document.title}>
-              <span className="ico">
-                <FileText />
-              </span>
-              <div className="pmeta">
-                <span className="chip accent">{document.category}</span>
-                <span>Cập nhật {document.updatedAt}</span>
-              </div>
-              <h3>{document.title}</h3>
-              <p>{document.description}</p>
-              <span className="more">Xem tài liệu</span>
-            </article>
-          ))}
-        </div>
-      </div>
-    </section>
-  )
-}
-
-
-function GalleryContent() {
-  return (
-    <section className="section">
-      <div className="wrap">
-        <div className="gallery">
-          {gallery.map((item) => (
-            <Link className={`gitem ph ${item.cls}`} to="/thu-vien-anh" key={item.title}>
-              <span>{item.title}</span>
-            </Link>
-          ))}
-        </div>
-      </div>
-    </section>
   )
 }
 

@@ -9,6 +9,10 @@ export function getResearchFields() {
   return apiClient<ResearchField[]>('/research-fields')
 }
 
+export function getResearchFieldByCode(code: string) {
+  return apiClient<ResearchField>(`/research-fields/${encodeURIComponent(code)}`)
+}
+
 export function updateMyMemberProfile(
   token: string,
   payload: {

@@ -6,6 +6,7 @@ import com.smartlab.entity.UserEntity;
 import com.smartlab.enums.FileAccessScope;
 import com.smartlab.repo.DocumentRepository;
 import com.smartlab.repo.DocumentVersionRepository;
+import com.smartlab.repo.GalleryItemRepository;
 import com.smartlab.repo.LabAchievementFileRepository;
 import com.smartlab.repo.ProjectRepository;
 import com.smartlab.repo.ResearchFieldRepository;
@@ -78,6 +79,7 @@ public class FileServiceImpl implements FileService, PostContentFileService {
     private final TaskAttachmentRepository taskAttachmentRepository;
     private final ResearchFieldRepository researchFieldRepository;
     private final LabAchievementFileRepository achievementFileRepository;
+    private final GalleryItemRepository galleryItemRepository;
 
     @Value("${smartlab.file.max-size-bytes:26214400}")
     private long maxFileSizeBytes;
@@ -270,6 +272,9 @@ public class FileServiceImpl implements FileService, PostContentFileService {
         }
         if (achievementFileRepository.existsActiveReferenceForActiveAchievement(id)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "File is currently attached to an active achievement");
+        }
+        if (galleryItemRepository.existsByFile_IdAndDeletedAtIsNull(id)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "File is currently owned by a gallery item");
         }
         try {
             fileStorage.trash(entity.getStorageKey());

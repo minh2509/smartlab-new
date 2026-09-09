@@ -7,6 +7,7 @@ export const accessPolicies = {
   accounts: ['USER_MANAGE', 'ROLE_MANAGE', 'PERMISSION_MANAGE'],
   rbac: ['ROLE_MANAGE', 'PERMISSION_MANAGE'],
   content: ['PROJECT_MANAGE'],
+  gallery: ['GALLERY_MANAGE'],
 } as const
 
 export function hasAllPermissions(

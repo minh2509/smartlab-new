@@ -27,6 +27,13 @@ class LabNewsArticleRepositoryContractTest {
         String query = method.getAnnotation(Query.class).value();
         assertThat(method.getReturnType()).isEqualTo(org.springframework.data.domain.Page.class);
         assertThat(query).contains("article.deletedAt is null", "article.isPublic = true",
-                "order by article.publishedAt desc, article.createdAt desc, article.id desc");
+                "order by article.publishedAt desc, article.id desc");
+    }
+
+    @Test void publicSourcesAndYearsOnlyReadPublicActiveRows() throws Exception {
+        Method sources = LabNewsArticleRepository.class.getMethod("findPublicSources");
+        Method years = LabNewsArticleRepository.class.getMethod("findPublicYears");
+        assertThat(sources.getAnnotation(Query.class).value()).contains("article.deletedAt is null", "article.isPublic = true", "trim(article.sourceName)");
+        assertThat(years.getAnnotation(Query.class).value()).contains("article.deletedAt is null", "article.isPublic = true", "year(article.publishedAt)");
     }
 }

@@ -4,6 +4,7 @@ import com.smartlab.dto.request.CreateLabNewsArticleRequest;
 import com.smartlab.dto.request.UpdateLabNewsArticleRequest;
 import com.smartlab.dto.response.LabNewsArticleResponse;
 import com.smartlab.dto.response.PublicPageResponse;
+import com.smartlab.enums.PublicNewsSort;
 import com.smartlab.service.LabNewsArticleService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -55,15 +56,27 @@ class LabNewsArticleControllerTest {
     }
 
     @Test void publicArchiveDefaultsForwardsPagingAndHidesInternalFields() throws Exception {
-        when(articleService.listPublicArchive(0, 12)).thenReturn(new PublicPageResponse<>(List.of(response()), 0, 12, 13, 2));
-        when(articleService.listPublicArchive(2, 8)).thenReturn(new PublicPageResponse<>(List.of(response()), 2, 8, 24, 3));
+        when(articleService.listPublicArchive(null, null, null, PublicNewsSort.LATEST, 0, 12)).thenReturn(new PublicPageResponse<>(List.of(response()), 0, 12, 13, 2));
+        when(articleService.listPublicArchive("robot", "VnExpress", 2026, PublicNewsSort.OLDEST, 2, 8)).thenReturn(new PublicPageResponse<>(List.of(response()), 2, 8, 24, 3));
         MockMvc mvc = MockMvcBuilders.standaloneSetup(controller).build();
         mvc.perform(get("/news/archive")).andExpect(status().isOk()).andExpect(jsonPath("$.items[0].title").value("Article"))
                 .andExpect(jsonPath("$.items[0].isPublic").doesNotExist()).andExpect(jsonPath("$.items[0].createdAt").doesNotExist())
                 .andExpect(jsonPath("$.items[0].updatedAt").doesNotExist()).andExpect(jsonPath("$.items[0].deletedAt").doesNotExist())
                 .andExpect(jsonPath("$.page").value(0)).andExpect(jsonPath("$.size").value(12));
-        mvc.perform(get("/news/archive").queryParam("page", "2").queryParam("size", "8")).andExpect(status().isOk());
-        verify(articleService).listPublicArchive(0, 12); verify(articleService).listPublicArchive(2, 8);
+        mvc.perform(get("/news/archive").queryParam("q", "robot").queryParam("source", "VnExpress")
+                        .queryParam("year", "2026").queryParam("sort", "OLDEST").queryParam("page", "2").queryParam("size", "8"))
+                .andExpect(status().isOk());
+        verify(articleService).listPublicArchive(null, null, null, PublicNewsSort.LATEST, 0, 12);
+        verify(articleService).listPublicArchive("robot", "VnExpress", 2026, PublicNewsSort.OLDEST, 2, 8);
+    }
+
+    @Test void publicOptionsExposeSourcesAndYears() throws Exception {
+        when(articleService.listPublicSources()).thenReturn(List.of("SmartLab", "VnExpress"));
+        when(articleService.listPublicYears()).thenReturn(List.of(2026, 2025));
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(controller).build();
+        mvc.perform(get("/news/archive/sources")).andExpect(status().isOk()).andExpect(jsonPath("$[0]").value("SmartLab"));
+        mvc.perform(get("/news/archive/years")).andExpect(status().isOk()).andExpect(jsonPath("$[0]").value(2026));
+        verify(articleService).listPublicSources(); verify(articleService).listPublicYears();
     }
 
     @Test void createValidationRejectsMissingTitleSourceNameSourceUrlAndPublishedAt() throws Exception {

@@ -35,6 +35,14 @@ public class ResearchFieldServiceImpl implements ResearchFieldService {
 
     @Override
     @Transactional(readOnly = true)
+    public ResearchFieldResponse getActiveByCode(String code) {
+        return researchFieldRepository.findByCodeIgnoreCaseAndIsActiveTrue(code)
+                .map(this::toResponse)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Research field not found"));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<ResearchFieldResponse> listAll() {
         return researchFieldRepository.findAll().stream()
                 .map(this::toResponse)

@@ -10,8 +10,8 @@ export const stats = [
 
 export const aboutQuickFacts = [
   { label: 'Thành lập', value: '2023' },
-  { label: 'Trực thuộc', value: 'Khoa Công nghệ thông tin' },
-  { label: 'Địa điểm', value: 'Phòng A3-502, Hoà Lạc' },
+  { label: 'Trực thuộc', value: 'Đại học FPT Hà Nội' },
+  { label: 'Địa điểm', value: 'Phòng DE 211 - Tòa Delta, Đại học FPT Hà Nội' },
   { label: 'Lĩnh vực', value: 'AI · Robotics · SE' },
 ]
 
@@ -214,39 +214,9 @@ export const posts = [
   },
 ]
 
-export const documents = [
-  {
-    title: 'Quy chế vận hành Smart Lab',
-    category: 'Quy trình nội bộ',
-    updatedAt: '01/08/2026',
-    description: 'Tổng quan cách Lab tổ chức role, project, nhiệm vụ, đánh giá và trách nhiệm của từng thành viên.',
-  },
-  {
-    title: 'Hướng dẫn tham gia dự án nghiên cứu',
-    category: 'Hướng dẫn thành viên',
-    updatedAt: '28/07/2026',
-    description: 'Các bước nhận project, làm việc với leader, cập nhật tiến độ và nộp kết quả định kỳ trên hệ thống.',
-  },
-  {
-    title: 'Template báo cáo tiến độ',
-    category: 'Biểu mẫu',
-    updatedAt: '20/07/2026',
-    description: 'Mẫu cấu trúc báo cáo ngắn cho demo, review kỹ thuật và đánh giá cuối giai đoạn.',
-  },
-]
-
 export const events = [
   { day: '12', month: '08', title: 'Workshop: Xây pipeline dữ liệu ảnh', meta: 'A3-502 · 19:00 · Nhóm AI' },
   { day: '19', month: '08', title: 'Demo nội bộ cánh tay robot', meta: 'Lab Robotics · 18:30 · Nhóm Robotics' },
   { day: '26', month: '08', title: 'Review kiến trúc Smart Lab Platform', meta: 'Online · 20:00 · Nhóm SE' },
   { day: '04', month: '09', title: 'Bảo vệ tiến độ tháng 09', meta: 'Hội trường B · 17:30 · Toàn Lab' },
-]
-
-export const gallery = [
-  { title: 'Workshop AI', cls: 'ph-ai wide' },
-  { title: 'Robot arm demo', cls: 'ph-robotics' },
-  { title: 'Code review', cls: 'ph-se' },
-  { title: 'Seminar nội bộ', cls: 'ph-news tall' },
-  { title: 'Data labeling', cls: 'ph-people' },
-  { title: 'Sprint planning', cls: 'ph-se wide' },
 ]

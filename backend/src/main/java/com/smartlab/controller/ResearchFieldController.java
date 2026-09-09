@@ -34,6 +34,12 @@ public class ResearchFieldController {
         return researchFieldService.listActive();
     }
 
+    @GetMapping("/research-fields/{code}")
+    @Operation(summary = "Get an active research field by code")
+    public ResearchFieldResponse getActiveByCode(@PathVariable String code) {
+        return researchFieldService.getActiveByCode(code);
+    }
+
     @GetMapping("/admin/research-fields")
     @PreAuthorize("hasAuthority('RESEARCH_FIELD_MANAGE')")
     @Operation(summary = "List all research fields for administration")
