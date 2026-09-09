@@ -2,13 +2,17 @@ package com.smartlab.controller;
 
 import com.smartlab.config.OpenApiConfig;
 import com.smartlab.dto.request.AccountProvisionRequest;
+import com.smartlab.dto.request.BulkAccountInvitationRequest;
 import com.smartlab.dto.response.AccountResponse;
 import com.smartlab.dto.request.AssignRolesRequest;
 import com.smartlab.dto.response.ErrorResponse;
 import com.smartlab.dto.response.InvitationResponse;
+import com.smartlab.dto.response.BulkAccountInvitationBatchResponse;
+import com.smartlab.dto.response.BulkAccountInvitationPreviewResponse;
 import com.smartlab.dto.request.PermissionOverrideRequest;
 import com.smartlab.dto.response.PageResponse;
 import com.smartlab.service.AdminAccountService;
+import com.smartlab.service.BulkAccountInvitationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -39,6 +43,7 @@ import org.springframework.web.bind.annotation.RestController;
 @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 public class AdminAccountController {
     private final AdminAccountService adminAccountService;
+    private final BulkAccountInvitationService bulkAccountInvitationService;
 
     @GetMapping
     @PreAuthorize("hasAuthority('USER_MANAGE')")
@@ -102,6 +107,49 @@ public class AdminAccountController {
             @CurrentSecurityContext(expression = "authentication?.name") String adminEmail
     ) {
         return adminAccountService.resendInvite(email, adminEmail);
+    }
+
+    @PostMapping("/invitation-batches/preview")
+    @PreAuthorize("hasAuthority('USER_MANAGE')")
+    @Operation(summary = "Preview bulk account invitations",
+            description = "Validates up to 100 name/email rows and selected active roles without creating accounts or sending email.")
+    public BulkAccountInvitationPreviewResponse previewBulkInvitations(
+            @Valid @RequestBody BulkAccountInvitationRequest request
+    ) {
+        return bulkAccountInvitationService.preview(request);
+    }
+
+    @PostMapping("/invitation-batches")
+    @PreAuthorize("hasAuthority('USER_MANAGE')")
+    @Operation(summary = "Provision bulk account invitations",
+            description = "Creates inactive SmartLab accounts and queues invitation email after validation. Mail delivery is processed from the database outbox.")
+    @ApiResponse(responseCode = "202", description = "Batch accepted and queued")
+    public org.springframework.http.ResponseEntity<BulkAccountInvitationBatchResponse> provisionBulkInvitations(
+            @Valid @RequestBody BulkAccountInvitationRequest request,
+            @CurrentSecurityContext(expression = "authentication?.name") String adminEmail
+    ) {
+        return org.springframework.http.ResponseEntity.accepted()
+                .body(bulkAccountInvitationService.provision(request, adminEmail));
+    }
+
+    @GetMapping("/invitation-batches/{batchId}")
+    @PreAuthorize("hasAuthority('USER_MANAGE')")
+    @Operation(summary = "Read bulk invitation batch outcomes")
+    public BulkAccountInvitationBatchResponse getBulkInvitationBatch(@PathVariable String batchId) {
+        return bulkAccountInvitationService.getBatch(batchId);
+    }
+
+    @PostMapping("/invitation-batches/{batchId}/items/{itemId}/resend")
+    @PreAuthorize("hasAuthority('USER_MANAGE')")
+    @Operation(summary = "Queue a new invitation email for one bulk item")
+    @ApiResponse(responseCode = "202", description = "Resend accepted and queued")
+    public org.springframework.http.ResponseEntity<Void> resendBulkInvitation(
+            @PathVariable String batchId,
+            @PathVariable String itemId,
+            @CurrentSecurityContext(expression = "authentication?.name") String adminEmail
+    ) {
+        bulkAccountInvitationService.resend(batchId, itemId, adminEmail);
+        return org.springframework.http.ResponseEntity.accepted().build();
     }
 
     @PutMapping("/{userId}/roles")

@@ -82,9 +82,10 @@ class PostControllerTest {
 
         assertThat(PostController.class.isAnnotationPresent(RestController.class)).isTrue();
         assertThat(requestMapping.value()).containsExactly("/posts");
-        assertThat(PostController.class.getDeclaredFields()).extracting(Field::getType)
-                .containsExactly(PostService.class, PostSocialService.class)
-                .doesNotContain(PostRepository.class, UserRepository.class, ContentCategoryRepository.class, PermissionService.class);
+        assertThat(PostController.class.getDeclaredFields()).extracting(Field::getType).map(Class::getName)
+                .containsExactly(PostService.class.getName(), PostSocialService.class.getName())
+                .doesNotContain(PostRepository.class.getName(), UserRepository.class.getName(),
+                        ContentCategoryRepository.class.getName(), PermissionService.class.getName());
     }
 
     @Test

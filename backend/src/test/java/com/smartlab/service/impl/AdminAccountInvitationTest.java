@@ -7,6 +7,7 @@ import com.smartlab.entity.MemberProfileEntity;
 import com.smartlab.entity.UserEntity;
 import com.smartlab.enums.InvitationStatus;
 import com.smartlab.repo.AccountInvitationRepository;
+import com.smartlab.repo.EmailOutboxRepository;
 import com.smartlab.repo.MemberProfileRepository;
 import com.smartlab.repo.PermissionRepository;
 import com.smartlab.repo.RoleRepository;
@@ -14,7 +15,6 @@ import com.smartlab.repo.UserPermissionOverrideRepository;
 import com.smartlab.repo.UserRepository;
 import com.smartlab.repo.UserRoleRepository;
 import com.smartlab.service.AuditService;
-import com.smartlab.service.EmailService;
 import com.smartlab.service.PermissionService;
 import com.smartlab.service.TokenHashService;
 import com.smartlab.service.UserSessionService;
@@ -28,6 +28,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -55,7 +56,8 @@ class AdminAccountInvitationTest {
     @Mock private AccountInvitationRepository accountInvitationRepository;
     @Mock private MemberProfileRepository memberProfileRepository;
     @Mock private PermissionService permissionService;
-    @Mock private EmailService emailService;
+    @Mock private EmailOutboxRepository emailOutboxRepository;
+    @Mock private AccountInvitationOutboxStateService outboxStateService;
     @Mock private UserSessionService userSessionService;
     @Mock private TokenHashService tokenHashService;
     @Mock private PasswordEncoder passwordEncoder;
@@ -68,7 +70,7 @@ class AdminAccountInvitationTest {
         service = new AdminAccountServiceImpl(
                 userRepository, roleRepository, permissionRepository, userRoleRepository,
                 userPermissionOverrideRepository, accountInvitationRepository, memberProfileRepository,
-                permissionService, emailService, userSessionService, tokenHashService, passwordEncoder, auditService
+                permissionService, emailOutboxRepository, outboxStateService, userSessionService, tokenHashService, passwordEncoder, auditService
         );
     }
 
@@ -95,6 +97,7 @@ class AdminAccountInvitationTest {
         assertThat(invitation.getStatus()).isEqualTo(InvitationStatus.ACCEPTED);
         assertThat(invitation.getAcceptedAt()).isNotNull();
         verify(userSessionService).revokeAllByEmail(EMAIL);
+        verify(outboxStateService).markActivated(51L);
         assertThat(response.getEmail()).isEqualTo(EMAIL);
         assertThat(response.getIsActive()).isTrue();
         assertThat(response.getIsAccountVerified()).isTrue();
@@ -135,6 +138,24 @@ class AdminAccountInvitationTest {
         assertThat(invitation.getStatus()).isEqualTo(InvitationStatus.EXPIRED);
         verify(accountInvitationRepository).save(invitation);
         verifyNoInteractions(userRepository, memberProfileRepository, userSessionService, passwordEncoder);
+    }
+
+    @Test
+    void resendRejectsAnInvitationThatAlreadyHasActiveDelivery() {
+        UserEntity user = invitedUser();
+        AccountInvitationEntity invitation = invitation(InvitationStatus.PENDING, Instant.now().plusSeconds(3600));
+        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
+        when(accountInvitationRepository.findByEmail(EMAIL)).thenReturn(Optional.of(invitation));
+        when(emailOutboxRepository.existsByInvitation_IdAndStatusIn(
+                51L, List.of(com.smartlab.enums.EmailOutboxStatus.QUEUED,
+                        com.smartlab.enums.EmailOutboxStatus.PROCESSING))).thenReturn(true);
+
+        assertThatThrownBy(() -> service.resendInvite(EMAIL, "admin@example.test"))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+
+        verify(accountInvitationRepository, never()).save(any());
+        verify(emailOutboxRepository, never()).save(any());
     }
 
     private static InvitationAcceptRequest request() {
