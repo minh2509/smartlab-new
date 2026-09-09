@@ -31,14 +31,15 @@ class AdminAccountAuditTest {
     @Mock UserRepository users; @Mock RoleRepository roles; @Mock PermissionRepository permissions;
     @Mock UserRoleRepository userRoles; @Mock UserPermissionOverrideRepository overrides;
     @Mock AccountInvitationRepository invitations; @Mock MemberProfileRepository memberProfiles;
-    @Mock PermissionService permissionService; @Mock EmailService email;
+    @Mock PermissionService permissionService; @Mock EmailOutboxRepository emailOutbox;
+    @Mock AccountInvitationOutboxStateService outboxState;
     @Mock UserSessionService sessions; @Mock TokenHashService hashes; @Mock PasswordEncoder encoder; @Mock AuditService audit;
     AdminAccountServiceImpl service;
     UserEntity user;
 
     @BeforeEach void setUp() {
         service = new AdminAccountServiceImpl(users, roles, permissions, userRoles, overrides, invitations, memberProfiles,
-                permissionService, email, sessions, hashes, encoder, audit);
+                permissionService, emailOutbox, outboxState, sessions, hashes, encoder, audit);
         user = UserEntity.builder().id(11L).userId("external-user-id").email("member@test").name("Member").isActive(true).build();
         when(users.findByUserId("external-user-id")).thenReturn(Optional.of(user));
         when(permissionService.getRoleCodes(user)).thenReturn(Set.of());
@@ -94,5 +95,5 @@ class AdminAccountAuditTest {
         verify(audit, times(1)).log(any(), any(), any(), any(), any());
     }
 
-    private static RoleEntity role(Long id, String code) { return RoleEntity.builder().id(id).code(code).build(); }
+    private static RoleEntity role(Long id, String code) { return RoleEntity.builder().id(id).code(code).isActive(true).build(); }
 }

@@ -1,0 +1,6 @@
+# Local runtime configuration. Never commit it.
+/.env
+
+# Local backend runtime logs.
+/backend/*.log
+/frontend/*.log
