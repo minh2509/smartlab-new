@@ -20,6 +20,7 @@ database:
 12. `sql/012_gallery_system.sql`
 13. `sql/013_bulk_account_invitations.sql`
 14. `sql/014_email_template_copy_refresh.sql`
+15. `sql/015_gallery_permission_repair.sql`
 
 These are manual, operator-executed SQL migrations. The repository does not
 contain Flyway, Liquibase, or another automatic numbered migration runner.
@@ -31,7 +32,7 @@ passwords in shell history, command output, tickets, or documentation.
 
 ## Fresh bootstrap and current-lineage upgrades
 
-On an empty database, apply `001` through `014` in numeric order. `001` creates
+On an empty database, apply `001` through `015` in numeric order. `001` creates
 the current backend schema, roles, permissions, and foundational seed data;
 `002` adds the social-feed reaction and comment tables. Both scripts are
 designed to be re-run safely for the current `001`/`002` lineage.
@@ -58,6 +59,9 @@ The later migrations extend that foundation:
   templates, and an email outbox for bulk account invitations.
 - `014` refreshes only the original default invitation and password-reset copy;
   templates already customized by an operator are preserved.
+- `015` idempotently provisions the `GALLERY_MANAGE` permission and grants it
+  to `ADMIN`. It repairs installations where the Gallery schema exists but the
+  `GALLERY_MANAGE` permission/mapping is absent.
 
 ### Migration 010 prerequisite and lineage decision
 
@@ -86,9 +90,18 @@ achievement editor v2 schema. It provisions or verifies
 `recognizing_organization`, the achievement attachment table, its sequence,
 required indexes, constraints, and runtime grants. It does not rewrite
 achievement rows and does not replace `009` or `010` on a fresh installation.
-In a complete fresh `001` through `014` chain, its schema additions should
+In a complete fresh `001` through `015` chain, its schema additions should
 already exist and the repair operations should effectively be no-ops while
 the final assertions still verify compatibility.
+
+### Migration 015 repair role
+
+`015` is an additive, idempotent forward repair for environments where migration
+`012` was partially applied (or where the `gallery_items` schema was provisioned
+but the `GALLERY_MANAGE` permission or its mapping to `ADMIN` was omitted). It
+provisions the `GALLERY_MANAGE` permission and maps it to `ADMIN` using safe
+`ON CONFLICT` semantics without modifying existing gallery items, files, or
+unrelated role permissions.
 
 ### Deployment safety
 
