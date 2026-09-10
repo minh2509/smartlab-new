@@ -95,6 +95,7 @@ export type CreateProjectPayload = {
   actualEndDate?: string
   isPublic?: boolean
   isFeatured?: boolean
+  isRecruiting?: boolean
   leaderUserId?: string
   additionalLeaderUserIds?: string[]
 }
@@ -111,6 +112,7 @@ export type UpdateProjectPayload = {
   actualEndDate?: string
   isPublic?: boolean
   isFeatured?: boolean
+  isRecruiting?: boolean
 }
 
 export type UpdateProjectLeadershipPayload = {
