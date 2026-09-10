@@ -68,6 +68,7 @@ type ProjectCoreForm = {
   actualEndDate: string
   isPublic: boolean
   isFeatured: boolean
+  isRecruiting: boolean
 }
 
 type CreateProjectForm = ProjectCoreForm
@@ -90,6 +91,7 @@ const emptyCreateForm: CreateProjectForm = {
   actualEndDate: '',
   isPublic: false,
   isFeatured: false,
+  isRecruiting: false,
 }
 
 const PROJECT_TABS: ProjectTab[] = ['overview', 'leaders', 'members', 'research-fields', 'documents']
@@ -403,6 +405,7 @@ export function ProjectManagementPage() {
       code: createForm.code.trim(),
       name: createForm.name.trim(),
       projectType: createForm.projectType,
+      isRecruiting: createForm.isRecruiting,
     }
 
     setBusyAction('create')
@@ -1146,6 +1149,9 @@ function ProjectCoreFields<T extends ProjectCoreForm>({
       </label><label className="project-visibility-row">
         <input type="checkbox" checked={form.isFeatured} onChange={(event) => patch({ isFeatured: event.target.checked })} />
         <span><strong>Nổi bật</strong><small>Ưu tiên dự án trên giao diện công khai.</small></span>
+      </label><label className="project-visibility-row">
+        <input type="checkbox" checked={form.isRecruiting} onChange={(event) => patch({ isRecruiting: event.target.checked })} />
+        <span><strong>Tuyển thành viên</strong><small>Cho phép thành viên gửi yêu cầu tham gia dự án.</small></span>
       </label></div></section>
     </div>
   )
@@ -1164,6 +1170,7 @@ function toCoreForm(project: Project): ProjectCoreForm {
     actualEndDate: project.actualEndDate ?? '',
     isPublic: project.isPublic,
     isFeatured: project.isFeatured,
+    isRecruiting: project.isRecruiting,
   }
 }
 
@@ -1180,6 +1187,7 @@ function toCorePayload(form: ProjectCoreForm): UpdateProjectPayload {
     actualEndDate: form.actualEndDate || undefined,
     isPublic: form.isPublic,
     isFeatured: form.isFeatured,
+    isRecruiting: form.isRecruiting,
   }
 }
 
@@ -1196,6 +1204,7 @@ function sameCoreForm(left: ProjectCoreForm, right: ProjectCoreForm) {
     && left.actualEndDate === right.actualEndDate
     && left.isPublic === right.isPublic
     && left.isFeatured === right.isFeatured
+    && left.isRecruiting === right.isRecruiting
   )
 }
 

@@ -18,7 +18,7 @@ import {
 import type { Project, ProjectJoinRequest, ProjectMembershipHistory } from '../types'
 import './ProjectJoinRequestCard.css'
 
-export function ProjectJoinRequestCard({ project, showWorkspaceActions = true }: { project: Pick<Project, 'id'>; showWorkspaceActions?: boolean }) {
+export function ProjectJoinRequestCard({ project, showWorkspaceActions = true }: { project: Pick<Project, 'id' | 'publicStatus'>; showWorkspaceActions?: boolean }) {
   const { token, profile } = useAuth()
   const toast = useToast()
   const [memberships, setMemberships] = useState<ProjectMembershipHistory[]>([])
@@ -201,7 +201,8 @@ export function ProjectJoinRequestCard({ project, showWorkspaceActions = true }:
         </div>
       ) : null}
 
-      {!loading && !activeMembership && joinRequest?.status !== 'PENDING'
+      {!loading && project.publicStatus === 'RECRUITING'
+        && !activeMembership && joinRequest?.status !== 'PENDING'
         && !(joinRequest?.status === 'APPROVED' && !removedMembership) ? (
         <div className="project-join-form">
           {removedMembership ? (
