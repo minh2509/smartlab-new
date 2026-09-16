@@ -48,9 +48,9 @@ export function SmartLabHero({ onExploreFields }: { onExploreFields: () => void 
       <div className="landing-hero-grid" aria-hidden="true" />
 
       <div className="landing-hero-in">
-        {/* Left Column — Editorial Copy & CTAs */}
+        {/* Left Column: Editorial Copy & CTAs */}
         <div className="landing-hero-copy">
-          <h1 className="landing-hero-title">
+          <h1 className="landing-hero-title" aria-label="SMART LAB: Nghiên cứu thật. Dự án thật. Sản phẩm thật. Nơi sinh viên làm nghiên cứu và phát triển sản phẩm thực tế.">
             <span className="landing-hero-brand">SMART LAB</span>
             <span className="landing-hero-headline">
               <span className="landing-hero-line">Nghiên cứu thật.</span>
@@ -66,7 +66,8 @@ export function SmartLabHero({ onExploreFields }: { onExploreFields: () => void 
 
           <div className="landing-hero-cta">
             <button className="btn primary lg landing-hero-btn-primary" type="button" onClick={onExploreFields}>
-              Khám phá lĩnh vực <ArrowRight size={17} />
+              <span>Khám phá lĩnh vực</span>
+              <ArrowRight size={17} className="landing-hero-btn-icon" />
             </button>
             <Link className="btn outline-light lg landing-hero-btn-secondary" to="/du-an?status=RECRUITING">
               Xem dự án đang tuyển
@@ -74,7 +75,7 @@ export function SmartLabHero({ onExploreFields }: { onExploreFields: () => void 
           </div>
         </div>
 
-        {/* Right Column — SmartLab Retro-modern Research Workstation */}
+        {/* Right Column: SmartLab Retro-modern Research Workstation */}
         <div className="landing-hero-visual">
           {/* Ground ambient contact shadow */}
           <div className="sl-ws-ground-shadow" aria-hidden="true" />
@@ -111,8 +112,8 @@ export function SmartLabHero({ onExploreFields }: { onExploreFields: () => void 
                       type="button"
                       className={`sl-ws-drive-slot ${floppyBlinking ? 'is-active-drive' : ''}`}
                       onClick={() => triggerAction('floppy')}
-                      title="5.25&quot; Floppy Drive — Click to load/eject Arcade Disk"
-                      aria-label="5.25 inch Floppy Drive — Click to load Arcade Disk"
+                      title="5.25&quot; Floppy Drive - Click to load/eject Arcade Disk"
+                      aria-label="5.25 inch Floppy Drive - Click to load Arcade Disk"
                     >
                       <div className="sl-ws-drive-slit" />
                       <div className="sl-ws-drive-latch" />

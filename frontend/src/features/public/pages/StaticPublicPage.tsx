@@ -1,4 +1,4 @@
-import { BadgeCheck, FlaskConical, GraduationCap, Search } from 'lucide-react'
+import { ArrowRight, BadgeCheck, FlaskConical, GraduationCap, Search } from 'lucide-react'
 import type { CSSProperties, ReactNode } from 'react'
 import { Fragment, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -11,6 +11,8 @@ import { aboutQuickFacts, coreValues, operatingSteps } from '../publicData'
 import { PublicPostCard, PublicProjectCard } from '../components/PublicDataCards'
 import { PublicPageHead } from '../components/PublicPageHead'
 import { listPublicEvents } from '../../events/api'
+import { listLatestNews } from '../newsApi'
+import type { LabNewsArticle } from '../newsTypes'
 
 type StaticPublicPageProps = {
   title: string
@@ -34,12 +36,16 @@ export function StaticPublicPage({ title, description, kind }: StaticPublicPageP
 function AboutContent() {
   const valueIcons = [FlaskConical, GraduationCap, BadgeCheck]
   const [counts, setCounts] = useState({ projects: null as number | null, fields: null as number | null, events: null as number | null })
+  const [newsItems, setNewsItems] = useState<LabNewsArticle[]>([])
 
   useEffect(() => {
     let active = true
-    void Promise.all([listPublicProjects(0, 1), getResearchFields(), listPublicEvents({ upcoming: true })])
-      .then(([projects, fields, events]) => {
-        if (active) setCounts({ projects: projects.totalElements, fields: fields.length, events: events.length })
+    void Promise.all([listPublicProjects(0, 1), getResearchFields(), listPublicEvents({ upcoming: true }), listLatestNews(3)])
+      .then(([projects, fields, events, news]) => {
+        if (active) {
+          setCounts({ projects: projects.totalElements, fields: fields.length, events: events.length })
+          setNewsItems(news)
+        }
       })
       .catch(() => undefined)
     return () => { active = false }
@@ -162,6 +168,57 @@ function AboutContent() {
               ))}
             </div>
           </div>
+        </div>
+      </section>
+
+      <section className="section">
+        <div className="wrap">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 16, marginBottom: 32 }}>
+            <div className="sec-head" style={{ marginBottom: 0 }}>
+              <div className="kicker">Truyền thông</div>
+              <h2>Báo chí &amp; Truyền thông nói về Smart Lab</h2>
+              <p>Những bài viết, tin tức và góc nhìn từ các cơ quan báo chí về hoạt động của phòng Lab.</p>
+            </div>
+            <Link className="landing-section-cta" to="/tin-tuc" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 700, color: 'var(--accent)' }}>
+              Xem tất cả tin tức <ArrowRight size={16} />
+            </Link>
+          </div>
+
+          {newsItems.length > 0 ? (
+            <div className="grid c3">
+              {newsItems.map((item) => (
+                <article className="card pad" key={item.id} style={{ display: 'flex', flexDirection: 'column', height: '100%', borderRadius: 'var(--r)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
+                    <span className="chip accent" style={{ fontSize: 11, fontWeight: 700 }}>{item.sourceName}</span>
+                    {item.publishedAt ? (
+                      <span className="muted small">{new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short' }).format(new Date(item.publishedAt))}</span>
+                    ) : null}
+                  </div>
+                  <h3 style={{ fontSize: 16.5, fontWeight: 750, lineHeight: 1.4, margin: '0 0 10px', color: 'var(--text-1)' }}>{item.title}</h3>
+                  {item.excerpt ? (
+                    <p className="muted small" style={{ flex: 1, margin: '0 0 16px', lineHeight: 1.55 }}>
+                      {item.excerpt.length > 120 ? `${item.excerpt.slice(0, 120).trimEnd()}…` : item.excerpt}
+                    </p>
+                  ) : null}
+                  <div style={{ marginTop: 'auto', paddingTop: 12, borderTop: '1px solid var(--line)' }}>
+                    <a
+                      href={item.sourceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={`Xem bài viết trên ${item.sourceName}`}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 700, fontSize: 13, color: 'var(--brand-1)' }}
+                    >
+                      Nguồn bài viết ↗
+                    </a>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="public-empty empty tight">
+              Đang cập nhật các bài viết và tin tức truyền thông về phòng Lab.
+            </div>
+          )}
         </div>
       </section>
 
@@ -317,5 +374,5 @@ function messageOf(reason: unknown, fallback: string) {
 }
 
 function countLabel(value: number | null) {
-  return value === null ? '—' : String(value)
+  return value === null ? '-' : String(value)
 }

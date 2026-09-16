@@ -14,6 +14,8 @@ const publicLinks = [
 
 const aboutLinks = [
   { to: '/gioi-thieu', title: 'Về phòng Lab', description: 'Tổng quan, mục tiêu, định hướng' },
+  { to: '/thanh-tuu', title: 'Thành tựu & Dấu mốc', description: 'Kết quả và dấu mốc nổi bật' },
+  { to: '/tin-tuc', title: 'Tin tức truyền thông', description: 'Báo chí và truyền thông về Lab' },
   { to: '/thu-vien-anh', title: 'Hình ảnh hoạt động', description: 'Thư viện ảnh của Lab' },
 ]
 
@@ -206,9 +208,10 @@ function AboutDropdown() {
         Giới thiệu
         <ChevronDown aria-hidden="true" />
       </button>
-      <div className="nav-dropdown-menu">
+      <div className="nav-dropdown-menu" role="menu">
         {aboutLinks.map((link) => (
           <NavLink
+            role="menuitem"
             className="nav-dropdown-item"
             to={link.to}
             key={link.to}
