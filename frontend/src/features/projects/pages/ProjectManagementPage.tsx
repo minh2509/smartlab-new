@@ -95,7 +95,7 @@ const emptyCreateForm: CreateProjectForm = {
 }
 
 const PROJECT_TABS: ProjectTab[] = ['overview', 'leaders', 'members', 'research-fields', 'documents']
-const PROJECT_PAGE_SIZE = 10
+const PROJECT_PAGE_SIZE = 5
 
 export function ProjectManagementPage() {
   const { token, profile } = useAuth()
@@ -178,6 +178,9 @@ export function ProjectManagementPage() {
   const canEditProject = (project: Project) => Boolean(
     profile && (isAdmin || project.leaders.some((leader) => leader.userId === profile.userId)),
   )
+  const canDeleteProject = (_project?: Project) => Boolean(
+    token && canAdminManageProject,
+  )
   const membershipByProjectId = useMemo(
     () => new Map(
       membershipHistory
@@ -194,6 +197,12 @@ export function ProjectManagementPage() {
   )
   const canEditSelected = Boolean(
     selectedProject && canEditProject(selectedProject),
+  )
+  const canDeleteSelected = Boolean(
+    selectedProject && canDeleteProject(selectedProject),
+  )
+  const canManageLeaders = Boolean(
+    token && canAdminManageProject,
   )
   const createDirty = useMemo(
     () => !sameCoreForm(createForm, emptyCreateForm),
@@ -251,6 +260,16 @@ export function ProjectManagementPage() {
     dialog.showModal()
     window.requestAnimationFrame(() => document.getElementById(`project-tab-${activeTab}`)?.focus())
   }, [activeTab, selectedProject])
+
+  useEffect(() => {
+    const isModalOpen = Boolean(selectedProject || isCreating)
+    if (!isModalOpen) return
+    const originalOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = originalOverflow
+    }
+  }, [isCreating, selectedProject])
 
   useEffect(() => {
     if (loading || selectedId !== null || requestedProjectId === null) return
@@ -458,21 +477,31 @@ export function ProjectManagementPage() {
     }
   }
 
-  async function handleDelete() {
-    if (!token || !selectedProject || !canAdminManageProject || isBusy) return
-    const draftWarning = selectedProjectDirty ? ' Các thay đổi chưa lưu cũng sẽ bị bỏ.' : ''
-    if (!await confirmDialog({ title: 'Xóa dự án?', description: `Dự án sẽ không còn xuất hiện trong danh sách đang hoạt động. Dữ liệu lịch sử vẫn được giữ lại.${draftWarning}`, confirmLabel: 'Xóa dự án', destructive: true })) return
+  async function handleDelete(targetProject?: Project) {
+    const projectToDelete = targetProject ?? selectedProject
+    if (!token || !projectToDelete || !canDeleteProject(projectToDelete) || isBusy) return
+    const isSelected = selectedProject?.id === projectToDelete.id
+    const draftWarning = isSelected && selectedProjectDirty ? ' Các thay đổi chưa lưu cũng sẽ bị bỏ.' : ''
+    if (!await confirmDialog({
+      title: `Xóa dự án ${projectToDelete.code}?`,
+      description: `Dự án "${projectToDelete.name}" (${projectToDelete.code}) sẽ không còn xuất hiện trong danh sách đang hoạt động. Dữ liệu lịch sử vẫn được giữ lại.${draftWarning}`,
+      confirmLabel: 'Xóa dự án',
+      destructive: true,
+    })) return
 
     setBusyAction('delete')
     clearFeedback()
     try {
-      const deletedCode = selectedProject.code
-      await deleteProject(token, selectedProject.id)
+      const deletedCode = projectToDelete.code
+      await deleteProject(token, projectToDelete.id)
       await loadProjects()
-      finishClosingProjectDialog()
+      if (isSelected) {
+        finishClosingProjectDialog()
+      }
       toast.success('Đã xóa mềm dự án', deletedCode)
     } catch (reason: unknown) {
       setError(errorMessage(reason, 'Không thể xóa dự án.'))
+      toast.error('Không thể xóa dự án', errorMessage(reason, 'Đã xảy ra lỗi khi xóa dự án.'))
     } finally {
       setBusyAction(null)
     }
@@ -566,20 +595,50 @@ export function ProjectManagementPage() {
                     : 'Không có dự án phù hợp'}
                   {filteredProjects.length !== projects.length ? ` · ${projects.length} dự án tổng cộng` : ''}
                 </span>
+
+                {filteredProjects.length > PROJECT_PAGE_SIZE ? (
+                  <nav className="project-pagination-top" aria-label="Phân trang danh sách dự án (trên)">
+                    <button
+                      className="btn ghost table-btn"
+                      type="button"
+                      disabled={projectPage === 0}
+                      onClick={() => setProjectPage((current) => Math.max(0, current - 1))}
+                    >
+                      <ChevronLeft aria-hidden="true" /> Trước
+                    </button>
+                    <span className="project-page-indicator">
+                      Trang {projectPage + 1} / {projectPageCount}
+                    </span>
+                    <button
+                      className="btn ghost table-btn"
+                      type="button"
+                      disabled={projectPage + 1 >= projectPageCount}
+                      onClick={() => setProjectPage((current) => Math.min(projectPageCount - 1, current + 1))}
+                    >
+                      Sau <ChevronRight aria-hidden="true" />
+                    </button>
+                  </nav>
+                ) : null}
               </div>
 
               {pagedProjects.length ? (
-                <div className="field-admin-list project-management-list">
+                <div className="project-management-list">
                   {pagedProjects.map((project) => {
                     const membership = membershipByProjectId.get(project.id)
                     return (
-                    <article className="member-select-row project-management-row" key={project.id}>
-                      <span className="member-avatar">{project.code.slice(0, 2).toUpperCase()}</span>
-                      <span className="project-management-row-main">
-                        <strong>{project.name}</strong>
-                        <small>{project.code} · {PROJECT_TYPE_LABELS[project.projectType]}</small>
+                    <article className="project-management-row" key={project.id}>
+                      <span className="member-avatar" aria-hidden="true">
+                        {project.code.slice(0, 2).toUpperCase()}
                       </span>
-                      <span className="project-management-row-actions">
+                      <div className="project-management-row-main">
+                        <strong className="project-management-row-title">{project.name}</strong>
+                        <div className="project-management-row-meta">
+                          <span className="project-code-tag">{project.code}</span>
+                          <span className="project-meta-sep">·</span>
+                          <span>{PROJECT_TYPE_LABELS[project.projectType]}</span>
+                        </div>
+                      </div>
+                      <div className="project-management-row-badges">
                         <span className={`badge ${PROJECT_STATUS_BADGES[project.status]}`}>
                           {PROJECT_STATUS_LABELS[project.status]}
                         </span>
@@ -588,6 +647,8 @@ export function ProjectManagementPage() {
                             {membership.projectRole === 'LEADER' ? 'Leader' : 'Thành viên'}
                           </span>
                         ) : null}
+                      </div>
+                      <div className="project-management-row-actions">
                         <button
                           className="btn ghost table-btn"
                           type="button"
@@ -598,7 +659,19 @@ export function ProjectManagementPage() {
                           <Eye aria-hidden="true" />
                           Chi tiết
                         </button>
-                      </span>
+                        {canDeleteProject(project) ? (
+                          <button
+                            className="btn ghost table-btn danger-text"
+                            type="button"
+                            disabled={isBusy}
+                            aria-label={`Xóa dự án ${project.name}`}
+                            onClick={() => void handleDelete(project)}
+                          >
+                            <Trash2 aria-hidden="true" />
+                            Xóa
+                          </button>
+                        ) : null}
+                      </div>
                     </article>
                     )
                   })}
@@ -668,6 +741,7 @@ export function ProjectManagementPage() {
             if (event.target === event.currentTarget) void cancelCreating()
           }}
         >
+          <OverlayPortalHost />
           <form className="project-create-dialog-form" onSubmit={handleCreate} noValidate>
             <header className="project-create-dialog-head">
               <span className="project-create-dialog-icon" aria-hidden="true">
@@ -909,6 +983,16 @@ export function ProjectManagementPage() {
                 <div className="project-overview-read">
                   <section className="project-overview-read-section project-overview-wide">
                     <h3>Thông tin cơ bản</h3>
+                    <div className="project-overview-metadata-grid project-basic-read-grid">
+                      <div className="project-overview-item">
+                        <span>Code</span>
+                        <strong>{selectedProject.code}</strong>
+                      </div>
+                      <div className="project-overview-item">
+                        <span>Tên dự án</span>
+                        <strong>{selectedProject.name}</strong>
+                      </div>
+                    </div>
                     <div className="project-overview-item">
                       <span>Mô tả</span>
                       <strong>{selectedProject.description || 'Chưa có mô tả.'}</strong>
@@ -923,10 +1007,18 @@ export function ProjectManagementPage() {
                     <div className="project-overview-metadata-grid">
                       <div className="project-overview-item"><span>Loại dự án</span><strong>{PROJECT_TYPE_LABELS[selectedProject.projectType]}</strong></div>
                       <div className="project-overview-item"><span>Trạng thái</span><strong>{PROJECT_STATUS_LABELS[selectedProject.status]}</strong></div>
-                      <div className="project-overview-item"><span>Leader chính</span><strong>{selectedProject.primaryLeader?.name ?? 'Chưa chọn'}</strong></div>
-                      <div className="project-overview-item"><span>Mã dự án</span><strong>{selectedProject.code}</strong></div>
+                      <div className="project-overview-item"><span>Leader chính</span><strong>{selectedProject.primaryLeader?.name ?? 'Chưa chỉ định'}</strong></div>
                       <div className="project-overview-item"><span>Nhóm leader</span><strong>{selectedProject.leaders.length} người</strong></div>
-                      <div className="project-overview-item"><span>Hiển thị</span><strong>{selectedProject.isFeatured ? 'Nổi bật' : 'Thông thường'} · {selectedProject.isPublic ? 'Công khai' : 'Nội bộ'}</strong></div>
+                      <div className="project-overview-item">
+                        <span>Chế độ hiển thị & tuyển dụng</span>
+                        <strong>
+                          {[
+                            selectedProject.isPublic ? 'Công khai' : 'Nội bộ',
+                            selectedProject.isFeatured ? 'Nổi bật' : null,
+                            selectedProject.isRecruiting ? 'Đang tuyển thành viên' : 'Đóng tuyển thành viên',
+                          ].filter(Boolean).join(' · ')}
+                        </strong>
+                      </div>
                     </div>
                   </section>
                   <section className="project-overview-read-section project-overview-wide">
@@ -940,7 +1032,7 @@ export function ProjectManagementPage() {
                 </div>
               )}
 
-              {!isEditingCore && canAdminManageProject ? (
+              {!isEditingCore && canDeleteSelected ? (
                 <div className="project-danger-zone">
                   <div>
                     <strong>Xóa mềm dự án</strong>
@@ -961,11 +1053,11 @@ export function ProjectManagementPage() {
                 tabIndex={0}
                 hidden={activeTab !== 'leaders'}
               >
-              {canAdminManageProject && token ? (
+              {canManageLeaders ? (
                 <ProjectLeadershipEditor
                   key={selectedProject.id}
                   project={selectedProject}
-                  token={token}
+                  token={token!}
                   disabled={isBusy}
                   onClearFeedback={clearFeedback}
                   onError={(message) => { setError(message); toast.error('Không thể cập nhật nhóm leader', message) }}
@@ -1069,24 +1161,29 @@ function MembershipHistoryPanel({ memberships }: { memberships: ProjectMembershi
         <div className="field-admin-list project-membership-history-list">
           {memberships.map((membership) => (
             <article
-              className="member-select-row project-management-row project-membership-history-row"
+              className="project-management-row project-membership-history-row"
               key={`${membership.projectId}-${membership.joinedAt}`}
             >
-              <span className="member-avatar">{membership.projectCode.slice(0, 2).toUpperCase()}</span>
-              <span className="project-management-row-main">
-                <strong>{membership.projectName}</strong>
-                <small>{membership.projectCode} · {PROJECT_STATUS_LABELS[membership.projectStatus]}</small>
-                <small>
-                  Tham gia {formatDateTime(membership.joinedAt)}
-                  {membership.removedAt ? ` · Rời dự án ${formatDateTime(membership.removedAt)}` : ''}
-                </small>
-              </span>
-              <span className="project-management-row-actions">
+              <span className="member-avatar" aria-hidden="true">{membership.projectCode.slice(0, 2).toUpperCase()}</span>
+              <div className="project-management-row-main">
+                <strong className="project-management-row-title">{membership.projectName}</strong>
+                <div className="project-management-row-meta">
+                  <span className="project-code-tag">{membership.projectCode}</span>
+                  <span className="project-meta-sep">·</span>
+                  <span>{PROJECT_STATUS_LABELS[membership.projectStatus]}</span>
+                  <span className="project-meta-sep">·</span>
+                  <span>
+                    Tham gia {formatDateTime(membership.joinedAt)}
+                    {membership.removedAt ? ` · Rời dự án ${formatDateTime(membership.removedAt)}` : ''}
+                  </span>
+                </div>
+              </div>
+              <div className="project-management-row-badges">
                 <span className={`badge ${membership.projectRole === 'LEADER' ? 'info' : 'success'}`}>
                   {membership.projectRole === 'LEADER' ? 'Leader' : 'Thành viên'}
                 </span>
                 <span className="badge danger">Đã rời dự án</span>
-              </span>
+              </div>
             </article>
           ))}
         </div>
@@ -1111,6 +1208,13 @@ function ProjectCoreFields<T extends ProjectCoreForm>({
     onChange({ ...form, ...next })
   }
 
+  const expectedEndError = form.startDate && form.expectedEndDate && form.expectedEndDate < form.startDate
+    ? 'Ngày kết thúc dự kiến không được trước ngày bắt đầu.'
+    : null
+  const actualEndError = form.startDate && form.actualEndDate && form.actualEndDate < form.startDate
+    ? 'Ngày kết thúc thực tế không được trước ngày bắt đầu.'
+    : null
+
   return (
     <div className="project-core-fields">
       <section className="project-overview-section project-basic-information"><h3>Thông tin cơ bản</h3><div className="project-basic-grid"><label className="field">
@@ -1121,10 +1225,10 @@ function ProjectCoreFields<T extends ProjectCoreForm>({
         <input className="input" required maxLength={200} value={form.name} onChange={(event) => patch({ name: event.target.value })} />
       </label><label className="field project-core-field-wide">
         <span>Mô tả</span>
-        <textarea className="textarea" rows={4} value={form.description} onChange={(event) => patch({ description: event.target.value })} />
+        <textarea className="textarea" rows={2} value={form.description} onChange={(event) => patch({ description: event.target.value })} />
       </label><label className="field project-core-field-wide">
         <span>Mục tiêu</span>
-        <textarea className="textarea" rows={3} value={form.goal} onChange={(event) => patch({ goal: event.target.value })} />
+        <textarea className="textarea" rows={2} value={form.goal} onChange={(event) => patch({ goal: event.target.value })} />
       </label></div></section>
       <section className="project-overview-section"><h3>Phân loại</h3><div className="project-basic-grid"><label className="field">
         <span>Loại dự án</span>
@@ -1138,10 +1242,12 @@ function ProjectCoreFields<T extends ProjectCoreForm>({
         <input className="input" type="date" value={form.startDate} onChange={(event) => patch({ startDate: event.target.value })} />
       </label><label className="field">
         <span>Ngày kết thúc dự kiến</span>
-        <input className="input" type="date" value={form.expectedEndDate} onChange={(event) => patch({ expectedEndDate: event.target.value })} />
+        <input className={`input ${expectedEndError ? 'has-error' : ''}`} type="date" value={form.expectedEndDate} onChange={(event) => patch({ expectedEndDate: event.target.value })} />
+        {expectedEndError ? <small className="danger-text project-field-inline-error">{expectedEndError}</small> : null}
       </label><label className="field">
         <span>Ngày kết thúc thực tế</span>
-        <input className="input" type="date" value={form.actualEndDate} onChange={(event) => patch({ actualEndDate: event.target.value })} />
+        <input className={`input ${actualEndError ? 'has-error' : ''}`} type="date" value={form.actualEndDate} onChange={(event) => patch({ actualEndDate: event.target.value })} />
+        {actualEndError ? <small className="danger-text project-field-inline-error">{actualEndError}</small> : null}
       </label></div></section>
       <section className="project-overview-section"><h3>Hiển thị</h3><div className="project-visibility-settings"><label className="project-visibility-row">
         <input type="checkbox" checked={form.isPublic} onChange={(event) => patch({ isPublic: event.target.checked })} />
