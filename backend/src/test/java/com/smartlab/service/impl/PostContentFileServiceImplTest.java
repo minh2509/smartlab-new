@@ -13,6 +13,7 @@ import com.smartlab.repo.ProjectMemberRepository;
 import com.smartlab.repo.ProjectRepository;
 import com.smartlab.repo.UserRepository;
 import com.smartlab.service.AuditService;
+import com.smartlab.service.FileService;
 import com.smartlab.service.NotificationService;
 import com.smartlab.service.PostContentFileService;
 import com.smartlab.service.PostMediaCache;
@@ -38,7 +39,10 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
@@ -61,6 +65,7 @@ class PostContentFileServiceImplTest {
     @Mock private ProjectRepository projectRepository;
     @Mock private ProjectMemberRepository projectMemberRepository;
     @Mock private PostContentFileService contentFiles;
+    @Mock private FileService fileService;
 
     private PostServiceImpl postService;
 
@@ -70,7 +75,9 @@ class PostContentFileServiceImplTest {
                 slugGenerator, createAttemptService, renderer, notificationService, auditService,
                 projectRepository, projectMemberRepository);
         ReflectionTestUtils.setField(postService, "postContentFileService", contentFiles);
+        ReflectionTestUtils.setField(postService, "fileService", fileService);
         ReflectionTestUtils.setField(postService, "postMediaCache", new PostMediaCache());
+        lenient().when(fileService.canRead(anyLong(), nullable(Authentication.class))).thenReturn(true);
     }
 
     @Test
@@ -154,6 +161,132 @@ class PostContentFileServiceImplTest {
         PostEntity draft = post(PostStatus.DRAFT, PostVisibility.PUBLIC, AUTHOR_ID, files());
         when(postRepository.findActivePublishedPublicBySlug("draft-intent")).thenReturn(Optional.empty());
         assertStatus(HttpStatus.NOT_FOUND, () -> postService.downloadPostFile(null, "draft-intent", 12L));
+    }
+
+    @Test
+    void anonymousReadsPublicFileReferencedByPublishedPublicPostWhenFilePolicyAllowsIt() {
+        PostEntity publicPost = post(PostStatus.PUBLISHED, PostVisibility.PUBLIC, AUTHOR_ID,
+                Map.of("type", "doc", "body", "body", "files", List.of(Map.of("type", "file", "fileId", 13))));
+        when(postRepository.findActivePublishedPublicBySlug("public-file")).thenReturn(Optional.of(publicPost));
+        when(contentFiles.findActiveMetadata(13L)).thenReturn(Optional.of(
+                new PostContentFileService.FileMetadata(13L, AUTHOR_ID, "application/pdf", "public.pdf", false, "PUBLIC")));
+        when(contentFiles.downloadActiveContent(13L)).thenReturn(
+                new PostContentFileService.DownloadedContent(new byte[]{9}, "application/pdf", "public.pdf"));
+
+        assertThat(postService.downloadPostFile(null, "public-file", 13L).content()).containsExactly((byte) 9);
+        verify(fileService).canRead(13L, null);
+    }
+
+    @Test
+    void anonymousCannotDownloadPrivateFileReferencedByPublishedPublicPost() {
+        PostEntity publicPost = post(PostStatus.PUBLISHED, PostVisibility.PUBLIC, AUTHOR_ID,
+                Map.of("type", "doc", "body", "body", "files", List.of(Map.of("type", "file", "fileId", 13))));
+        when(postRepository.findActivePublishedPublicBySlug("public-private-file")).thenReturn(Optional.of(publicPost));
+        when(contentFiles.findActiveMetadata(13L)).thenReturn(Optional.of(
+                new PostContentFileService.FileMetadata(13L, AUTHOR_ID, "application/pdf", "private.pdf", false, "PRIVATE")));
+        when(fileService.canRead(13L, null)).thenReturn(false);
+
+        assertStatus(HttpStatus.NOT_FOUND, () -> postService.downloadPostFile(null, "public-private-file", 13L));
+        verify(contentFiles, never()).downloadActiveContent(13L);
+    }
+
+    @Test
+    void anonymousCannotDownloadPrivateImageReferencedByPublishedPublicPost() {
+        PostEntity publicPost = post(PostStatus.PUBLISHED, PostVisibility.PUBLIC, AUTHOR_ID,
+                Map.of("type", "doc", "body", "body", "files", List.of(Map.of("type", "image", "fileId", 14))));
+        when(postRepository.findActivePublishedPublicBySlug("public-private-image")).thenReturn(Optional.of(publicPost));
+        when(contentFiles.findActiveMetadata(14L)).thenReturn(Optional.of(
+                new PostContentFileService.FileMetadata(14L, AUTHOR_ID, "image/png", "private.png", true, "PRIVATE")));
+        when(fileService.canRead(14L, null)).thenReturn(false);
+
+        assertStatus(HttpStatus.NOT_FOUND, () -> postService.downloadPostFile(null, "public-private-image", 14L));
+        verify(contentFiles, never()).downloadActiveContent(14L);
+    }
+
+    @Test
+    void cachedPrivateImageStillRequiresFileAuthorizationForAnonymousCaller() {
+        PostEntity publicPost = post(PostStatus.PUBLISHED, PostVisibility.PUBLIC, AUTHOR_ID,
+                Map.of("type", "doc", "body", "body", "files", List.of(Map.of("type", "image", "fileId", 16))));
+        activeAuthor();
+        when(postRepository.findActiveBySlug("public-cached-private-image")).thenReturn(Optional.of(publicPost));
+        when(postRepository.findActivePublishedPublicBySlug("public-cached-private-image")).thenReturn(Optional.of(publicPost));
+        when(contentFiles.findActiveMetadata(16L)).thenReturn(Optional.of(
+                new PostContentFileService.FileMetadata(16L, AUTHOR_ID, "image/png", "private.png", true, "PRIVATE")));
+        when(contentFiles.downloadActiveContent(16L)).thenReturn(
+                new PostContentFileService.DownloadedContent(new byte[]{6}, "image/png", "private.png"));
+        Authentication author = authentication(AUTHOR_EMAIL);
+        when(fileService.canRead(16L, author)).thenReturn(true);
+        when(fileService.canRead(16L, null)).thenReturn(false);
+
+        assertThat(postService.downloadPostFile(author, "public-cached-private-image", 16L).content())
+                .containsExactly((byte) 6);
+        assertStatus(HttpStatus.NOT_FOUND, () -> postService.downloadPostFile(null, "public-cached-private-image", 16L));
+        verify(contentFiles, times(1)).downloadActiveContent(16L);
+    }
+
+    @Test
+    void unrelatedAuthenticatedUserCannotReadPrivateFileFromReadablePublicPost() {
+        PostEntity publicPost = post(PostStatus.PUBLISHED, PostVisibility.PUBLIC, AUTHOR_ID,
+                Map.of("type", "doc", "body", "body", "files", List.of(Map.of("type", "file", "fileId", 13))));
+        activeViewer();
+        when(postRepository.findActiveBySlug("public-private-file-viewer")).thenReturn(Optional.of(publicPost));
+        when(contentFiles.findActiveMetadata(13L)).thenReturn(Optional.of(
+                new PostContentFileService.FileMetadata(13L, AUTHOR_ID, "application/pdf", "private.pdf", false, "PRIVATE")));
+        Authentication viewer = authentication(VIEWER_EMAIL);
+        when(fileService.canRead(13L, viewer)).thenReturn(false);
+
+        assertStatus(HttpStatus.NOT_FOUND, () -> postService.downloadPostFile(viewer, "public-private-file-viewer", 13L));
+        verify(contentFiles, never()).downloadActiveContent(13L);
+    }
+
+    @Test
+    void projectFileUsesEffectiveFilePolicyEvenWhenPostIsPublic() {
+        PostEntity publicPost = post(PostStatus.PUBLISHED, PostVisibility.PUBLIC, AUTHOR_ID,
+                Map.of("type", "doc", "body", "body", "files", List.of(Map.of("type", "file", "fileId", 13))));
+        activeViewer();
+        when(postRepository.findActivePublishedPublicBySlug("public-project-file")).thenReturn(Optional.of(publicPost));
+        when(postRepository.findActiveBySlug("public-project-file")).thenReturn(Optional.of(publicPost));
+        when(contentFiles.findActiveMetadata(13L)).thenReturn(Optional.of(
+                new PostContentFileService.FileMetadata(13L, AUTHOR_ID, "application/pdf", "project.pdf", false, "PROJECT")));
+        when(contentFiles.downloadActiveContent(13L)).thenReturn(
+                new PostContentFileService.DownloadedContent(new byte[]{8}, "application/pdf", "project.pdf"));
+        when(fileService.canRead(13L, null)).thenReturn(false);
+        Authentication viewer = authentication(VIEWER_EMAIL);
+        when(fileService.canRead(13L, viewer)).thenReturn(true);
+
+        assertStatus(HttpStatus.NOT_FOUND, () -> postService.downloadPostFile(null, "public-project-file", 13L));
+        assertThat(postService.downloadPostFile(viewer, "public-project-file", 13L).content()).containsExactly((byte) 8);
+        verify(fileService).canRead(13L, viewer);
+    }
+
+    @Test
+    void labFileUsesEffectiveFilePolicyEvenWhenPostIsPublic() {
+        PostEntity publicPost = post(PostStatus.PUBLISHED, PostVisibility.PUBLIC, AUTHOR_ID,
+                Map.of("type", "doc", "body", "body", "files", List.of(Map.of("type", "file", "fileId", 15))));
+        when(postRepository.findActivePublishedPublicBySlug("public-lab-file")).thenReturn(Optional.of(publicPost));
+        when(contentFiles.findActiveMetadata(15L)).thenReturn(Optional.of(
+                new PostContentFileService.FileMetadata(15L, AUTHOR_ID, "application/pdf", "lab.pdf", false, "LAB")));
+        when(fileService.canRead(15L, null)).thenReturn(false);
+
+        assertStatus(HttpStatus.NOT_FOUND, () -> postService.downloadPostFile(null, "public-lab-file", 15L));
+        verify(contentFiles, never()).downloadActiveContent(15L);
+    }
+
+    @Test
+    void postAuthorReadsPrivateFileWhenFilePolicyAllowsIt() {
+        PostEntity draft = post(PostStatus.DRAFT, PostVisibility.LAB, AUTHOR_ID,
+                Map.of("type", "doc", "body", "body", "files", List.of(Map.of("type", "file", "fileId", 13))));
+        activeAuthor();
+        when(postRepository.findActiveBySlug("private-draft-file")).thenReturn(Optional.of(draft));
+        when(contentFiles.findActiveMetadata(13L)).thenReturn(Optional.of(
+                new PostContentFileService.FileMetadata(13L, AUTHOR_ID, "application/pdf", "private.pdf", false, "PRIVATE")));
+        when(contentFiles.downloadActiveContent(13L)).thenReturn(
+                new PostContentFileService.DownloadedContent(new byte[]{7}, "application/pdf", "private.pdf"));
+        Authentication author = authentication(AUTHOR_EMAIL);
+        when(fileService.canRead(13L, author)).thenReturn(true);
+
+        assertThat(postService.downloadPostFile(author, "private-draft-file", 13L).content()).containsExactly((byte) 7);
+        verify(fileService).canRead(13L, author);
     }
 
     @Test

@@ -26,6 +26,7 @@ import com.smartlab.repo.ProjectRepository;
 import com.smartlab.repo.UserRepository;
 import com.smartlab.service.NotificationService;
 import com.smartlab.service.AuditService;
+import com.smartlab.service.FileService;
 import com.smartlab.service.NotificationRelated;
 import com.smartlab.service.PostService;
 import com.smartlab.service.PostContentRenderer;
@@ -75,6 +76,8 @@ public class PostServiceImpl implements PostService {
 
     @Autowired
     private PostContentFileService postContentFileService;
+    @Autowired
+    private FileService fileService;
     @Autowired
     private PostMediaCache postMediaCache;
     @Autowired
@@ -422,6 +425,9 @@ public class PostServiceImpl implements PostService {
                 .filter(candidate -> Objects.equals(candidate.ownerUserId(), post.getAuthorUserId()))
                 .orElseThrow(this::postNotFound);
         if ("image".equals(reference.type()) && !metadata.image()) {
+            throw postNotFound();
+        }
+        if (!fileService.canRead(fileId, authentication)) {
             throw postNotFound();
         }
         if ("image".equals(reference.type())) {
