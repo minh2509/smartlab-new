@@ -1,227 +1,454 @@
-import { ChevronDown, LogIn, LogOut, Newspaper } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { NavLink, useLocation } from 'react-router-dom'
-import { useAuth } from '../../features/auth/authContext'
-import { NotificationPopover } from '../../features/notifications/components/NotificationPopover'
-import { Logo } from './Logo'
+import { ChevronDown, LogIn, LogOut, Newspaper, Search } from "lucide-react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ComponentPropsWithoutRef,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
+import {
+  matchPath,
+  NavLink,
+  useLocation,
+  useNavigate,
+  useResolvedPath,
+} from "react-router-dom";
+import { useAuth } from "../../features/auth/authContext";
+import { NotificationPopover } from "../../features/notifications/components/NotificationPopover";
+import { Logo } from "./Logo";
 
-const publicLinks = [
-  { to: '/du-an', label: 'Dự án' },
-  { to: '/bai-viet', label: 'Bài viết' },
-  { to: '/tai-lieu', label: 'Tài liệu' },
-  { to: '/su-kien', label: 'Sự kiện' },
-]
+type NavLeaf = {
+  to: string;
+  label: string;
+  description?: string;
+  end?: boolean;
+};
+type NavGroup = { label: string; children: readonly NavLeaf[] };
+type NavItem = NavLeaf | NavGroup;
 
-const aboutLinks = [
-  { to: '/gioi-thieu', title: 'Về phòng Lab', description: 'Tổng quan, mục tiêu, định hướng' },
-  { to: '/thanh-tuu', title: 'Thành tựu & Dấu mốc', description: 'Kết quả và dấu mốc nổi bật' },
-  { to: '/tin-tuc', title: 'Tin tức truyền thông', description: 'Báo chí và truyền thông về Lab' },
-  { to: '/thu-vien-anh', title: 'Hình ảnh hoạt động', description: 'Thư viện ảnh của Lab' },
-]
+const mainNav: readonly NavItem[] = [
+  { to: "/", label: "Trang chủ", end: true },
+  { to: "/gioi-thieu", label: "Về Phòng Lab" },
+  {
+    label: "Nghiên cứu",
+    children: [
+      {
+        to: "/du-an",
+        label: "Dự án",
+        description: "Từ ý tưởng tới hiện thực.",
+      },
+      {
+        to: "/tai-lieu",
+        label: "Tài liệu",
+        description: "Tri thức cho hành trình nghiên cứu",
+      },
+    ],
+  },
+  {
+    label: "Tin tức",
+    children: [
+      {
+        to: "/bai-viet",
+        label: "Bài viết",
+        description: "Góc nhìn và những chia sẻ khác nhau.",
+      },
+      {
+        to: "/su-kien",
+        label: "Sự kiện",
+        description: "Kết nối, học hỏi và trải nghiệm.",
+      },
+    ],
+  },
+];
 
-export function AppHeader() {
-  const { isAuthenticated, logout, profile } = useAuth()
-  const role = resolveHeaderRole(profile?.roles)
-  const canReadNotifications = profile?.permissions.includes('notifications.read_own') ?? false
+const ROLE_LABELS = [
+  { key: "ADMIN", label: "Admin" },
+  { key: "LEADER", label: "Leader" },
+  { key: "MEMBER", label: "Member" },
+] as const;
 
-  return (
-    <header className="site-nav">
-      <div className="nav-in">
-        <NavLink to="/" className="logo" aria-label="Smart Lab">
-          <Logo />
-        </NavLink>
+const PERMISSION_READ_OWN_NOTIFICATIONS = "notifications.read_own";
+const DROPDOWN_VIEWPORT_MARGIN = 12;
 
-        <nav className="public-nav" aria-label="Điều hướng chính">
-          <ul className="menu">
-            <li>
-              <NavLink to="/">Trang chủ</NavLink>
-            </li>
-            <li>
-              <AboutDropdown />
-            </li>
-            {publicLinks.map((link) => (
-              <li key={link.to}>
-                <NavLink to={link.to}>{link.label}</NavLink>
-              </li>
-            ))}
-            {isAuthenticated ? (
-              <li>
-                <NavLink to="/profile">Workspace</NavLink>
-              </li>
-            ) : null}
-          </ul>
-        </nav>
-
-        <div className="nav-act">
-          {isAuthenticated ? (
-            <>
-              {role ? <span className="nav-role-label nav-utility-role">{role}</span> : null}
-              {role ? <span className="nav-utility-separator" aria-hidden="true" /> : null}
-              <div className="nav-utility-actions">
-                <NavLink
-                  end
-                  className={({ isActive }) => `nav-private-link${isActive ? ' is-active' : ''}`}
-                  to="/posts"
-                >
-                  <Newspaper size={15} aria-hidden="true" />
-                  Bảng tin
-                </NavLink>
-                {canReadNotifications ? <NotificationPopover /> : null}
-                <button className="btn sm" type="button" onClick={() => void logout()}>
-                  <LogOut size={15} />
-                  Đăng xuất
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <NavLink
-                end
-                className={({ isActive }) => `nav-private-link nav-public-feed-link${isActive ? ' is-active' : ''}`}
-                to="/posts"
-              >
-                <Newspaper size={15} aria-hidden="true" />
-                Bảng tin
-              </NavLink>
-              <NavLink className="nav-login-btn" to="/login">
-                <span className="nav-login-ico">
-                  <LogIn size={15} />
-                </span>
-                <span>Đăng nhập</span>
-              </NavLink>
-            </>
-          )}
-        </div>
-      </div>
-    </header>
-  )
+function isGroup(item: NavItem): item is NavGroup {
+  return "children" in item;
 }
 
-function resolveHeaderRole(roles: string[] | undefined) {
-  if (roles?.includes('ADMIN')) return 'Admin'
-  if (roles?.includes('LEADER')) return 'Leader'
-  if (roles?.includes('MEMBER')) return 'Member'
-  return null
+function isCoarsePointer() {
+  return window.matchMedia("(pointer: coarse)").matches;
 }
 
-function AboutDropdown() {
-  const [isOpen, setOpen] = useState(false)
-  const location = useLocation()
-  const menuRef = useRef<HTMLDivElement>(null)
-  const triggerRef = useRef<HTMLButtonElement>(null)
-  const rafRef = useRef<number | null>(null)
-  const isActive = aboutLinks.some((link) => link.to === `${location.pathname}${location.hash}`)
+function resolveHeaderRole(roles: readonly string[] | null | undefined) {
+  if (!roles?.length) return null;
+  return ROLE_LABELS.find(({ key }) => roles.includes(key))?.label ?? null;
+}
 
-  const resetDrift = useCallback(() => {
-    if (rafRef.current) {
-      cancelAnimationFrame(rafRef.current)
-      rafRef.current = null
+function hasPermission(
+  permissions: readonly string[] | null | undefined,
+  permission: string,
+) {
+  return permissions?.includes(permission) ?? false;
+}
+
+function joinClassNames(...names: Array<string | false | undefined>) {
+  return names.filter(Boolean).join(" ");
+}
+
+function updateDropdownDrift(
+  root: HTMLElement | null,
+  menu: HTMLElement | null,
+) {
+  if (!root || !menu) return;
+  const rootRect = root.getBoundingClientRect();
+  const viewportWidth = document.documentElement.clientWidth;
+  const centered = rootRect.left + rootRect.width / 2 - menu.offsetWidth / 2;
+  const maxLeft = viewportWidth - menu.offsetWidth - DROPDOWN_VIEWPORT_MARGIN;
+  const clamped = Math.min(
+    Math.max(centered, DROPDOWN_VIEWPORT_MARGIN),
+    Math.max(DROPDOWN_VIEWPORT_MARGIN, maxLeft),
+  );
+  menu.style.setProperty(
+    "--dropdown-drift",
+    `${Math.round(clamped - centered)}px`,
+  );
+}
+
+const SamePageClickContext = createContext<(() => void) | undefined>(undefined);
+
+function ReloadNavLink({
+  to,
+  onClick,
+  ...rest
+}: ComponentPropsWithoutRef<typeof NavLink>) {
+  const { pathname, search } = useLocation();
+  const resolved = useResolvedPath(to);
+  const navigate = useNavigate();
+  const onSamePageClick = useContext(SamePageClickContext);
+
+  function handleClick(event: ReactMouseEvent<HTMLAnchorElement>) {
+    onClick?.(event);
+    if (event.defaultPrevented) return;
+    if (
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    ) {
+      return;
     }
-    if (menuRef.current) {
-      menuRef.current.style.setProperty('--dropdown-drift', '0px')
+    if (resolved.pathname !== pathname || !onSamePageClick) return;
+
+    event.preventDefault();
+    if (resolved.search !== search) {
+      navigate(
+        { pathname: resolved.pathname, search: resolved.search },
+        { replace: true },
+      );
     }
-  }, [])
+    onSamePageClick();
+  }
+
+  return <NavLink {...rest} to={to} onClick={handleClick} />;
+}
+
+type NavDropdownProps = {
+  group: NavGroup;
+  pinned: boolean;
+  onTogglePinned: () => void;
+  onClosePinned: () => void;
+};
+
+function NavDropdown({
+  group,
+  pinned,
+  onTogglePinned,
+  onClosePinned,
+}: NavDropdownProps) {
+  const { pathname } = useLocation();
+  const menuId = useId();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+
+  const coarse = isCoarsePointer();
+  const open = coarse ? pinned : hovered || focused;
+
+  const isActive = group.children.some((child) =>
+    matchPath({ path: child.to, end: child.end ?? false }, pathname),
+  );
 
   useEffect(() => {
-    setOpen(false)
-    resetDrift()
-  }, [location.pathname, resetDrift])
+    if (!open) return;
+    const sync = () => updateDropdownDrift(rootRef.current, menuRef.current);
+    sync();
+    window.addEventListener("resize", sync);
+    return () => window.removeEventListener("resize", sync);
+  }, [open]);
 
-  useEffect(() => {
-    function handlePointerDown(event: PointerEvent) {
-      if (!menuRef.current?.contains(event.target as Node)) {
-        setOpen(false)
-        resetDrift()
-      }
-    }
+  function handleKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "Escape") return;
+    onClosePinned();
+    setHovered(false);
+    setFocused(false);
+    (document.activeElement as HTMLElement | null)?.blur();
+  }
 
-    document.addEventListener('pointerdown', handlePointerDown)
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown)
-      if (rafRef.current) {
-        cancelAnimationFrame(rafRef.current)
-      }
-    }
-  }, [resetDrift])
+  function handleTriggerClick() {
+    if (!coarse) return;
+    if (pinned) buttonRef.current?.blur();
+    onTogglePinned();
+  }
 
-  const handlePointerMove = (event: React.PointerEvent<HTMLButtonElement>) => {
-    if (event.pointerType === 'touch') return
-    if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-
-    const clientX = event.clientX
-    if (rafRef.current) cancelAnimationFrame(rafRef.current)
-    rafRef.current = requestAnimationFrame(() => {
-      if (!triggerRef.current || !menuRef.current) return
-      const rect = triggerRef.current.getBoundingClientRect()
-      if (rect.width <= 0) return
-
-      // Normalized X relative to trigger: left edge = -1, center = 0, right edge = +1
-      const rawNormalized = ((clientX - rect.left) / rect.width) * 2 - 1
-      const normalized = Math.max(-1, Math.min(1, rawNormalized))
-
-      // Restrained, subtle travel distance (10px max)
-      // Sine curve softens extremes and gives physical, spring-like boundary
-      const MAX_DRIFT = 10
-      const drift = Math.sin(normalized * (Math.PI / 2)) * MAX_DRIFT
-
-      // Viewport collision clamping
-      const triggerCenterX = rect.left + rect.width / 2
-      const halfMenuWidth = 146 // 292px width
-      const VIEWPORT_PADDING = 12
-      let clampedDrift = drift
-      const projectedLeft = triggerCenterX - halfMenuWidth + drift
-      const projectedRight = triggerCenterX + halfMenuWidth + drift
-
-      if (projectedLeft < VIEWPORT_PADDING) {
-        clampedDrift += (VIEWPORT_PADDING - projectedLeft)
-      } else if (projectedRight > window.innerWidth - VIEWPORT_PADDING) {
-        clampedDrift -= (projectedRight - (window.innerWidth - VIEWPORT_PADDING))
-      }
-
-      menuRef.current.style.setProperty('--dropdown-drift', `${clampedDrift.toFixed(2)}px`)
-    })
+  function handleItemClick(event: ReactMouseEvent<HTMLAnchorElement>) {
+    event.currentTarget.blur();
+    onClosePinned();
   }
 
   return (
-    <div
-      className={isOpen ? 'nav-dropdown open' : 'nav-dropdown'}
-      ref={menuRef}
-      onPointerLeave={resetDrift}
-    >
-      <button
-        ref={triggerRef}
-        className={isActive ? 'nav-dropdown-trigger active' : 'nav-dropdown-trigger'}
-        type="button"
-        aria-expanded={isOpen}
-        aria-haspopup="true"
-        onClick={() => setOpen((value) => !value)}
-        onPointerMove={handlePointerMove}
-        onPointerLeave={resetDrift}
-        onFocus={resetDrift}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') {
-            setOpen(false)
-            resetDrift()
+    <li>
+      <div
+        ref={rootRef}
+        className={joinClassNames("nav-dropdown", open && "open")}
+        onKeyDown={handleKeyDown}
+        onPointerEnter={(event) => {
+          if (event.pointerType === "mouse") setHovered(true);
+        }}
+        onPointerLeave={(event) => {
+          if (event.pointerType === "mouse") setHovered(false);
+        }}
+        onFocus={(event) => setFocused(event.target.matches(":focus-visible"))}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) {
+            setFocused(false);
           }
         }}
       >
-        Giới thiệu
-        <ChevronDown aria-hidden="true" />
-      </button>
-      <div className="nav-dropdown-menu" role="menu">
-        {aboutLinks.map((link) => (
-          <NavLink
-            role="menuitem"
-            className="nav-dropdown-item"
-            to={link.to}
-            key={link.to}
-            onClick={() => setOpen(false)}
-          >
-            <span>{link.title}</span>
-            <small>{link.description}</small>
-          </NavLink>
-        ))}
+        <button
+          ref={buttonRef}
+          type="button"
+          className={joinClassNames(
+            "nav-dropdown-trigger",
+            isActive && "active",
+          )}
+          aria-expanded={open}
+          aria-controls={menuId}
+          onClick={handleTriggerClick}
+        >
+          {group.label}
+          <ChevronDown size={14} aria-hidden="true" />
+        </button>
+        <div ref={menuRef} id={menuId} className="nav-dropdown-menu">
+          {group.children.map((child) => (
+            <ReloadNavLink
+              key={child.to}
+              to={child.to}
+              end={child.end}
+              className="nav-dropdown-item"
+              onClick={handleItemClick}
+            >
+              <span>{child.label}</span>
+              {child.description ? <small>{child.description}</small> : null}
+            </ReloadNavLink>
+          ))}
+        </div>
       </div>
-    </div>
-  )
+    </li>
+  );
+}
+
+function FeedLink({ extraClassName }: { extraClassName?: string }) {
+  return (
+    <ReloadNavLink
+      end
+      to="/posts"
+      className={({ isActive }) =>
+        joinClassNames(
+          "nav-private-link",
+          extraClassName,
+          isActive && "is-active",
+        )
+      }
+    >
+      <Newspaper size={15} aria-hidden="true" />
+      Bảng tin
+    </ReloadNavLink>
+  );
+}
+
+function SearchButton({ onClick }: { onClick?: () => void }) {
+  return (
+    <button
+      className="icon-btn"
+      type="button"
+      aria-label="Tìm kiếm"
+      onClick={onClick}
+    >
+      <Search size={18} aria-hidden="true" />
+    </button>
+  );
+}
+
+type AppHeaderProps = {
+  onSearchOpen?: () => void;
+  onSamePageClick?: () => void;
+};
+
+export function AppHeader({ onSearchOpen, onSamePageClick }: AppHeaderProps) {
+  const { isAuthenticated, logout, profile } = useAuth();
+  const { pathname } = useLocation();
+  const navRef = useRef<HTMLElement>(null);
+  const [pinnedGroup, setPinnedGroup] = useState<string | null>(null);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const role = resolveHeaderRole(profile?.roles);
+  const canReadNotifications = hasPermission(
+    profile?.permissions,
+    PERMISSION_READ_OWN_NOTIFICATIONS,
+  );
+
+  useEffect(() => {
+    setPinnedGroup(null);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (pinnedGroup === null) return;
+
+    function handlePointerDown(event: PointerEvent) {
+      if (!navRef.current?.contains(event.target as Node)) {
+        setPinnedGroup(null);
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [pinnedGroup]);
+
+  useEffect(() => {
+    if (!onSearchOpen) return;
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        onSearchOpen?.();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onSearchOpen]);
+
+  const handleLogout = useCallback(async () => {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    try {
+      await logout();
+    } catch (error) {
+      console.error("Đăng xuất thất bại", error);
+    } finally {
+      setIsLoggingOut(false);
+    }
+  }, [isLoggingOut, logout]);
+
+  return (
+    <SamePageClickContext.Provider value={onSamePageClick}>
+      <header className="site-nav">
+        <div className="nav-in">
+          <ReloadNavLink to="/" className="logo" aria-label="Smart Lab">
+            <Logo />
+          </ReloadNavLink>
+
+          <nav
+            ref={navRef}
+            className="public-nav"
+            aria-label="Điều hướng chính"
+          >
+            <ul className="menu">
+              {mainNav.map((item) =>
+                isGroup(item) ? (
+                  <NavDropdown
+                    key={item.label}
+                    group={item}
+                    pinned={pinnedGroup === item.label}
+                    onTogglePinned={() =>
+                      setPinnedGroup((current) =>
+                        current === item.label ? null : item.label,
+                      )
+                    }
+                    onClosePinned={() =>
+                      setPinnedGroup((current) =>
+                        current === item.label ? null : current,
+                      )
+                    }
+                  />
+                ) : (
+                  <li key={item.to}>
+                    <ReloadNavLink end={item.end} to={item.to}>
+                      {item.label}
+                    </ReloadNavLink>
+                  </li>
+                ),
+              )}
+              {isAuthenticated ? (
+                <li>
+                  <ReloadNavLink to="/profile">Workspace</ReloadNavLink>
+                </li>
+              ) : null}
+            </ul>
+          </nav>
+
+          <div className="nav-act">
+            {isAuthenticated ? (
+              <>
+                {role ? (
+                  <>
+                    <span className="nav-role-label nav-utility-role">
+                      {role}
+                    </span>
+                    <span
+                      className="nav-utility-separator"
+                      aria-hidden="true"
+                    />
+                  </>
+                ) : null}
+                <div className="nav-utility-actions">
+                  <FeedLink />
+                  <SearchButton onClick={onSearchOpen} />
+                  {canReadNotifications ? <NotificationPopover /> : null}
+                  <button
+                    className="btn sm"
+                    type="button"
+                    disabled={isLoggingOut}
+                    aria-busy={isLoggingOut}
+                    onClick={handleLogout}
+                  >
+                    <LogOut size={15} aria-hidden="true" />
+                    Đăng xuất
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <FeedLink extraClassName="nav-public-feed-link" />
+                <SearchButton onClick={onSearchOpen} />
+                <ReloadNavLink className="nav-login-btn" to="/login">
+                  <span className="nav-login-ico">
+                    <LogIn size={15} aria-hidden="true" />
+                  </span>
+                  <span>Đăng nhập</span>
+                </ReloadNavLink>
+              </>
+            )}
+          </div>
+        </div>
+      </header>
+    </SamePageClickContext.Provider>
+  );
 }
