@@ -79,6 +79,11 @@ public class DocumentEntity {
         this.currentFile = file;
     }
 
+    public void updateMetadata(String title, String description) {
+        this.title = title;
+        this.description = description;
+    }
+
     public void softDelete() {
         this.deletedAt = Instant.now();
     }

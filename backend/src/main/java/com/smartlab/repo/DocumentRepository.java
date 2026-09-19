@@ -71,4 +71,12 @@ public interface DocumentRepository extends JpaRepository<DocumentEntity, Long>,
     Optional<DocumentEntity> findActiveByIdForUpdate(@Param("id") Long id);
 
     boolean existsByCurrentFile_IdAndDeletedAtIsNull(Long fileId);
+
+    @Query("select case when count(d) > 0 then true else false end from DocumentEntity d "
+            + "where d.currentFile.id = :fileId and d.deletedAt is null "
+            + "and d.project.deletedAt is null and d.id <> :documentId")
+    boolean existsActiveCurrentReferenceOutsideDocument(
+            @Param("fileId") Long fileId,
+            @Param("documentId") Long documentId
+    );
 }

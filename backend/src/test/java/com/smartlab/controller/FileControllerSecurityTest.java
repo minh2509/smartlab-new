@@ -18,6 +18,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
@@ -117,6 +119,17 @@ class FileControllerSecurityTest {
                 .andExpect(status().isOk());
 
         verify(fileService).download(eq(22L), nullable(Authentication.class));
+    }
+
+    @Test
+    void directFileIdDownloadCannotBypassServiceDenial() throws Exception {
+        when(fileService.download(eq(23L), nullable(Authentication.class)))
+                .thenThrow(new ResponseStatusException(HttpStatus.FORBIDDEN, "File is not public"));
+
+        mockMvc.perform(get("/files/23"))
+                .andExpect(status().isForbidden());
+
+        verify(fileService).download(eq(23L), nullable(Authentication.class));
     }
 
     private static MockMultipartFile textFile() {

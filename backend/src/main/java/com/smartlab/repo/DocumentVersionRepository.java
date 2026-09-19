@@ -29,4 +29,18 @@ public interface DocumentVersionRepository extends JpaRepository<DocumentVersion
     int findMaxVersionNo(@Param("documentId") Long documentId);
 
     boolean existsByFile_Id(Long fileId);
+
+    @Query("""
+            select case when count(dv) > 0 then true else false end
+            from DocumentVersionEntity dv
+            where dv.file.id = :fileId
+              and dv.document.id <> :documentId
+              and dv.document.deletedAt is null
+              and dv.document.project.deletedAt is null
+              and dv.file.deletedAt is null
+            """)
+    boolean existsActiveReferenceOutsideDocument(
+            @Param("fileId") Long fileId,
+            @Param("documentId") Long documentId
+    );
 }

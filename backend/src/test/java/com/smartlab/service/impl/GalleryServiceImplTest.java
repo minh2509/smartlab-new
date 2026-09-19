@@ -18,6 +18,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Optional;
+import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -74,6 +75,39 @@ class GalleryServiceImplTest {
 
         assertThat(result.title()).isEqualTo("Demo");
         verify(fileService).upload(any(), org.mockito.ArgumentMatchers.eq("PRIVATE"), org.mockito.ArgumentMatchers.eq("Demo"), org.mockito.ArgumentMatchers.eq("admin@lab.test"));
+    }
+
+    @Test
+    void unpublishRevokesDirectPublicFileScope() {
+        StoredFileEntity file = image(23L, "PRIVATE");
+        GalleryItemEntity item = GalleryItemEntity.draft(file, "Workshop", null, "Workshop", null, null, null, null, false, null);
+        ReflectionTestUtils.setField(item, "id", 5L);
+        item.publish(Instant.now());
+        file.setAccessScope("PUBLIC");
+        when(galleryRepository.findActiveByIdForUpdate(5L)).thenReturn(Optional.of(item));
+        GalleryServiceImpl service = new GalleryServiceImpl(galleryRepository, fileRepository, projectRepository, eventRepository, userRepository, fileService);
+
+        service.unpublish(5L);
+
+        assertThat(item.getStatus()).isEqualTo(GalleryItemStatus.DRAFT);
+        assertThat(file.getAccessScope()).isEqualTo("PRIVATE");
+    }
+
+    @Test
+    void softDeleteRevokesDirectPublicFileScope() {
+        StoredFileEntity file = image(24L, "PRIVATE");
+        GalleryItemEntity item = GalleryItemEntity.draft(file, "Workshop", null, "Workshop", null, null, null, null, false, null);
+        ReflectionTestUtils.setField(item, "id", 6L);
+        item.publish(Instant.now());
+        file.setAccessScope("PUBLIC");
+        when(galleryRepository.findActiveByIdForUpdate(6L)).thenReturn(Optional.of(item));
+        GalleryServiceImpl service = new GalleryServiceImpl(galleryRepository, fileRepository, projectRepository, eventRepository, userRepository, fileService);
+
+        service.delete(6L);
+
+        assertThat(item.getStatus()).isEqualTo(GalleryItemStatus.DRAFT);
+        assertThat(item.getDeletedAt()).isNotNull();
+        assertThat(file.getAccessScope()).isEqualTo("PRIVATE");
     }
 
     private static StoredFileEntity image(Long id, String scope) {

@@ -2,6 +2,7 @@ package com.smartlab.service.impl;
 
 import com.smartlab.dto.request.CreateDocumentRequest;
 import com.smartlab.dto.request.CreateDocumentVersionRequest;
+import com.smartlab.dto.request.UpdateDocumentRequest;
 import com.smartlab.dto.response.DocumentResponse;
 import com.smartlab.dto.response.DocumentVersionResponse;
 import com.smartlab.dto.response.FileResponse;
@@ -27,6 +28,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Answers;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -39,6 +41,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.lang.reflect.Field;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -370,6 +373,199 @@ class DocumentServiceImplTest {
         assertThat(document.getDeletedAt()).isNull();
         verify(projectAccessService, never()).requireManage(any(), any());
         verify(documentRepository, never()).saveAndFlush(document);
+    }
+
+    @Test
+    void softDeleteRevokesPublicScopeOfCurrentAndRetainedVersionFiles() {
+        StoredFileEntity previousFile = storedFile(100L, "PUBLIC", actor);
+        StoredFileEntity currentFile = storedFile(101L, "PUBLIC", actor);
+        DocumentEntity document = document(31L, currentFile);
+        when(documentRepository.findActiveByIdForUpdate(31L)).thenReturn(Optional.of(document));
+        lenient().when(documentVersionRepository.findReadableCandidatesByDocumentId(31L))
+                .thenReturn(List.of(version(40L, document, previousFile, 1),
+                        version(41L, document, currentFile, 2)));
+        when(documentRepository.saveAndFlush(document)).thenReturn(document);
+
+        service.delete(31L, authentication);
+
+        assertThat(document.getDeletedAt()).isNotNull();
+        assertThat(currentFile.getAccessScope()).isEqualTo("PRIVATE");
+        assertThat(previousFile.getAccessScope()).isEqualTo("PRIVATE");
+        assertThat(currentFile.getDeletedAt()).isNull();
+        assertThat(previousFile.getDeletedAt()).isNull();
+    }
+
+    @Test
+    void rejectsDeleteWhenCurrentPublicFileIsUsedAsMemberAvatar() {
+        StoredFileEntity currentFile = storedFile(101L, "PUBLIC", actor);
+        DocumentEntity document = document(31L, currentFile);
+        when(documentRepository.findActiveByIdForUpdate(31L)).thenReturn(Optional.of(document));
+        when(fileService.hasExternalReferencesOutsideDocument(101L, 31L)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.delete(31L, authentication))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+
+        assertThat(document.getDeletedAt()).isNull();
+        assertThat(currentFile.getAccessScope()).isEqualTo("PUBLIC");
+        verify(documentRepository, never()).saveAndFlush(document);
+    }
+
+    @Test
+    void rejectsDeleteWhenCurrentPublicFileIsUsedAsResearchFieldCover() {
+        StoredFileEntity currentFile = storedFile(101L, "PUBLIC", actor);
+        DocumentEntity document = document(31L, currentFile);
+        when(documentRepository.findActiveByIdForUpdate(31L)).thenReturn(Optional.of(document));
+        when(fileService.hasExternalReferencesOutsideDocument(101L, 31L)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.delete(31L, authentication))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+
+        assertThat(document.getDeletedAt()).isNull();
+        assertThat(currentFile.getAccessScope()).isEqualTo("PUBLIC");
+        verify(documentRepository, never()).saveAndFlush(document);
+    }
+
+    @Test
+    void rejectsDeleteWhenRetainedPublicVersionHasExternalReferenceWithoutPartialMutation() {
+        StoredFileEntity previousFile = storedFile(100L, "PUBLIC", actor);
+        StoredFileEntity currentFile = storedFile(101L, "PUBLIC", actor);
+        DocumentEntity document = document(31L, currentFile);
+        when(documentRepository.findActiveByIdForUpdate(31L)).thenReturn(Optional.of(document));
+        when(documentVersionRepository.findReadableCandidatesByDocumentId(31L))
+                .thenReturn(List.of(version(40L, document, previousFile, 1), version(41L, document, currentFile, 2)));
+        when(fileService.hasExternalReferencesOutsideDocument(100L, 31L)).thenReturn(true);
+        when(fileService.hasExternalReferencesOutsideDocument(101L, 31L)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.delete(31L, authentication))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+
+        assertThat(document.getDeletedAt()).isNull();
+        assertThat(previousFile.getAccessScope()).isEqualTo("PUBLIC");
+        assertThat(currentFile.getAccessScope()).isEqualTo("PUBLIC");
+        verify(documentRepository, never()).saveAndFlush(document);
+    }
+
+    @Test
+    void updatesDocumentMetadataWithoutChangingFileOrVersionHistory() {
+        StoredFileEntity currentFile = storedFile(101L, "PROJECT", actor);
+        DocumentEntity document = document(31L, currentFile);
+        UpdateDocumentRequest request = new UpdateDocumentRequest();
+        request.setTitle("  Updated title  ");
+        request.setDescription("  Updated description  ");
+        FileResponse fileResponse = fileResponse(101L, "PROJECT");
+
+        when(documentRepository.findActiveByIdForUpdate(31L)).thenReturn(Optional.of(document));
+        when(projectAccessService.requireManage(project, EMAIL)).thenReturn(actor);
+        when(documentRepository.saveAndFlush(document)).thenReturn(document);
+        when(documentVersionRepository.findMaxVersionNo(31L)).thenReturn(2);
+        when(fileService.describe(101L, authentication)).thenReturn(fileResponse);
+
+        DocumentResponse response = service.update(31L, request, authentication);
+
+        assertThat(response.getTitle()).isEqualTo("Updated title");
+        assertThat(response.getDescription()).isEqualTo("Updated description");
+        assertThat(response.getCurrentFile().getId()).isEqualTo(101L);
+        assertThat(document.getCurrentFile()).isSameAs(currentFile);
+        assertThat(document.getProject()).isSameAs(project);
+        verify(documentVersionRepository).findMaxVersionNo(31L);
+        ArgumentCaptor<Map<String, Object>> beforeCaptor = ArgumentCaptor.forClass(Map.class);
+        ArgumentCaptor<Map<String, Object>> afterCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(auditService).log(
+                eq("DOCUMENT_METADATA_UPDATED"), eq("DOCUMENT"), eq("31"),
+                beforeCaptor.capture(), afterCaptor.capture());
+        assertThat(beforeCaptor.getValue()).containsEntry("title", "Proposal").containsEntry("description", "Description");
+        assertThat(afterCaptor.getValue()).containsEntry("title", "Updated title").containsEntry("description", "Updated description");
+        verifyNoInteractions(notificationService);
+    }
+
+    @Test
+    void blankDescriptionIsStoredAsNullLikeCreateFlow() {
+        DocumentEntity document = document(31L, storedFile(101L, "PROJECT", actor));
+        UpdateDocumentRequest request = new UpdateDocumentRequest();
+        request.setTitle("Updated");
+        request.setDescription("   ");
+        when(documentRepository.findActiveByIdForUpdate(31L)).thenReturn(Optional.of(document));
+        when(projectAccessService.requireManage(project, EMAIL)).thenReturn(actor);
+        when(documentRepository.saveAndFlush(document)).thenReturn(document);
+        when(documentVersionRepository.findMaxVersionNo(31L)).thenReturn(1);
+        when(fileService.describe(101L, authentication)).thenReturn(fileResponse(101L, "PROJECT"));
+
+        DocumentResponse response = service.update(31L, request, authentication);
+
+        assertThat(response.getDescription()).isNull();
+        assertThat(document.getDescription()).isNull();
+    }
+
+    @Test
+    void rejectsInvalidMetadataBeforePersistence() {
+        DocumentEntity document = document(31L, storedFile(101L, "PROJECT", actor));
+        UpdateDocumentRequest request = new UpdateDocumentRequest();
+        request.setTitle(" ");
+        request.setDescription("ok");
+        when(documentRepository.findActiveByIdForUpdate(31L)).thenReturn(Optional.of(document));
+        when(projectAccessService.requireManage(project, EMAIL)).thenReturn(actor);
+
+        assertThatThrownBy(() -> service.update(31L, request, authentication))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+
+        verify(documentRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void managerAuthorizationIsRequiredForMetadataUpdate() {
+        DocumentEntity document = document(31L, storedFile(101L, "PROJECT", actor));
+        UpdateDocumentRequest request = new UpdateDocumentRequest();
+        request.setTitle("Updated");
+        doThrow(new ResponseStatusException(HttpStatus.FORBIDDEN, "manage required"))
+                .when(projectAccessService).requireManage(project, EMAIL);
+        when(documentRepository.findActiveByIdForUpdate(31L)).thenReturn(Optional.of(document));
+
+        assertThatThrownBy(() -> service.update(31L, request, authentication))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN));
+
+        assertThat(document.getTitle()).isEqualTo("Proposal");
+        verify(documentRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void rejectsMetadataThatExceedsDocumentConstraints() {
+        DocumentEntity document = document(31L, storedFile(101L, "PROJECT", actor));
+        when(documentRepository.findActiveByIdForUpdate(31L)).thenReturn(Optional.of(document));
+        when(projectAccessService.requireManage(project, EMAIL)).thenReturn(actor);
+
+        UpdateDocumentRequest longTitle = new UpdateDocumentRequest();
+        longTitle.setTitle("t".repeat(256));
+        longTitle.setDescription("ok");
+        assertThatThrownBy(() -> service.update(31L, longTitle, authentication))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+
+        UpdateDocumentRequest longDescription = new UpdateDocumentRequest();
+        longDescription.setTitle("Valid");
+        longDescription.setDescription("d".repeat(20_001));
+        assertThatThrownBy(() -> service.update(31L, longDescription, authentication))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+
+        verify(documentRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void deletedDocumentCannotBeUpdated() {
+        UpdateDocumentRequest request = new UpdateDocumentRequest();
+        request.setTitle("Updated");
+        when(documentRepository.findActiveByIdForUpdate(31L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.update(31L, request, authentication))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
+
+        verifyNoInteractions(projectAccessService, fileService, auditService);
     }
 
     private DocumentEntity document(Long id, StoredFileEntity file) {

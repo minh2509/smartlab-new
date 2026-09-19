@@ -2,6 +2,7 @@ package com.smartlab.service;
 
 import com.smartlab.dto.request.CreateDocumentRequest;
 import com.smartlab.dto.request.CreateDocumentVersionRequest;
+import com.smartlab.dto.request.UpdateDocumentRequest;
 import com.smartlab.dto.response.DocumentResponse;
 import com.smartlab.dto.response.DocumentVersionResponse;
 import org.springframework.security.core.Authentication;
@@ -14,6 +15,12 @@ public interface DocumentService {
     DocumentResponse create(
             Long projectId,
             CreateDocumentRequest request,
+            Authentication authentication
+    );
+
+    DocumentResponse update(
+            Long documentId,
+            UpdateDocumentRequest request,
             Authentication authentication
     );
 

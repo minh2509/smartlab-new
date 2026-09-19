@@ -3,6 +3,8 @@ package com.smartlab.service.impl;
 import com.smartlab.entity.StoredFileEntity;
 import com.smartlab.entity.UserEntity;
 import com.smartlab.entity.ProjectEntity;
+import com.smartlab.enums.ProjectStatus;
+import com.smartlab.enums.ProjectType;
 import com.smartlab.repo.DocumentRepository;
 import com.smartlab.repo.DocumentVersionRepository;
 import com.smartlab.repo.GalleryItemRepository;
@@ -15,6 +17,7 @@ import com.smartlab.repo.TaskAttachmentRepository;
 import com.smartlab.repo.UserRepository;
 import com.smartlab.service.ProjectAccessService;
 import com.smartlab.storage.FileStorage;
+import com.smartlab.storage.StorageException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,18 +30,24 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -113,6 +122,7 @@ class FileServiceImplTest {
         doThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Project not found"))
                 .when(projectAccessService).requireRead(project, "other@lab.test");
 
+        assertThat(service.canRead(7L, authentication("other@lab.test"))).isFalse();
         assertThatThrownBy(() -> service.download(7L, authentication("other@lab.test")))
                 .isInstanceOfSatisfying(ResponseStatusException.class,
                         exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN));
@@ -142,6 +152,7 @@ class FileServiceImplTest {
         when(projectAccessService.requireRead(project, owner.getEmail())).thenReturn(owner);
         when(fileStorage.download("drive-id")).thenReturn(new FileStorage.StoredFileContent(new byte[]{1, 2}));
 
+        assertThat(service.canRead(7L, authentication(owner.getEmail()))).isTrue();
         assertThat(service.download(7L, authentication(owner.getEmail())).content()).containsExactly(1, 2);
     }
 
@@ -198,6 +209,13 @@ class FileServiceImplTest {
     }
 
     @Test
+    void treatsLiveAvatarAsExternalToDocumentVisibilityChanges() {
+        when(memberProfileRepository.existsByAvatarFileId(18L)).thenReturn(true);
+
+        assertThat(service.hasExternalReferencesOutsideDocument(18L, 31L)).isTrue();
+    }
+
+    @Test
     void refusesToDeleteFileAttachedToAnActiveTask() {
         StoredFileEntity entity = storedFile(11L, "PROJECT");
         when(storedFileRepository.findByIdAndDeletedAtIsNull(11L)).thenReturn(Optional.of(entity));
@@ -225,6 +243,13 @@ class FileServiceImplTest {
     }
 
     @Test
+    void treatsResearchFieldCoverAsExternalToDocumentVisibilityChanges() {
+        when(researchFieldRepository.existsByCoverFile_Id(19L)).thenReturn(true);
+
+        assertThat(service.hasExternalReferencesOutsideDocument(19L, 31L)).isTrue();
+    }
+
+    @Test
     void allowsDeletionAfterResearchFieldCoverIsRemoved() {
         StoredFileEntity entity = storedFile(13L, "PUBLIC");
         when(storedFileRepository.findByIdAndDeletedAtIsNull(13L)).thenReturn(Optional.of(entity));
@@ -232,7 +257,7 @@ class FileServiceImplTest {
         service.delete(13L, owner.getEmail(), authentication(owner.getEmail()));
 
         verify(fileStorage).trash("drive-id");
-        verify(storedFileRepository).save(entity);
+        verify(storedFileRepository).saveAndFlush(entity);
         assertThat(entity.getDeletedAt()).isNotNull();
     }
 
@@ -279,6 +304,232 @@ class FileServiceImplTest {
                 "admin@lab.test", "n/a", List.of(new SimpleGrantedAuthority("ROLE_ADMIN")));
 
         assertThat(service.download(12L, admin).content()).containsExactly(3);
+    }
+
+    @Test
+    void standalonePublicFileCanBeDownloadedWithoutAuthentication() {
+        StoredFileEntity file = storedFile(30L, "PUBLIC");
+        when(storedFileRepository.findByIdAndDeletedAtIsNull(30L)).thenReturn(Optional.of(file));
+        when(fileStorage.download("drive-id")).thenReturn(new FileStorage.StoredFileContent(new byte[]{7}));
+
+        assertThat(service.canRead(30L, null)).isTrue();
+        assertThat(service.download(30L, null).content()).containsExactly(7);
+    }
+
+    @Test
+    void privateFileRejectsAnonymousDirectDownload() {
+        when(storedFileRepository.findByIdAndDeletedAtIsNull(31L))
+                .thenReturn(Optional.of(storedFile(31L, "PRIVATE")));
+
+        assertThat(service.canRead(31L, null)).isFalse();
+        assertThatThrownBy(() -> service.download(31L, null))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN));
+        verify(fileStorage, never()).download(any());
+    }
+
+    @Test
+    void publicFileBoundToPublicProjectAllowsAnonymousDirectDownload() {
+        StoredFileEntity file = storedFile(32L, "PUBLIC");
+        file.setProjectId(4L);
+        ProjectEntity project = publicProject();
+        when(storedFileRepository.findByIdAndDeletedAtIsNull(32L)).thenReturn(Optional.of(file));
+        lenient().when(projectRepository.findByIdAndDeletedAtIsNull(4L)).thenReturn(Optional.of(project));
+        when(fileStorage.download("drive-id")).thenReturn(new FileStorage.StoredFileContent(new byte[]{8}));
+
+        assertThat(project.getIsPublic()).isTrue();
+        assertThat(service.download(32L, null).content()).containsExactly(8);
+    }
+
+    @Test
+    void publicProjectFileMustStopAnonymousDirectAccessAfterProjectBecomesPrivate() {
+        StoredFileEntity file = storedFile(33L, "PUBLIC");
+        file.setProjectId(4L);
+        ProjectEntity project = publicProject();
+        project.updateCore(project.getCode(), project.getName(), null, null, project.getProjectType(),
+                project.getStatus(), project.getStartDate(), null, null, false, false);
+        when(storedFileRepository.findByIdAndDeletedAtIsNull(33L)).thenReturn(Optional.of(file));
+        lenient().when(projectRepository.findByIdAndDeletedAtIsNull(4L)).thenReturn(Optional.of(project));
+
+        assertThat(service.canRead(33L, null)).isFalse();
+        assertThatThrownBy(() -> service.download(33L, null))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN));
+        verify(fileStorage, never()).download(any());
+    }
+
+    @Test
+    void authenticatedProjectReaderCanDownloadPublicFileAfterProjectBecomesPrivate() {
+        StoredFileEntity file = storedFile(40L, "PUBLIC");
+        file.setProjectId(4L);
+        ProjectEntity project = publicProject();
+        project.updateCore(project.getCode(), project.getName(), null, null, project.getProjectType(),
+                project.getStatus(), project.getStartDate(), null, null, false, false);
+        when(storedFileRepository.findByIdAndDeletedAtIsNull(40L)).thenReturn(Optional.of(file));
+        when(projectRepository.findByIdAndDeletedAtIsNull(4L)).thenReturn(Optional.of(project));
+        when(projectAccessService.requireRead(project, owner.getEmail())).thenReturn(owner);
+        when(fileStorage.download("drive-id")).thenReturn(new FileStorage.StoredFileContent(new byte[]{9}));
+
+        assertThat(service.canRead(40L, authentication(owner.getEmail()))).isTrue();
+        assertThat(service.download(40L, authentication(owner.getEmail())).content()).containsExactly(9);
+        verify(projectAccessService, org.mockito.Mockito.times(2)).requireRead(project, owner.getEmail());
+    }
+
+    @Test
+    void unrelatedMemberCannotDownloadPublicFileAfterProjectBecomesPrivate() {
+        StoredFileEntity file = storedFile(41L, "PUBLIC");
+        file.setProjectId(4L);
+        ProjectEntity project = publicProject();
+        project.updateCore(project.getCode(), project.getName(), null, null, project.getProjectType(),
+                project.getStatus(), project.getStartDate(), null, null, false, false);
+        when(storedFileRepository.findByIdAndDeletedAtIsNull(41L)).thenReturn(Optional.of(file));
+        lenient().when(projectRepository.findByIdAndDeletedAtIsNull(4L)).thenReturn(Optional.of(project));
+        lenient().doThrow(new ResponseStatusException(HttpStatus.NOT_FOUND))
+                .when(projectAccessService).requireRead(project, "other@lab.test");
+
+        assertThat(service.canRead(41L, authentication("other@lab.test"))).isFalse();
+        assertThatThrownBy(() -> service.download(41L, authentication("other@lab.test")))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN));
+        verify(fileStorage, never()).download(any());
+    }
+
+    @Test
+    void publicProjectFileMustStopAnonymousDirectAccessAfterProjectDeletion() {
+        StoredFileEntity file = storedFile(34L, "PUBLIC");
+        file.setProjectId(4L);
+        ProjectEntity project = publicProject();
+        project.softDelete();
+        when(storedFileRepository.findByIdAndDeletedAtIsNull(34L)).thenReturn(Optional.of(file));
+        lenient().when(projectRepository.findByIdAndDeletedAtIsNull(4L)).thenReturn(Optional.empty());
+
+        assertThat(service.canRead(34L, null)).isFalse();
+        assertThatThrownBy(() -> service.download(34L, null))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN));
+        verify(fileStorage, never()).download(any());
+    }
+
+    @Test
+    void failedStorageTrashLeavesFileMetadataActive() {
+        StoredFileEntity file = storedFile(36L, "PRIVATE");
+        when(storedFileRepository.findByIdAndDeletedAtIsNull(36L)).thenReturn(Optional.of(file));
+        doThrow(new StorageException("storage unavailable")).when(fileStorage).trash("drive-id");
+
+        assertThatThrownBy(() -> service.delete(36L, owner.getEmail(), authentication(owner.getEmail())))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY));
+        assertThat(file.getDeletedAt()).isNull();
+        verify(storedFileRepository, never()).save(any());
+    }
+
+    @Test
+    void failedDatabaseSaveRestoresStoredBytes() {
+        StoredFileEntity file = storedFile(37L, "PRIVATE");
+        when(storedFileRepository.findByIdAndDeletedAtIsNull(37L)).thenReturn(Optional.of(file));
+        when(storedFileRepository.saveAndFlush(file)).thenThrow(new IllegalStateException("database write failed"));
+        AtomicBoolean trashed = new AtomicBoolean();
+        doAnswer(invocation -> { trashed.set(true); return null; }).when(fileStorage).trash("drive-id");
+        doAnswer(invocation -> { trashed.set(false); return null; }).when(fileStorage).restore("drive-id");
+
+        assertThatThrownBy(() -> service.delete(37L, owner.getEmail(), authentication(owner.getEmail())))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(trashed.get()).isFalse();
+        verify(fileStorage).trash("drive-id");
+        verify(fileStorage).restore("drive-id");
+    }
+
+    @Test
+    void transactionRollbackAfterDeleteMustLeaveStoredBytesAvailable() {
+        StoredFileEntity file = storedFile(38L, "PRIVATE");
+        when(storedFileRepository.findByIdAndDeletedAtIsNull(38L)).thenReturn(Optional.of(file));
+        AtomicBoolean trashed = new AtomicBoolean();
+        doAnswer(invocation -> { trashed.set(true); return null; }).when(fileStorage).trash("drive-id");
+        doAnswer(invocation -> { trashed.set(false); return null; }).when(fileStorage).restore("drive-id");
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            service.delete(38L, owner.getEmail(), authentication(owner.getEmail()));
+            verify(storedFileRepository).saveAndFlush(file);
+            assertThat(trashed.get()).isTrue();
+            for (TransactionSynchronization synchronization : TransactionSynchronizationManager.getSynchronizations()) {
+                synchronization.afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK);
+            }
+            assertThat(trashed.get()).isFalse();
+            verify(fileStorage).restore("drive-id");
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    void committedDeleteKeepsStorageTrashedAndMetadataSoftDeleted() {
+        StoredFileEntity file = storedFile(42L, "PRIVATE");
+        when(storedFileRepository.findByIdAndDeletedAtIsNull(42L)).thenReturn(Optional.of(file));
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            service.delete(42L, owner.getEmail(), authentication(owner.getEmail()));
+            for (TransactionSynchronization synchronization : TransactionSynchronizationManager.getSynchronizations()) {
+                synchronization.afterCompletion(TransactionSynchronization.STATUS_COMMITTED);
+            }
+            assertThat(file.getDeletedAt()).isNotNull();
+            verify(fileStorage).trash("drive-id");
+            verify(fileStorage, never()).restore("drive-id");
+            verify(storedFileRepository).saveAndFlush(file);
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    void databaseFailureInsideOuterTransactionRestoresOnlyOnRollback() {
+        StoredFileEntity file = storedFile(43L, "PRIVATE");
+        when(storedFileRepository.findByIdAndDeletedAtIsNull(43L)).thenReturn(Optional.of(file));
+        when(storedFileRepository.saveAndFlush(file)).thenThrow(new IllegalStateException("database write failed"));
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            assertThatThrownBy(() -> service.delete(43L, owner.getEmail(), authentication(owner.getEmail())))
+                    .isInstanceOf(IllegalStateException.class);
+            verify(fileStorage, never()).restore("drive-id");
+            for (TransactionSynchronization synchronization : TransactionSynchronizationManager.getSynchronizations()) {
+                synchronization.afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK);
+            }
+            verify(fileStorage).restore("drive-id");
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    void restoreFailurePreservesOriginalDatabaseFailure() {
+        StoredFileEntity file = storedFile(44L, "PRIVATE");
+        when(storedFileRepository.findByIdAndDeletedAtIsNull(44L)).thenReturn(Optional.of(file));
+        IllegalStateException databaseFailure = new IllegalStateException("database write failed");
+        when(storedFileRepository.saveAndFlush(file)).thenThrow(databaseFailure);
+        doThrow(new StorageException("restore failed")).when(fileStorage).restore("drive-id");
+
+        assertThatThrownBy(() -> service.delete(44L, owner.getEmail(), authentication(owner.getEmail())))
+                .isSameAs(databaseFailure)
+                .satisfies(failure -> assertThat(failure.getSuppressed()).hasSize(1));
+    }
+
+    @Test
+    void currentDocumentReferenceRejectsGenericFileDeletion() {
+        StoredFileEntity file = storedFile(39L, "PRIVATE");
+        when(storedFileRepository.findByIdAndDeletedAtIsNull(39L)).thenReturn(Optional.of(file));
+        when(documentRepository.existsByCurrentFile_IdAndDeletedAtIsNull(39L)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.delete(39L, owner.getEmail(), authentication(owner.getEmail())))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+        verify(fileStorage, never()).trash(any());
+    }
+
+    private ProjectEntity publicProject() {
+        ProjectEntity project = ProjectEntity.create("PUBLIC", "Public project", null, null,
+                ProjectType.RESEARCH, null, ProjectStatus.IN_PROGRESS, LocalDate.of(2026, 1, 1),
+                null, null, true, false, false, null);
+        ReflectionTestUtils.setField(project, "id", 4L);
+        return project;
     }
 
     private StoredFileEntity storedFile(Long id, String scope) {

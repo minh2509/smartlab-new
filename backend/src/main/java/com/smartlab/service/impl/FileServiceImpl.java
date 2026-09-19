@@ -20,6 +20,8 @@ import com.smartlab.service.ProjectAccessService;
 import com.smartlab.storage.FileStorage;
 import com.smartlab.storage.StorageException;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
@@ -48,6 +50,7 @@ import java.util.Set;
 @Service
 @RequiredArgsConstructor
 public class FileServiceImpl implements FileService, PostContentFileService {
+    private static final Logger log = LoggerFactory.getLogger(FileServiceImpl.class);
     private static final String PROVIDER = "GOOGLE_DRIVE";
     private static final Map<String, Set<String>> ALLOWED_FILE_TYPES = Map.ofEntries(
             Map.entry("image/jpeg", Set.of("jpg", "jpeg")),
@@ -225,6 +228,18 @@ public class FileServiceImpl implements FileService, PostContentFileService {
 
     @Override
     @Transactional(readOnly = true)
+    public boolean hasExternalReferencesOutsideDocument(Long fileId, Long documentId) {
+        return memberProfileRepository.existsByAvatarFileId(fileId)
+                || documentRepository.existsActiveCurrentReferenceOutsideDocument(fileId, documentId)
+                || documentVersionRepository.existsActiveReferenceOutsideDocument(fileId, documentId)
+                || taskAttachmentRepository.existsByFile_IdAndTask_DeletedAtIsNull(fileId)
+                || researchFieldRepository.existsByCoverFile_Id(fileId)
+                || achievementFileRepository.existsActiveReferenceForActiveAchievement(fileId)
+                || galleryItemRepository.existsByFile_IdAndDeletedAtIsNull(fileId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public java.util.Optional<FileMetadata> findActiveMetadata(Long fileId) {
         return storedFileRepository.findByIdAndDeletedAtIsNull(fileId)
                 .map(file -> new FileMetadata(
@@ -276,13 +291,48 @@ public class FileServiceImpl implements FileService, PostContentFileService {
         if (galleryItemRepository.existsByFile_IdAndDeletedAtIsNull(id)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "File is currently owned by a gallery item");
         }
+        String storageKey = entity.getStorageKey();
         try {
-            fileStorage.trash(entity.getStorageKey());
+            fileStorage.trash(storageKey);
         } catch (StorageException exception) {
+            restoreAfterFailure(storageKey, exception);
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, exception.getMessage(), exception);
         }
-        entity.setDeletedAt(Instant.now());
-        storedFileRepository.save(entity);
+        boolean synchronizedTransaction = TransactionSynchronizationManager.isSynchronizationActive();
+        if (synchronizedTransaction) {
+            try {
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                    @Override
+                    public void afterCompletion(int status) {
+                        if (status != TransactionSynchronization.STATUS_COMMITTED) {
+                            try {
+                                fileStorage.restore(storageKey);
+                            } catch (RuntimeException exception) {
+                                log.error("Unable to restore file after transaction rollback", exception);
+                            }
+                        }
+                    }
+                });
+            } catch (RuntimeException exception) {
+                restoreAfterFailure(storageKey, exception);
+                throw exception;
+            }
+        }
+        try {
+            entity.setDeletedAt(Instant.now());
+            storedFileRepository.saveAndFlush(entity);
+        } catch (RuntimeException exception) {
+            if (!synchronizedTransaction) restoreAfterFailure(storageKey, exception);
+            throw exception;
+        }
+    }
+
+    private void restoreAfterFailure(String storageKey, RuntimeException failure) {
+        try {
+            fileStorage.restore(storageKey);
+        } catch (RuntimeException restoreFailure) {
+            failure.addSuppressed(restoreFailure);
+        }
     }
 
     private StoredFileEntity findActive(Long id) {
@@ -297,13 +347,13 @@ public class FileServiceImpl implements FileService, PostContentFileService {
         } catch (IllegalArgumentException | NullPointerException exception) {
             return false;
         }
-        if (scope == FileAccessScope.PUBLIC) return true;
-        if (!isAuthenticated(authentication)) return false;
-        if (scope == FileAccessScope.LAB) return true;
-        if (scope == FileAccessScope.PROJECT) {
+        if (scope == FileAccessScope.PUBLIC && entity.getProjectId() == null) return true;
+        if (scope == FileAccessScope.PUBLIC || scope == FileAccessScope.PROJECT) {
             if (entity.getProjectId() == null) return false;
             return projectRepository.findByIdAndDeletedAtIsNull(entity.getProjectId())
                     .map(project -> {
+                        if (scope == FileAccessScope.PUBLIC && Boolean.TRUE.equals(project.getIsPublic())) return true;
+                        if (!isAuthenticated(authentication)) return false;
                         try {
                             projectAccessService.requireRead(project, authentication.getName());
                             return true;
@@ -313,6 +363,8 @@ public class FileServiceImpl implements FileService, PostContentFileService {
                     })
                     .orElse(false);
         }
+        if (!isAuthenticated(authentication)) return false;
+        if (scope == FileAccessScope.LAB) return true;
         if (isAdmin(authentication)) return true;
         if (scope == FileAccessScope.PRIVATE) {
             return entity.getOwnerUser() != null

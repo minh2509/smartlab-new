@@ -27,6 +27,8 @@ public interface FileService {
 
     DownloadedFile download(Long id, Authentication authentication);
 
+    boolean hasExternalReferencesOutsideDocument(Long fileId, Long documentId);
+
     void delete(Long id, String email, Authentication authentication);
 
     record DownloadedFile(byte[] content, String mimeType, String originalName) {

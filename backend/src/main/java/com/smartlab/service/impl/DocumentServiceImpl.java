@@ -2,6 +2,7 @@ package com.smartlab.service.impl;
 
 import com.smartlab.dto.request.CreateDocumentRequest;
 import com.smartlab.dto.request.CreateDocumentVersionRequest;
+import com.smartlab.dto.request.UpdateDocumentRequest;
 import com.smartlab.dto.response.DocumentResponse;
 import com.smartlab.dto.response.DocumentUserResponse;
 import com.smartlab.dto.response.DocumentVersionResponse;
@@ -33,8 +34,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
-import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -46,6 +47,7 @@ public class DocumentServiceImpl implements DocumentService {
     private static final String DOCUMENT_VERSION = "DOCUMENT_VERSION";
     private static final String DOCUMENT_CREATED = "DOCUMENT_CREATED";
     private static final String DOCUMENT_VERSION_CREATED = "DOCUMENT_VERSION_CREATED";
+    private static final String DOCUMENT_METADATA_UPDATED = "DOCUMENT_METADATA_UPDATED";
     private static final String DOCUMENT_DELETED = "DOCUMENT_DELETED";
     private static final String PROJECT_DOCUMENT_CREATED = "PROJECT_DOCUMENT_CREATED";
     private static final String PROJECT_DOCUMENT_VERSION_CREATED = "PROJECT_DOCUMENT_VERSION_CREATED";
@@ -132,6 +134,39 @@ public class DocumentServiceImpl implements DocumentService {
     }
 
     @Override
+    @Transactional
+    public DocumentResponse update(
+            Long documentId,
+            UpdateDocumentRequest request,
+            Authentication authentication
+    ) {
+        requireRequest(request);
+        DocumentEntity document = requireDocumentForUpdate(documentId);
+        projectAccessService.requireManage(document.getProject(), currentEmail(authentication));
+        String title = normalizeRequired(request.getTitle(), TITLE_MAX_LENGTH, "Document title");
+        String description = normalizeOptional(
+                request.getDescription(),
+                DESCRIPTION_MAX_LENGTH,
+                "Document description"
+        );
+        Map<String, Object> before = documentSnapshot(document);
+        document.updateMetadata(title, description);
+        DocumentEntity saved = documentRepository.saveAndFlush(document);
+        auditService.log(
+                DOCUMENT_METADATA_UPDATED,
+                DOCUMENT,
+                saved.getId().toString(),
+                before,
+                documentSnapshot(saved)
+        );
+        return toDocumentResponse(
+                saved,
+                documentVersionRepository.findMaxVersionNo(saved.getId()),
+                authentication
+        );
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public List<DocumentVersionResponse> listVersions(Long documentId, Authentication authentication) {
         DocumentEntity document = requireDocument(documentId);
@@ -212,6 +247,22 @@ public class DocumentServiceImpl implements DocumentService {
         fileService.describe(document.getCurrentFile().getId(), authentication);
         projectAccessService.requireManage(document.getProject(), currentEmail(authentication));
         Map<String, Object> before = documentSnapshot(document);
+        List<DocumentVersionEntity> versions = documentVersionRepository.findReadableCandidatesByDocumentId(documentId);
+        Map<Long, StoredFileEntity> files = new LinkedHashMap<>();
+        files.put(document.getCurrentFile().getId(), document.getCurrentFile());
+        versions.forEach(version -> files.put(version.getFile().getId(), version.getFile()));
+        for (Map.Entry<Long, StoredFileEntity> entry : files.entrySet()) {
+            if (FileAccessScope.PUBLIC.name().equals(entry.getValue().getAccessScope())
+                    && fileService.hasExternalReferencesOutsideDocument(entry.getKey(), documentId)) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "A document file is referenced by another active resource"
+                );
+            }
+        }
+        files.values().stream()
+                .filter(file -> FileAccessScope.PUBLIC.name().equals(file.getAccessScope()))
+                .forEach(file -> file.setAccessScope(FileAccessScope.PRIVATE.name()));
         document.softDelete();
         DocumentEntity saved = documentRepository.saveAndFlush(document);
         auditService.log(DOCUMENT_DELETED, DOCUMENT, saved.getId().toString(), before, documentSnapshot(saved));

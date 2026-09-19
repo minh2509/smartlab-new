@@ -2,6 +2,7 @@ package com.smartlab.controller;
 
 import com.smartlab.dto.request.CreateDocumentRequest;
 import com.smartlab.dto.request.CreateDocumentVersionRequest;
+import com.smartlab.dto.request.UpdateDocumentRequest;
 import com.smartlab.dto.response.DocumentResponse;
 import com.smartlab.dto.response.DocumentVersionResponse;
 import com.smartlab.dto.response.FileResponse;
@@ -30,6 +31,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -129,6 +131,37 @@ class DocumentControllerTest {
                 .andExpect(status().isNoContent());
 
         verify(documentService).delete(31L, AUTHENTICATION);
+    }
+
+    @Test
+    void updatesDocumentMetadataAndReturnsAuthoritativeResponse() throws Exception {
+        when(documentService.update(eq(31L), any(UpdateDocumentRequest.class), eq(AUTHENTICATION)))
+                .thenReturn(documentResponse());
+
+        mockMvc.perform(patch("/documents/31")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"Updated\",\"description\":\"New description\"}")
+                        .principal(AUTHENTICATION))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(31))
+                .andExpect(jsonPath("$.title").value("Proposal"))
+                .andExpect(jsonPath("$.currentFile.id").value(101));
+
+        ArgumentCaptor<UpdateDocumentRequest> captor = ArgumentCaptor.forClass(UpdateDocumentRequest.class);
+        verify(documentService).update(eq(31L), captor.capture(), eq(AUTHENTICATION));
+        assertThat(captor.getValue().getTitle()).isEqualTo("Updated");
+        assertThat(captor.getValue().getDescription()).isEqualTo("New description");
+    }
+
+    @Test
+    void rejectsMetadataUpdateWithoutTitleBeforeService() throws Exception {
+        mockMvc.perform(patch("/documents/31")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"description\":\"New description\"}")
+                        .principal(AUTHENTICATION))
+                .andExpect(status().isBadRequest());
+
+        verify(documentService, never()).update(any(), any(), any());
     }
 
     @Test
