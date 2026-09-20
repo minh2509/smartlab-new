@@ -60,16 +60,35 @@
 }
 
 .project-membership-history-list {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .project-membership-history-row {
   cursor: default;
+  opacity: 0.95;
+}
+
+.project-membership-history-row:hover {
+  opacity: 1;
 }
 
 .project-membership-history-row .project-management-row-main {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 3px;
+  min-width: 0;
+}
+
+.project-membership-history-row .project-management-row-meta {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+.project-history-dates {
+  color: var(--text-2);
+  font-size: 12px;
 }
 
 .project-join-review {
@@ -198,6 +217,47 @@
   transform: translateY(-1px);
 }
 
+.project-management-row.clickable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.project-management-row.clickable:hover {
+  border-color: color-mix(in srgb, var(--brand-1, #e06d10) 40%, var(--line-2, #E2DBD0));
+  background: color-mix(in srgb, var(--brand-1, #e06d10) 3%, var(--surface));
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+}
+
+.project-management-row.clickable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.project-row-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--brand-1, #e06d10) 10%, var(--surface-2));
+  color: var(--brand-1, #e06d10);
+  border: 1px solid color-mix(in srgb, var(--brand-1, #e06d10) 22%, transparent);
+  transition: transform 150ms ease, background 150ms ease, border-color 150ms ease;
+}
+
+.project-management-row.clickable:hover .project-row-icon {
+  transform: scale(1.05);
+  background: color-mix(in srgb, var(--brand-1, #e06d10) 16%, var(--surface-2));
+  border-color: color-mix(in srgb, var(--brand-1, #e06d10) 35%, transparent);
+}
+
+.project-row-icon-muted {
+  background: var(--surface-2);
+  color: var(--text-3);
+  border-color: var(--line);
+}
+
 .project-management-row .member-avatar {
   display: grid;
   place-items: center;
@@ -218,12 +278,12 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 
 .project-management-row-title {
   color: var(--text-1);
-  font-size: 14.5px;
+  font-size: 15px;
   font-weight: 650;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -236,6 +296,7 @@
   gap: 6px;
   color: var(--text-2);
   font-size: 12px;
+  flex-wrap: wrap;
 }
 
 .project-code-tag {
@@ -256,11 +317,58 @@
   font-weight: 700;
 }
 
+.project-meta-leader {
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.project-meta-leader strong {
+  color: var(--text-1);
+  font-weight: 600;
+}
+
+.project-meta-recruiting {
+  display: inline-flex;
+  align-items: center;
+  color: var(--ok, #059669);
+  font-weight: 600;
+  font-size: 11.5px;
+}
+
 .project-management-row-badges {
   display: flex;
   flex: none;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+.project-management-row-badges .badge {
+  white-space: nowrap;
+  font-size: 11.5px;
+  padding: 4px 8px;
+}
+
+.project-role-badge.leader {
+  color: #4338ca;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+}
+
+.project-role-badge.member {
+  color: #0f766e;
+  background: #f0fdfa;
+  border: 1px solid #99f6e4;
+}
+
+.project-status-badge.proposed {
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+}
+
+.project-status-text {
+  font-weight: 600;
 }
 
 .project-management-row-actions {

@@ -125,7 +125,7 @@ export function ProjectManagementPage() {
   const createDialogRef = useRef<HTMLDialogElement>(null)
   const createTriggerRef = useRef<HTMLButtonElement>(null)
   const projectDialogRef = useRef<HTMLDialogElement>(null)
-  const projectDialogTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const projectDialogTriggerRef = useRef<HTMLElement | null>(null)
 
   const isAdmin = Boolean(profile?.roles.includes('ADMIN'))
   const hasProjectManage = Boolean(profile?.permissions.includes('PROJECT_MANAGE'))
@@ -334,9 +334,9 @@ export function ProjectManagementPage() {
     clearFeedback()
   }
 
-  function openProjectDialog(project: Project, trigger: HTMLButtonElement) {
+  function openProjectDialog(project: Project, trigger?: HTMLElement | null) {
     if (isBusy) return
-    projectDialogTriggerRef.current = trigger
+    projectDialogTriggerRef.current = trigger ?? null
     setSelectedId(project.id)
     setEditForm(toCoreForm(project))
     setActiveTab('overview')
@@ -625,10 +625,28 @@ export function ProjectManagementPage() {
                 <div className="project-management-list">
                   {pagedProjects.map((project) => {
                     const membership = membershipByProjectId.get(project.id)
+                    const isResearch = project.projectType === 'RESEARCH'
                     return (
-                    <article className="project-management-row" key={project.id}>
-                      <span className="member-avatar" aria-hidden="true">
-                        {project.code.slice(0, 2).toUpperCase()}
+                    <article
+                      className="project-management-row clickable"
+                      key={project.id}
+                      tabIndex={0}
+                      role="button"
+                      aria-label={`Chi tiết dự án ${project.name}`}
+                      onClick={(event) => {
+                        if ((event.target as HTMLElement).closest('button')) return
+                        openProjectDialog(project, event.currentTarget)
+                      }}
+                      onKeyDown={(event) => {
+                        if ((event.target as HTMLElement).closest('button')) return
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault()
+                          openProjectDialog(project, event.currentTarget)
+                        }
+                      }}
+                    >
+                      <span className="project-row-icon" aria-hidden="true">
+                        {isResearch ? <FlaskConical size={18} /> : <FolderKanban size={18} />}
                       </span>
                       <div className="project-management-row-main">
                         <strong className="project-management-row-title">{project.name}</strong>
@@ -636,14 +654,26 @@ export function ProjectManagementPage() {
                           <span className="project-code-tag">{project.code}</span>
                           <span className="project-meta-sep">·</span>
                           <span>{PROJECT_TYPE_LABELS[project.projectType]}</span>
+                          {project.primaryLeader ? (
+                            <>
+                              <span className="project-meta-sep">·</span>
+                              <span className="project-meta-leader">Leader: <strong>{project.primaryLeader.name}</strong></span>
+                            </>
+                          ) : null}
+                          {project.isRecruiting ? (
+                            <>
+                              <span className="project-meta-sep">·</span>
+                              <span className="project-meta-recruiting">Đang tuyển thành viên</span>
+                            </>
+                          ) : null}
                         </div>
                       </div>
                       <div className="project-management-row-badges">
-                        <span className={`badge ${PROJECT_STATUS_BADGES[project.status]}`}>
+                        <span className={`badge ${project.status === 'PROPOSED' ? 'project-status-badge proposed' : PROJECT_STATUS_BADGES[project.status]}`}>
                           {PROJECT_STATUS_LABELS[project.status]}
                         </span>
                         {membership ? (
-                          <span className={`badge ${membership.projectRole === 'LEADER' ? 'info' : 'success'}`}>
+                          <span className={`badge project-role-badge ${membership.projectRole === 'LEADER' ? 'leader' : 'member'}`}>
                             {membership.projectRole === 'LEADER' ? 'Leader' : 'Thành viên'}
                           </span>
                         ) : null}
@@ -1152,34 +1182,36 @@ function MembershipHistoryPanel({ memberships }: { memberships: ProjectMembershi
       <div className="panel-head">
         <div>
           <h2 id="project-membership-history-title">Lịch sử tham gia</h2>
-          <p>Các membership đã chuyển sang REMOVED vẫn được giữ lại cho riêng bạn.</p>
+          <p>Lịch sử các dự án bạn đã từng tham gia trước đây.</p>
         </div>
         <History size={20} aria-hidden="true" />
       </div>
 
       {memberships.length ? (
-        <div className="field-admin-list project-membership-history-list">
+        <div className="project-membership-history-list">
           {memberships.map((membership) => (
             <article
               className="project-management-row project-membership-history-row"
               key={`${membership.projectId}-${membership.joinedAt}`}
             >
-              <span className="member-avatar" aria-hidden="true">{membership.projectCode.slice(0, 2).toUpperCase()}</span>
+              <span className="project-row-icon project-row-icon-muted" aria-hidden="true">
+                <History size={18} />
+              </span>
               <div className="project-management-row-main">
                 <strong className="project-management-row-title">{membership.projectName}</strong>
                 <div className="project-management-row-meta">
                   <span className="project-code-tag">{membership.projectCode}</span>
                   <span className="project-meta-sep">·</span>
-                  <span>{PROJECT_STATUS_LABELS[membership.projectStatus]}</span>
+                  <span className="project-status-text">{PROJECT_STATUS_LABELS[membership.projectStatus]}</span>
                   <span className="project-meta-sep">·</span>
-                  <span>
-                    Tham gia {formatDateTime(membership.joinedAt)}
-                    {membership.removedAt ? ` · Rời dự án ${formatDateTime(membership.removedAt)}` : ''}
+                  <span className="project-history-dates">
+                    Tham gia: {formatDateTime(membership.joinedAt)}
+                    {membership.removedAt ? ` · Rời dự án: ${formatDateTime(membership.removedAt)}` : ''}
                   </span>
                 </div>
               </div>
               <div className="project-management-row-badges">
-                <span className={`badge ${membership.projectRole === 'LEADER' ? 'info' : 'success'}`}>
+                <span className={`badge project-role-badge ${membership.projectRole === 'LEADER' ? 'leader' : 'member'}`}>
                   {membership.projectRole === 'LEADER' ? 'Leader' : 'Thành viên'}
                 </span>
                 <span className="badge danger">Đã rời dự án</span>
@@ -1190,7 +1222,7 @@ function MembershipHistoryPanel({ memberships }: { memberships: ProjectMembershi
       ) : (
         <EmptyState
           title="Chưa có lịch sử đã rời dự án"
-          description="Khi membership của bạn chuyển sang REMOVED, thông tin tham gia sẽ xuất hiện tại đây."
+          description="Khi bạn kết thúc tham gia một dự án, thông tin lịch sử sẽ xuất hiện tại đây."
         />
       )}
     </section>
