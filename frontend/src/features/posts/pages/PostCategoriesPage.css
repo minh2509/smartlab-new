@@ -47,12 +47,20 @@
 
 .post-category-table {
   width: 100%;
-  min-width: 620px;
+  min-width: 820px;
   border-collapse: collapse;
 }
 
 .post-category-table th:nth-child(1) { width: 28%; }
 .post-category-table th:nth-child(2) { width: 25%; }
+
+.post-category-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  white-space: nowrap;
+}
 
 .post-category-table th,
 .post-category-table td {

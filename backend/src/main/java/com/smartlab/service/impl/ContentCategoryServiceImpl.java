@@ -29,6 +29,14 @@ public class ContentCategoryServiceImpl implements ContentCategoryService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<ContentCategoryResponse> getAllCategories() {
+        return contentCategoryRepository.findAllByOrderByIdAsc().stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
+    @Override
     @Transactional
     public ContentCategoryResponse createCategory(CreateContentCategoryRequest request) {
         String code = request.getCode().trim().toUpperCase(Locale.ROOT);
@@ -52,6 +60,24 @@ public class ContentCategoryServiceImpl implements ContentCategoryService {
         }
     }
 
+    @Override
+    @Transactional
+    public ContentCategoryResponse setCategoryActive(Long id, boolean active) {
+        ContentCategoryEntity category = contentCategoryRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found"));
+        category.setActive(active);
+        return toResponse(contentCategoryRepository.saveAndFlush(category));
+    }
+
+    @Override
+    @Transactional
+    public void deleteCategory(Long id) {
+        ContentCategoryEntity category = contentCategoryRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found"));
+        contentCategoryRepository.delete(category);
+        contentCategoryRepository.flush();
+    }
+
     private String normalizeOptional(String value) {
         if (value == null) return null;
         String normalized = value.trim();
@@ -64,6 +90,7 @@ public class ContentCategoryServiceImpl implements ContentCategoryService {
                 .code(category.getCode())
                 .name(category.getName())
                 .description(category.getDescription())
+                .isActive(category.getIsActive())
                 .build();
     }
 }

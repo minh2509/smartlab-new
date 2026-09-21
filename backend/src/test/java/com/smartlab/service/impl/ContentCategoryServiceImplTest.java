@@ -116,6 +116,18 @@ class ContentCategoryServiceImplTest {
     }
 
     @Test
+    void returnsActiveAndInactiveCategoriesForAdmin() {
+        when(contentCategoryRepository.findAllByOrderByIdAsc()).thenReturn(List.of(
+                category(2L, "NEWS", "News", null),
+                ContentCategoryEntity.builder().id(3L).code("OLD").name("Old").isActive(false).build()
+        ));
+
+        assertThat(contentCategoryService.getAllCategories())
+                .extracting(ContentCategoryResponse::getId, ContentCategoryResponse::getIsActive)
+                .containsExactly(tuple(2L, true), tuple(3L, false));
+    }
+
+    @Test
     void normalizesCategoryFieldsBeforeCheckingAndSaving() {
         CreateContentCategoryRequest request = request("  member_blog  ", "  Member Blog  ", "  Member updates  ");
         when(contentCategoryRepository.existsByCodeIgnoreCase("MEMBER_BLOG")).thenReturn(false);
@@ -149,6 +161,48 @@ class ContentCategoryServiceImplTest {
         assertThatThrownBy(() -> contentCategoryService.createCategory(request))
                 .isInstanceOfSatisfying(ResponseStatusException.class,
                         exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+    }
+
+    @Test
+    void updatesCategoryActiveStatus() {
+        ContentCategoryEntity category = category(3L, "NEWS", "News", null);
+        when(contentCategoryRepository.findById(3L)).thenReturn(java.util.Optional.of(category));
+        when(contentCategoryRepository.saveAndFlush(category)).thenReturn(category);
+
+        ContentCategoryResponse response = contentCategoryService.setCategoryActive(3L, false);
+
+        assertThat(response.getIsActive()).isFalse();
+        assertThat(category.getIsActive()).isFalse();
+    }
+
+    @Test
+    void rejectsActiveUpdateForMissingCategory() {
+        when(contentCategoryRepository.findById(99L)).thenReturn(java.util.Optional.empty());
+
+        assertThatThrownBy(() -> contentCategoryService.setCategoryActive(99L, true))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
+    }
+
+    @Test
+    void deletesExistingCategory() {
+        ContentCategoryEntity category = category(3L, "NEWS", "News", null);
+        when(contentCategoryRepository.findById(3L)).thenReturn(java.util.Optional.of(category));
+
+        contentCategoryService.deleteCategory(3L);
+
+        verify(contentCategoryRepository).delete(category);
+        verify(contentCategoryRepository).flush();
+    }
+
+    @Test
+    void rejectsDeleteForMissingCategory() {
+        when(contentCategoryRepository.findById(99L)).thenReturn(java.util.Optional.empty());
+
+        assertThatThrownBy(() -> contentCategoryService.deleteCategory(99L))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
+        verify(contentCategoryRepository, never()).delete(any());
     }
 
     private static ContentCategoryEntity category(Long id, String code, String name, String description) {

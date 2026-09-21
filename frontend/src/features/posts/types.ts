@@ -58,6 +58,7 @@ export type PostContentDocument = {
 
 export type ContentCategory = PostCategory & {
   description: string | null
+  isActive: boolean
 }
 
 export type CreateContentCategoryRequest = {

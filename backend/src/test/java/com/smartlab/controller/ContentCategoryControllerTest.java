@@ -22,6 +22,8 @@ import static org.mockito.Mockito.when;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -103,6 +105,39 @@ class ContentCategoryControllerTest {
     }
 
     @Test
+    void getsAllCategoriesForAdmin() throws Exception {
+        when(contentCategoryService.getAllCategories()).thenReturn(List.of(
+                ContentCategoryResponse.builder().id(3L).code("NEWS").name("News").isActive(false).build()
+        ));
+
+        mockMvc.perform(get("/admin/content-categories"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(3))
+                .andExpect(jsonPath("$[0].isActive").value(false));
+    }
+
+    @Test
+    void updatesCategoryActiveStatus() throws Exception {
+        when(contentCategoryService.setCategoryActive(3L, false)).thenReturn(
+                ContentCategoryResponse.builder().id(3L).code("NEWS").name("News").isActive(false).build()
+        );
+
+        mockMvc.perform(patch("/admin/content-categories/3/active").param("active", "false"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.isActive").value(false));
+
+        verify(contentCategoryService).setCategoryActive(3L, false);
+    }
+
+    @Test
+    void deletesCategoryWithNoContentResponse() throws Exception {
+        mockMvc.perform(delete("/admin/content-categories/3"))
+                .andExpect(status().isNoContent());
+
+        verify(contentCategoryService).deleteCategory(3L);
+    }
+
+    @Test
     void rejectsInvalidCreateRequest() throws Exception {
         mockMvc.perform(post("/admin/content-categories")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -127,8 +162,8 @@ class ContentCategoryControllerTest {
     }
 
     @Test
-    void hasNoExtraCategoryPostRoute() throws Exception {
+    void rejectsPostAgainstCategoryIdRoute() throws Exception {
         mockMvc.perform(post("/admin/content-categories/extra"))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isMethodNotAllowed());
     }
 }

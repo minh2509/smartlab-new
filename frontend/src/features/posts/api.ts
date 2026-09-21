@@ -115,6 +115,24 @@ export function createContentCategory(token: string, request: CreateContentCateg
   })
 }
 
+export function listAdminContentCategories(token: string) {
+  return apiClient<ContentCategory[]>('/admin/content-categories', { token })
+}
+
+export function setContentCategoryActive(token: string, id: number, active: boolean) {
+  return apiClient<ContentCategory>(`/admin/content-categories/${encodeURIComponent(String(id))}/active?active=${active}`, {
+    method: 'PATCH',
+    token,
+  })
+}
+
+export function deleteContentCategory(token: string, id: number) {
+  return apiClient<void>(`/admin/content-categories/${encodeURIComponent(String(id))}`, {
+    method: 'DELETE',
+    token,
+  })
+}
+
 export function createPost(token: string, request: CreatePostRequest) {
   return apiClient<PostDetail>('/posts', {
     method: 'POST',

@@ -1,10 +1,11 @@
-import { type FormEvent, useCallback, useEffect, useState } from 'react'
-import { Plus, Tags } from 'lucide-react'
+import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
+import { Plus, Tags, Trash2 } from 'lucide-react'
 import { EmptyState } from '../../../shared/components/EmptyState'
 import { Feedback } from '../../../shared/components/Feedback'
+import { Pagination } from '../../../shared/components/Pagination'
 import { useToast } from '../../../shared/toast/useToast'
 import { useAuth } from '../../auth/authContext'
-import { createContentCategory, listContentCategories } from '../api'
+import { createContentCategory, deleteContentCategory, listAdminContentCategories, setContentCategoryActive } from '../api'
 import type { ContentCategory } from '../types'
 import './PostCategoriesPage.css'
 
@@ -15,6 +16,7 @@ type CategoryForm = {
 }
 
 const EMPTY_FORM: CategoryForm = { code: '', name: '', description: '' }
+const PAGE_SIZE = 6
 
 export function PostCategoriesPage() {
   const { token } = useAuth()
@@ -25,13 +27,15 @@ export function PostCategoriesPage() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
+  const [page, setPage] = useState(1)
+  const [mutatingId, setMutatingId] = useState<number | null>(null)
 
   const loadCategories = useCallback(async () => {
     if (!token) return
     setLoading(true)
     setError(null)
     try {
-      setCategories(await listContentCategories(token))
+      setCategories(await listAdminContentCategories(token))
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : 'Không thể tải danh mục bài viết.')
     } finally {
@@ -42,6 +46,16 @@ export function PostCategoriesPage() {
   useEffect(() => {
     void loadCategories()
   }, [loadCategories])
+
+  const totalPages = Math.max(1, Math.ceil(categories.length / PAGE_SIZE))
+  const pagedCategories = useMemo(
+    () => categories.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [categories, page],
+  )
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages)
+  }, [page, totalPages])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -64,13 +78,45 @@ export function PostCategoriesPage() {
         name,
         description: description || null,
       })
-      setCategories((current) => [...current, created])
+      const nextCategories = [...categories, created]
+      setCategories(nextCategories)
+      setPage(Math.ceil(nextCategories.length / PAGE_SIZE))
       setForm(EMPTY_FORM)
       toast.success('Đã tạo danh mục', created.name)
     } catch (reason: unknown) {
       setFormError(reason instanceof Error ? reason.message : 'Không thể tạo danh mục bài viết.')
     } finally {
       setBusy(false)
+    }
+  }
+
+  async function handleToggleActive(category: ContentCategory) {
+    if (!token || mutatingId !== null) return
+    setMutatingId(category.id)
+    setError(null)
+    try {
+      const updated = await setContentCategoryActive(token, category.id, !category.isActive)
+      setCategories((current) => current.map((item) => item.id === updated.id ? updated : item))
+      toast.success(updated.isActive ? 'Đã kích hoạt danh mục' : 'Đã tắt danh mục', updated.name)
+    } catch (reason: unknown) {
+      setError(reason instanceof Error ? reason.message : 'Không thể đổi trạng thái danh mục.')
+    } finally {
+      setMutatingId(null)
+    }
+  }
+
+  async function handleDelete(category: ContentCategory) {
+    if (!token || mutatingId !== null || !window.confirm(`Xóa vĩnh viễn danh mục “${category.name}”? Các bài viết đang dùng danh mục này sẽ được chuyển về không có danh mục.`)) return
+    setMutatingId(category.id)
+    setError(null)
+    try {
+      await deleteContentCategory(token, category.id)
+      setCategories((current) => current.filter((item) => item.id !== category.id))
+      toast.success('Đã xóa danh mục', category.name)
+    } catch (reason: unknown) {
+      setError(reason instanceof Error ? reason.message : 'Không thể xóa danh mục.')
+    } finally {
+      setMutatingId(null)
     }
   }
 
@@ -144,8 +190,8 @@ export function PostCategoriesPage() {
         <section className="panel post-category-list" aria-labelledby="post-category-list-title">
           <div className="panel-head">
             <div>
-              <h2 id="post-category-list-title">Danh mục đang hoạt động</h2>
-              <p>Chỉ các danh mục trong danh sách này xuất hiện ở trình soạn thảo.</p>
+              <h2 id="post-category-list-title">Danh mục đang quản lý</h2>
+              <p>Danh mục đang hoạt động sẽ xuất hiện trong trình soạn thảo bài viết.</p>
             </div>
           </div>
           <Feedback error={error ?? undefined} />
@@ -154,20 +200,34 @@ export function PostCategoriesPage() {
             <EmptyState title="Chưa có danh mục" description="Tạo danh mục đầu tiên bằng biểu mẫu bên cạnh." />
           ) : null}
           {!loading && categories.length > 0 ? (
-            <div className="post-category-table-wrap">
-              <table className="table post-category-table">
-                <thead><tr><th>Tên</th><th>Mã</th><th>Mô tả</th></tr></thead>
-                <tbody>
-                  {categories.map((category) => (
-                    <tr key={category.id}>
-                      <td><strong>{category.name}</strong></td>
-                      <td><code>{category.code}</code></td>
-                      <td>{category.description || <span className="muted">Không có mô tả</span>}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <>
+              <div className="post-category-table-wrap">
+                <table className="table post-category-table">
+                  <thead><tr><th>Tên</th><th>Mã</th><th>Mô tả</th><th>Trạng thái</th><th aria-label="Thao tác" /></tr></thead>
+                  <tbody>
+                    {pagedCategories.map((category) => (
+                      <tr key={category.id}>
+                        <td><strong>{category.name}</strong></td>
+                        <td><code>{category.code}</code></td>
+                        <td>{category.description || <span className="muted">Không có mô tả</span>}</td>
+                        <td><span className={`badge ${category.isActive ? 'success' : 'danger'}`}>{category.isActive ? 'Đang hoạt động' : 'Đã tắt'}</span></td>
+                        <td>
+                          <div className="post-category-actions">
+                            <button className="btn ghost table-btn" type="button" disabled={mutatingId !== null} onClick={() => void handleToggleActive(category)}>
+                              {category.isActive ? 'Tắt' : 'Kích hoạt'}
+                            </button>
+                            <button className="icon-btn danger" type="button" disabled={mutatingId !== null} onClick={() => void handleDelete(category)} aria-label={`Xóa danh mục ${category.name}`} title="Xóa vĩnh viễn">
+                              <Trash2 size={15} aria-hidden="true" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <Pagination page={page} totalPages={totalPages} onChange={setPage} />
+            </>
           ) : null}
         </section>
       </div>
