@@ -1,4 +1,5 @@
 import {
+  ArrowUp,
   Calendar,
   ChevronDown,
   ChevronUp,
@@ -30,15 +31,15 @@ const LOAD_MORE_BATCH_SIZE = 6
 
 type FilterValue = 'ALL' | string
 
-type StatusTabKey = 'ALL' | PublicProjectStatus
+type StatusTabKey = PublicProjectStatus
 
 interface StatusTabConfig {
   key: StatusTabKey
   label: string
 }
 
+// 4 explicit status tabs (no ALL)
 const STATUS_TABS: StatusTabConfig[] = [
-  { key: 'ALL', label: 'Tất cả' },
   { key: 'RECRUITING', label: 'Đang tuyển' },
   { key: 'UPCOMING', label: 'Sắp triển khai' },
   { key: 'ACTIVE', label: 'Đang thực hiện' },
@@ -57,9 +58,8 @@ export function ProjectListPage() {
   const [availableYears, setAvailableYears] = useState<number[]>([])
   const [reloadKey, setReloadKey] = useState(0)
 
-  // Status counts for folder tabs
+  // Status counts for the 4 folder tabs
   const [tabCounts, setTabCounts] = useState<Record<StatusTabKey, number | null>>({
-    ALL: null,
     RECRUITING: null,
     UPCOMING: null,
     ACTIVE: null,
@@ -69,14 +69,12 @@ export function ProjectListPage() {
   // Collapsible controls for sidebar
   const [isYearExpanded, setIsYearExpanded] = useState(false)
   const [isFieldFilterOpen, setIsFieldFilterOpen] = useState(true)
+  const [showScrollTop, setShowScrollTop] = useState(false)
 
   const query = searchParams.get('q') ?? ''
   const typeFilter = asProjectType(searchParams.get('projectType'))
-  // Default to RECRUITING if not specified in searchParams
-  const statusFilterRaw = searchParams.get('status')
-  const statusFilter: StatusTabKey = statusFilterRaw
-    ? (statusFilterRaw === 'ALL' ? 'ALL' : asPublicProjectStatus(statusFilterRaw))
-    : 'RECRUITING'
+  // Default to RECRUITING (4 statuses, no 'ALL')
+  const statusFilter: PublicProjectStatus = asPublicProjectStatus(searchParams.get('status'))
   const fieldFilter = searchParams.get('field') ?? 'ALL'
   const yearFilter = searchParams.get('year') ?? 'ALL'
 
@@ -151,6 +149,16 @@ export function ProjectListPage() {
     ]
   }, [displayYears, yearFilter])
 
+  // Scroll listener for "Cuộn lên đầu trang" button
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowScrollTop(window.scrollY > 200)
+    }
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    handleScroll()
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
+
   // Initial fetch when filters change (resets project list to first 6 items)
   useEffect(() => {
     const controller = new AbortController()
@@ -163,7 +171,7 @@ export function ProjectListPage() {
       query,
       researchFieldCode: fieldFilter === 'ALL' ? undefined : fieldFilter,
       projectType: typeFilter === 'ALL' ? undefined : typeFilter,
-      status: statusFilter === 'ALL' ? undefined : statusFilter,
+      status: statusFilter,
       year: selectedYearNum,
     }, controller.signal)
       .then((result) => {
@@ -185,7 +193,7 @@ export function ProjectListPage() {
     return () => controller.abort()
   }, [fieldFilter, query, reloadKey, statusFilter, typeFilter, yearFilter])
 
-  // Fetch tab counts in background
+  // Fetch tab counts for the 4 status tabs in background
   useEffect(() => {
     const controller = new AbortController()
     const selectedYearNum = yearFilter !== 'ALL' && !Number.isNaN(Number(yearFilter)) ? Number(yearFilter) : undefined
@@ -197,7 +205,6 @@ export function ProjectListPage() {
     }
 
     Promise.allSettled([
-      listPublicProjects(0, 1, { ...baseFilters }, controller.signal),
       listPublicProjects(0, 1, { ...baseFilters, status: 'RECRUITING' }, controller.signal),
       listPublicProjects(0, 1, { ...baseFilters, status: 'UPCOMING' }, controller.signal),
       listPublicProjects(0, 1, { ...baseFilters, status: 'ACTIVE' }, controller.signal),
@@ -205,18 +212,17 @@ export function ProjectListPage() {
     ]).then((results) => {
       if (controller.signal.aborted) return
       setTabCounts({
-        ALL: results[0].status === 'fulfilled' ? results[0].value.totalElements : null,
-        RECRUITING: results[1].status === 'fulfilled' ? results[1].value.totalElements : null,
-        UPCOMING: results[2].status === 'fulfilled' ? results[2].value.totalElements : null,
-        ACTIVE: results[3].status === 'fulfilled' ? results[3].value.totalElements : null,
-        COMPLETED: results[4].status === 'fulfilled' ? results[4].value.totalElements : null,
+        RECRUITING: results[0].status === 'fulfilled' ? results[0].value.totalElements : null,
+        UPCOMING: results[1].status === 'fulfilled' ? results[1].value.totalElements : null,
+        ACTIVE: results[2].status === 'fulfilled' ? results[2].value.totalElements : null,
+        COMPLETED: results[3].status === 'fulfilled' ? results[3].value.totalElements : null,
       })
     })
 
     return () => controller.abort()
   }, [fieldFilter, query, reloadKey, typeFilter, yearFilter])
 
-  // Incremental Load More: load 2 more projects and append to list
+  // Incremental Load More: load 6 more projects and append to list
   const handleLoadMore = useCallback(() => {
     if (loadingMore || projects.length >= totalElements) return
 
@@ -229,7 +235,7 @@ export function ProjectListPage() {
       query,
       researchFieldCode: fieldFilter === 'ALL' ? undefined : fieldFilter,
       projectType: typeFilter === 'ALL' ? undefined : typeFilter,
-      status: statusFilter === 'ALL' ? undefined : statusFilter,
+      status: statusFilter,
       year: selectedYearNum,
     })
       .then((result) => {
@@ -258,11 +264,7 @@ export function ProjectListPage() {
 
   function handleStatusTabClick(tabKey: StatusTabKey) {
     const next = new URLSearchParams(searchParams)
-    if (tabKey === 'ALL') {
-      next.set('status', 'ALL')
-    } else {
-      next.set('status', tabKey)
-    }
+    next.set('status', tabKey)
     setSearchParams(next)
   }
 
@@ -280,7 +282,7 @@ export function ProjectListPage() {
     setSearchParams(new URLSearchParams())
   }
 
-  const activeStatusLabel = statusFilter === 'ALL' ? 'Tất cả' : PUBLIC_PROJECT_STATUS_LABELS[statusFilter]
+  const activeStatusLabel = PUBLIC_PROJECT_STATUS_LABELS[statusFilter]
   const activeYearLabel = yearFilter === 'ALL' ? 'Tất cả' : yearFilter
   const remainingCount = Math.max(0, totalElements - projects.length)
 
@@ -574,6 +576,19 @@ export function ProjectListPage() {
           </main>
         </div>
       </div>
+
+      {/* Scroll to top floating button */}
+      <button
+        type="button"
+        className={`project-scroll-top-btn ${showScrollTop ? 'is-visible' : ''}`}
+        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        title="Cuộn lên đầu trang"
+        aria-label="Cuộn lên đầu trang"
+        {...{ alt: 'Cuộn lên đầu trang' }}
+      >
+        <ArrowUp size={20} aria-hidden="true" />
+        <span className="sr-only">Cuộn lên đầu trang</span>
+      </button>
     </div>
   )
 }

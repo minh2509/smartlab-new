@@ -887,6 +887,43 @@
   margin-bottom: 20px;
 }
 
+/* Floating Scroll to Top Button */
+.project-scroll-top-btn {
+  position: fixed;
+  bottom: 32px;
+  right: 32px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  border: 1.5px solid #E2E8F0;
+  color: #334155;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12);
+  z-index: 99;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(12px) scale(0.9);
+  transition: opacity 0.25s ease, transform 0.25s ease, visibility 0.25s ease, background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.project-scroll-top-btn.is-visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0) scale(1);
+}
+
+.project-scroll-top-btn:hover {
+  background: #EA580C;
+  color: #FFFFFF;
+  border-color: #EA580C;
+  box-shadow: 0 6px 20px rgba(234, 88, 12, 0.35);
+  transform: translateY(-3px) scale(1.05);
+}
+
 /* --------------------------------------------------------------------------
    Responsive Layout
    -------------------------------------------------------------------------- */
