@@ -48,7 +48,11 @@ export function ProjectMembersPanel({ project }: { project: Project | null }) {
   const isProjectLeader = Boolean(
     profile && project?.leaders.some((leader) => leader.userId === profile.userId),
   )
+  const isPrimaryLeader = Boolean(
+    profile && project?.primaryLeader && project.primaryLeader.userId === profile.userId,
+  )
   const canManage = isAdmin || isProjectLeader
+  const canRemoveMembers = isAdmin || isPrimaryLeader
 
   const loadMembers = useCallback(async () => {
     if (!token || !projectId) return
@@ -170,7 +174,7 @@ export function ProjectMembersPanel({ project }: { project: Project | null }) {
   }
 
   async function handleRemove(member: ProjectMember) {
-    if (!token || !project || !canManage || busyUserId || member.projectRole === 'LEADER') return
+    if (!token || !project || !canRemoveMembers || busyUserId || member.projectRole === 'LEADER') return
     if (!await confirmDialog({ title: 'Gỡ thành viên?', description: `Membership của ${member.name} sẽ được giữ lại ở trạng thái REMOVED để bảo toàn lịch sử tham gia.`, confirmLabel: 'Gỡ thành viên', destructive: true })) return
 
     setBusyUserId(member.userId)
@@ -241,8 +245,18 @@ export function ProjectMembersPanel({ project }: { project: Project | null }) {
 
       <Feedback error={error} />
 
-      <div className="form-actions" style={{ marginBottom: 16 }}>
-        <PopupSelect className="dense" ariaLabel="Lọc lịch sử thành viên" value={filter} onChange={(value) => setFilter(value as ProjectMemberFilter)} options={[{ value: 'ACTIVE', label: 'Đang tham gia' }, { value: 'REMOVED', label: 'Đã rời dự án' }, { value: 'ALL', label: 'Toàn bộ lịch sử' }]} />
+      <div className="project-members-toolbar">
+        <PopupSelect
+          className="dense project-members-filter"
+          ariaLabel="Lọc lịch sử thành viên"
+          value={filter}
+          onChange={(value) => setFilter(value as ProjectMemberFilter)}
+          options={[
+            { value: 'ACTIVE', label: 'Đang tham gia' },
+            { value: 'REMOVED', label: 'Đã rời dự án' },
+            { value: 'ALL', label: 'Toàn bộ lịch sử' },
+          ]}
+        />
         <button
           className="btn ghost table-btn"
           type="button"
@@ -261,55 +275,138 @@ export function ProjectMembersPanel({ project }: { project: Project | null }) {
 
       {loading ? <div className="empty tight">Đang tải thành viên...</div> : null}
       {!loading && visibleMembers.length ? (
-        <div className="field-admin-list">
-          {visibleMembers.map((member) => (
-            <div className="field-admin-row" key={`${member.userId}-${member.status}`}>
-              <div>
-                <strong>{member.name}</strong>
-                <span>{member.email}</span>
-                <span>
-                  Tham gia {formatDateTime(member.joinedAt)}
-                  {member.removedAt ? ` · Rời dự án ${formatDateTime(member.removedAt)}` : ''}
-                </span>
-              </div>
-              <span className="field-admin-actions">
-                <span className={`badge ${member.projectRole === 'LEADER' ? 'info' : 'success'}`}>
-                  {PROJECT_MEMBER_ROLE_LABELS[member.projectRole]}
-                </span>
-                <span className={`badge ${member.status === 'ACTIVE' ? 'success' : 'danger'}`}>
-                  {PROJECT_MEMBER_STATUS_LABELS[member.status]}
-                </span>
-                {canManage && member.status === 'ACTIVE' ? (
-                  <button
-                    className="btn ghost table-btn danger-text"
-                    type="button"
-                    title={member.projectRole === 'LEADER' ? 'Hãy bỏ thành viên khỏi nhóm leader trước' : 'Gỡ khỏi dự án'}
-                    disabled={Boolean(busyUserId) || member.projectRole === 'LEADER'}
-                    onClick={() => void handleRemove(member)}
-                  >
-                    <Trash2 /> Gỡ
-                  </button>
-                ) : null}
-                {canManage && member.status === 'REMOVED' ? (
-                  <button
-                    className="btn ghost table-btn"
-                    type="button"
-                    title="Kích hoạt lại thành viên"
-                    disabled={Boolean(busyUserId)}
-                    style={{ width: 'auto' }}
-                    onClick={() => void handleAdd(member)}
-                  >
-                    <RotateCcw /> Kích hoạt lại
-                  </button>
-                ) : null}
-              </span>
-            </div>
-          ))}
+        <div className="project-members-table-wrapper">
+          <table className="project-members-table">
+            <thead>
+              <tr>
+                <th>Thành viên & Thông tin</th>
+                <th style={{ width: '130px' }}>Vai trò</th>
+                <th style={{ width: '130px' }}>Trạng thái</th>
+                {canManage ? <th style={{ width: '90px', textAlign: 'right' }}>Thao tác</th> : null}
+              </tr>
+            </thead>
+            <tbody>
+              {visibleMembers.map((member) => {
+                const isLeaderRole = member.projectRole === 'LEADER'
+                const canRemoveThis = canRemoveMembers && member.status === 'ACTIVE' && !isLeaderRole
+                const removeTooltip = isLeaderRole
+                  ? 'Leader không thể tự gỡ hoặc bị gỡ tại mục thành viên'
+                  : !canRemoveMembers
+                    ? 'Chỉ leader chính hoặc Admin mới có quyền gỡ thành viên'
+                    : 'Gỡ khỏi dự án'
+
+                return (
+                  <tr key={`${member.userId}-${member.status}`} className="project-member-table-row">
+                    <td>
+                      <div className="project-member-info">
+                        <strong className="project-member-name">{member.name}</strong>
+                        <div className="project-member-meta-line">
+                          <span className="project-member-email">{member.email}</span>
+                          <span className="project-member-dot">·</span>
+                          <span className="project-member-date">
+                            Tham gia {formatDateTime(member.joinedAt)}
+                            {member.removedAt ? ` · Rời dự án ${formatDateTime(member.removedAt)}` : ''}
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <span className={`badge ${member.projectRole === 'LEADER' ? 'info' : 'success'}`}>
+                        {PROJECT_MEMBER_ROLE_LABELS[member.projectRole]}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={`badge ${member.status === 'ACTIVE' ? 'success' : 'danger'}`}>
+                        {PROJECT_MEMBER_STATUS_LABELS[member.status]}
+                      </span>
+                    </td>
+                    {canManage ? (
+                      <td style={{ textAlign: 'right' }}>
+                        {canRemoveThis ? (
+                          <button
+                            className="btn ghost table-btn danger-text"
+                            type="button"
+                            title={removeTooltip}
+                            disabled={Boolean(busyUserId)}
+                            onClick={() => void handleRemove(member)}
+                          >
+                            <Trash2 size={14} /> Gỡ
+                          </button>
+                        ) : null}
+                        {canManage && member.status === 'REMOVED' ? (
+                          <button
+                            className="btn ghost table-btn"
+                            type="button"
+                            title="Kích hoạt lại thành viên"
+                            disabled={Boolean(busyUserId)}
+                            style={{ width: 'auto' }}
+                            onClick={() => void handleAdd(member)}
+                          >
+                            <RotateCcw size={14} /> Kích hoạt lại
+                          </button>
+                        ) : null}
+                      </td>
+                    ) : null}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
       ) : null}
       {!loading && !visibleMembers.length ? (
         <EmptyState title="Không có thành viên" description="Không có membership phù hợp với bộ lọc hiện tại." />
       ) : null}
+
+      {canManage ? (
+        <div className="page-section project-member-add-section">
+          <label className="field">
+            <span>Thêm hoặc kích hoạt lại thành viên</span>
+            <div className="searchbar">
+              <Search aria-hidden="true" />
+              <input
+                className="input"
+                type="search"
+                value={query}
+                onChange={(event) => {
+                  setQuery(event.target.value)
+                  clearFeedback()
+                }}
+                placeholder="Nhập tên hoặc email..."
+              />
+            </div>
+          </label>
+          {searching ? <p className="muted small">Đang tìm thành viên...</p> : null}
+          {!searching && query.trim().length >= 2 && !candidates.length ? (
+            <p className="muted small">Không tìm thấy tài khoản có thể thêm.</p>
+          ) : null}
+          {candidates.length ? (
+            <div className="field-admin-list" style={{ marginTop: 10 }}>
+              {candidates.map((candidate) => (
+                <button
+                  className="member-select-row"
+                  type="button"
+                  disabled={Boolean(busyUserId)}
+                  onClick={() => void handleAdd(candidate)}
+                  key={candidate.userId}
+                >
+                  <span className="member-avatar">{initialsOf(candidate.name)}</span>
+                  <span><strong>{candidate.name}</strong><small>{candidate.email}</small></span>
+                  <span className="badge info">
+                    {removedMemberIds.has(candidate.userId)
+                      ? <><RotateCcw size={13} /> Kích hoạt lại</>
+                      : <><Plus size={13} /> Thêm</>}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <p className="muted small" style={{ marginTop: 16 }}>
+          Chỉ Admin hoặc leader đang hoạt động của dự án có thể thêm và gỡ thành viên.
+        </p>
+      )}
 
       {canManage ? (
         <div className="page-section project-join-review">
@@ -377,56 +474,6 @@ export function ProjectMembersPanel({ project }: { project: Project | null }) {
           ) : null}
         </div>
       ) : null}
-
-      {canManage ? (
-        <div className="page-section">
-          <label className="field">
-            <span>Thêm hoặc kích hoạt lại thành viên</span>
-            <div className="searchbar">
-              <Search aria-hidden="true" />
-              <input
-                className="input"
-                type="search"
-                value={query}
-                onChange={(event) => {
-                  setQuery(event.target.value)
-                  clearFeedback()
-                }}
-                placeholder="Nhập ít nhất 2 ký tự tên hoặc email..."
-              />
-            </div>
-          </label>
-          {searching ? <p className="muted small">Đang tìm thành viên...</p> : null}
-          {!searching && query.trim().length >= 2 && !candidates.length ? (
-            <p className="muted small">Không tìm thấy tài khoản có thể thêm.</p>
-          ) : null}
-          {candidates.length ? (
-            <div className="field-admin-list" style={{ marginTop: 10 }}>
-              {candidates.map((candidate) => (
-                <button
-                  className="member-select-row"
-                  type="button"
-                  disabled={Boolean(busyUserId)}
-                  onClick={() => void handleAdd(candidate)}
-                  key={candidate.userId}
-                >
-                  <span className="member-avatar">{initialsOf(candidate.name)}</span>
-                  <span><strong>{candidate.name}</strong><small>{candidate.email}</small></span>
-                  <span className="badge info">
-                    {removedMemberIds.has(candidate.userId)
-                      ? <><RotateCcw size={13} /> Kích hoạt lại</>
-                      : <><Plus size={13} /> Thêm</>}
-                  </span>
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </div>
-      ) : (
-        <p className="muted small" style={{ marginTop: 16 }}>
-          Chỉ Admin hoặc leader đang hoạt động của dự án có thể thêm và gỡ thành viên.
-        </p>
-      )}
     </section>
   )
 }

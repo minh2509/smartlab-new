@@ -885,13 +885,13 @@ class ProjectServiceImplTest {
     void publicArchiveMapsDedicatedSummaryWithoutInternalProjectFields() {
         UserEntity leader = user(2L, "leader-user", "leader@smartlab.test", true);
         ProjectEntity project = recruitingProject(7L, leader, ProjectStatus.IN_PROGRESS, true, true);
-        when(projectRepository.findPublicProjects(any(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), any(), any(Pageable.class)))
+        when(projectRepository.findPublicProjects(any(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), any(), any(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(project), PageRequest.of(0, 12), 1));
         when(projectMemberRepository.findActiveLeadersByProjectIds(List.of(7L))).thenReturn(List.of());
         when(projectResearchFieldRepository.findAllWithFieldByProjectIds(List.of(7L))).thenReturn(List.of());
 
         PublicProjectSummaryResponse response = projectService
-                .listPublic(0, 12, null, null, null, null, null)
+                .listPublic(0, 12, null, null, null, null, null, null)
                 .items()
                 .getFirst();
 
@@ -919,12 +919,12 @@ class ProjectServiceImplTest {
             PublicTaxonomyCase testCase = cases.get(index);
             reset(projectRepository, projectMemberRepository, projectResearchFieldRepository);
             ProjectEntity project = recruitingProject(100L + index, null, testCase.lifecycle(), true, testCase.recruiting());
-            when(projectRepository.findPublicProjects(any(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), any(), any(Pageable.class)))
+            when(projectRepository.findPublicProjects(any(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), any(), any(), any(Pageable.class)))
                     .thenReturn(new PageImpl<>(List.of(project), PageRequest.of(0, 12), 1));
             when(projectMemberRepository.findActiveLeadersByProjectIds(any())).thenReturn(List.of());
             when(projectResearchFieldRepository.findAllWithFieldByProjectIds(any())).thenReturn(List.of());
 
-            PublicProjectSummaryResponse response = projectService.listPublic(0, 12, null, null, null, null, null).items().getFirst();
+            PublicProjectSummaryResponse response = projectService.listPublic(0, 12, null, null, null, null, null, null).items().getFirst();
 
             assertThat(response.publicStatus())
                     .as("%s + isRecruiting=%s", testCase.lifecycle(), testCase.recruiting())
@@ -965,16 +965,16 @@ class ProjectServiceImplTest {
     void publicStatusFiltersUseEffectiveRecruitingExclusion() {
         for (PublicProjectStatus status : PublicProjectStatus.values()) {
             reset(projectRepository);
-            when(projectRepository.findPublicProjects(any(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), any(), any(Pageable.class)))
+            when(projectRepository.findPublicProjects(any(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), any(), any(), any(Pageable.class)))
                     .thenReturn(Page.empty());
 
-            projectService.listPublic(0, 12, null, null, null, null, status);
+            projectService.listPublic(0, 12, null, null, null, null, status, null);
 
             ArgumentCaptor<Boolean> recruitingOnly = ArgumentCaptor.forClass(Boolean.class);
             ArgumentCaptor<Boolean> excludeEffectiveRecruiting = ArgumentCaptor.forClass(Boolean.class);
             ArgumentCaptor<List<ProjectStatus>> recruitableStatuses = ArgumentCaptor.forClass(List.class);
             verify(projectRepository).findPublicProjects(any(), any(), any(), recruitingOnly.capture(),
-                    excludeEffectiveRecruiting.capture(), recruitableStatuses.capture(), any(), any(), any(Pageable.class));
+                    excludeEffectiveRecruiting.capture(), recruitableStatuses.capture(), any(), any(), any(), any(Pageable.class));
 
             assertThat(recruitingOnly.getValue()).isEqualTo(status == PublicProjectStatus.RECRUITING);
             assertThat(excludeEffectiveRecruiting.getValue()).isEqualTo(status != PublicProjectStatus.RECRUITING);
@@ -986,14 +986,14 @@ class ProjectServiceImplTest {
 
     @Test
     void publicListNormalizesNullableSearchStringsToNonNullSentinels() {
-        when(projectRepository.findPublicProjects(any(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), any(), any(Pageable.class)))
+        when(projectRepository.findPublicProjects(any(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), any(), any(), any(Pageable.class)))
                 .thenReturn(Page.empty(PageRequest.of(0, 12)));
 
-        projectService.listPublic(0, 12, null, null, null, null, null);
+        projectService.listPublic(0, 12, null, null, null, null, null, null);
 
         ArgumentCaptor<String> query = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<String> fieldCode = ArgumentCaptor.forClass(String.class);
-        verify(projectRepository).findPublicProjects(query.capture(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), fieldCode.capture(), any(Pageable.class));
+        verify(projectRepository).findPublicProjects(query.capture(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), fieldCode.capture(), any(), any(Pageable.class));
 
         assertThat(query.getValue()).isEmpty();
         assertThat(fieldCode.getValue()).isEmpty();
@@ -1001,25 +1001,25 @@ class ProjectServiceImplTest {
 
     @Test
     void publicListTrimsNonBlankSearchStringsAndConvertsBlankToSentinel() {
-        when(projectRepository.findPublicProjects(any(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), any(), any(Pageable.class)))
+        when(projectRepository.findPublicProjects(any(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), any(), any(), any(Pageable.class)))
                 .thenReturn(Page.empty(PageRequest.of(0, 12)));
 
-        projectService.listPublic(0, 12, "  robot  ", null, "  AI  ", null, null);
+        projectService.listPublic(0, 12, "  robot  ", null, "  AI  ", null, null, null);
 
         ArgumentCaptor<String> query = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<String> fieldCode = ArgumentCaptor.forClass(String.class);
-        verify(projectRepository).findPublicProjects(query.capture(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), fieldCode.capture(), any(Pageable.class));
+        verify(projectRepository).findPublicProjects(query.capture(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), fieldCode.capture(), any(), any(Pageable.class));
 
         assertThat(query.getValue()).isEqualTo("robot");
         assertThat(fieldCode.getValue()).isEqualTo("AI");
 
         reset(projectRepository);
-        when(projectRepository.findPublicProjects(any(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), any(), any(Pageable.class)))
+        when(projectRepository.findPublicProjects(any(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), any(), any(), any(Pageable.class)))
                 .thenReturn(Page.empty(PageRequest.of(0, 12)));
 
-        projectService.listPublic(0, 12, "  ", null, " \t", null, null);
+        projectService.listPublic(0, 12, "  ", null, " \t", null, null, null);
 
-        verify(projectRepository).findPublicProjects(eq(""), any(), any(), anyBoolean(), anyBoolean(), any(), any(), eq(""), any(Pageable.class));
+        verify(projectRepository).findPublicProjects(eq(""), any(), any(), anyBoolean(), anyBoolean(), any(), any(), eq(""), any(), any(Pageable.class));
     }
 
     @Test
