@@ -345,6 +345,18 @@ a.card:hover, .card.hover:hover {
 .pagehead h1 { color: #fff; font-size: clamp(28px, 3.8vw, 42px); font-weight: 800; letter-spacing: -.03em; line-height: 1.18; }
 .pagehead p { color: rgba(255, 255, 255, 0.78); margin-top: 14px; max-width: 64ch; font-size: 16px; line-height: 1.62; }
 
+/* Giữ cụm (...) nguyên vẹn khi xuống dòng, không bị ngắt đôi */
+.title-cluster {
+  display: inline-block;
+  white-space: nowrap;
+  max-width: 100%;
+}
+@media (max-width: 480px) {
+  .title-cluster {
+    white-space: normal;
+  }
+}
+
 .crumb { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; margin-bottom: 18px; color: rgba(255, 255, 255, 0.68); }
 .crumb a { color: rgba(255, 255, 255, 0.82); text-decoration: none; transition: color 0.15s ease; font-weight: 550; }
 .crumb a:hover { color: var(--accent-2); }
