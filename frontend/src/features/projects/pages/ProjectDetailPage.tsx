@@ -118,7 +118,6 @@ export function ProjectDetailPage() {
   }
 
   const facts = [
-    { label: 'Mã dự án', value: project.code },
     { label: 'Loại', value: PROJECT_TYPE_LABELS[project.projectType] },
     { label: 'Ngày bắt đầu', value: formatDate(project.startDate) },
     { label: 'Dự kiến kết thúc', value: formatDate(project.expectedEndDate) },

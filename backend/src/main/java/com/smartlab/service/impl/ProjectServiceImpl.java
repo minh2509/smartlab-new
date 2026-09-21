@@ -131,7 +131,8 @@ public class ProjectServiceImpl implements ProjectService {
             Long researchFieldId,
             String researchFieldCode,
             ProjectType projectType,
-            PublicProjectStatus status
+            PublicProjectStatus status,
+            Integer year
     ) {
         int pageSize = normalizePageSize(page, size, PUBLIC_PROJECT_PAGE_SIZE_MAX);
         if (researchFieldId != null && researchFieldId <= 0) {
@@ -148,9 +149,16 @@ public class ProjectServiceImpl implements ProjectService {
                 RECRUITABLE_STATUSES,
                 researchFieldId,
                 normalizeSearch(researchFieldCode),
+                year,
                 PageRequest.of(page, pageSize)
         );
         return toPublicPageResponse(projects);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Integer> listPublicYears() {
+        return projectRepository.findPublicYears();
     }
 
     @Override
@@ -900,6 +908,8 @@ public class ProjectServiceImpl implements ProjectService {
                 project.getGoal(),
                 project.getProjectType(),
                 toPublicProjectStatus(project.getStatus(), project.getIsRecruiting()),
+                project.getStartDate(),
+                project.getCoverUrl(),
                 researchFields.stream().map(this::toResearchFieldResponse).toList(),
                 leadersByUserId.values().stream().map(this::toPublicLeaderResponse).toList()
         );

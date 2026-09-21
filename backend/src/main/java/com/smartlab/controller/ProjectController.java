@@ -58,9 +58,16 @@ public class ProjectController {
             @RequestParam(required = false) Long researchFieldId,
             @RequestParam(required = false) String field,
             @RequestParam(required = false) ProjectType projectType,
-            @RequestParam(required = false) PublicProjectStatus status
+            @RequestParam(required = false) PublicProjectStatus status,
+            @RequestParam(required = false) Integer year
     ) {
-        return projectService.listPublic(page, size, query, researchFieldId, field, projectType, status);
+        return projectService.listPublic(page, size, query, researchFieldId, field, projectType, status, year);
+    }
+
+    @GetMapping("/public/years")
+    @Operation(summary = "List available project years for public filtering")
+    public List<Integer> listPublicYears() {
+        return projectService.listPublicYears();
     }
 
     @GetMapping("/public/recruiting")
