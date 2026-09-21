@@ -1,5 +1,5 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
-import { Plus, Tags, Trash2 } from 'lucide-react'
+import { Plus, Tags, Trash2, X } from 'lucide-react'
 import { EmptyState } from '../../../shared/components/EmptyState'
 import { Feedback } from '../../../shared/components/Feedback'
 import { Pagination } from '../../../shared/components/Pagination'
@@ -16,7 +16,7 @@ type CategoryForm = {
 }
 
 const EMPTY_FORM: CategoryForm = { code: '', name: '', description: '' }
-const PAGE_SIZE = 6
+const PAGE_SIZE = 4
 
 export function PostCategoriesPage() {
   const { token } = useAuth()
@@ -29,6 +29,7 @@ export function PostCategoriesPage() {
   const [formError, setFormError] = useState<string | null>(null)
   const [page, setPage] = useState(1)
   const [mutatingId, setMutatingId] = useState<number | null>(null)
+  const [isCreateOpen, setIsCreateOpen] = useState(false)
 
   const loadCategories = useCallback(async () => {
     if (!token) return
@@ -57,6 +58,22 @@ export function PostCategoriesPage() {
     if (page > totalPages) setPage(totalPages)
   }, [page, totalPages])
 
+  const closeCreateDialog = useCallback(() => {
+    if (busy) return
+    setIsCreateOpen(false)
+    setForm(EMPTY_FORM)
+    setFormError(null)
+  }, [busy])
+
+  useEffect(() => {
+    if (!isCreateOpen) return
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !busy) closeCreateDialog()
+    }
+    document.addEventListener('keydown', handleEscape)
+    return () => document.removeEventListener('keydown', handleEscape)
+  }, [busy, closeCreateDialog, isCreateOpen])
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!token || busy) return
@@ -82,6 +99,7 @@ export function PostCategoriesPage() {
       setCategories(nextCategories)
       setPage(Math.ceil(nextCategories.length / PAGE_SIZE))
       setForm(EMPTY_FORM)
+      setIsCreateOpen(false)
       toast.success('Đã tạo danh mục', created.name)
     } catch (reason: unknown) {
       setFormError(reason instanceof Error ? reason.message : 'Không thể tạo danh mục bài viết.')
@@ -128,66 +146,15 @@ export function PostCategoriesPage() {
           <h1>Danh mục bài viết</h1>
           <p>Tạo và kiểm tra các danh mục đang được dùng trong trình soạn thảo bài viết.</p>
         </div>
-        <span className="post-categories-count">{categories.length} danh mục</span>
+        <div className="post-categories-title-actions">
+          <span className="post-categories-count">{categories.length} danh mục</span>
+          <button className="btn primary" type="button" onClick={() => setIsCreateOpen(true)}>
+            <Plus size={16} aria-hidden="true" /> Tạo danh mục
+          </button>
+        </div>
       </header>
 
-      <div className="post-categories-grid">
-        <form className="panel post-category-form" onSubmit={(event) => void handleSubmit(event)}>
-          <div className="panel-head">
-            <div>
-              <h2>Tạo danh mục</h2>
-              <p>Mã được chuẩn hóa thành chữ in hoa và phải là duy nhất.</p>
-            </div>
-            <Tags aria-hidden="true" />
-          </div>
-
-          <label className="field" htmlFor="post-category-code">
-            <span>Mã danh mục <strong className="req">*</strong></span>
-            <input
-              id="post-category-code"
-              className="input"
-              value={form.code}
-              maxLength={80}
-              disabled={busy}
-              placeholder="Ví dụ: LAB_NEWS"
-              onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))}
-            />
-          </label>
-
-          <label className="field" htmlFor="post-category-name">
-            <span>Tên hiển thị <strong className="req">*</strong></span>
-            <input
-              id="post-category-name"
-              className="input"
-              value={form.name}
-              maxLength={150}
-              disabled={busy}
-              placeholder="Tin tức phòng Lab"
-              onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
-            />
-          </label>
-
-          <label className="field" htmlFor="post-category-description">
-            <span>Mô tả</span>
-            <textarea
-              id="post-category-description"
-              className="textarea"
-              value={form.description}
-              maxLength={500}
-              rows={4}
-              disabled={busy}
-              onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
-            />
-            <small className="hint">{form.description.length}/500 ký tự</small>
-          </label>
-
-          <Feedback error={formError ?? undefined} />
-          <button className="btn primary" type="submit" disabled={busy}>
-            <Plus aria-hidden="true" /> {busy ? 'Đang tạo...' : 'Tạo danh mục'}
-          </button>
-        </form>
-
-        <section className="panel post-category-list" aria-labelledby="post-category-list-title">
+      <section className="panel post-category-list" aria-labelledby="post-category-list-title">
           <div className="panel-head">
             <div>
               <h2 id="post-category-list-title">Danh mục đang quản lý</h2>
@@ -197,7 +164,7 @@ export function PostCategoriesPage() {
           <Feedback error={error ?? undefined} />
           {loading ? <div className="empty" aria-busy="true">Đang tải danh mục...</div> : null}
           {!loading && !error && categories.length === 0 ? (
-            <EmptyState title="Chưa có danh mục" description="Tạo danh mục đầu tiên bằng biểu mẫu bên cạnh." />
+            <EmptyState title="Chưa có danh mục" description="Nhấn “Tạo danh mục” để thêm danh mục đầu tiên." />
           ) : null}
           {!loading && categories.length > 0 ? (
             <>
@@ -229,8 +196,83 @@ export function PostCategoriesPage() {
               <Pagination page={page} totalPages={totalPages} onChange={setPage} />
             </>
           ) : null}
-        </section>
-      </div>
+      </section>
+
+      {isCreateOpen ? (
+        <div className="post-category-dialog-backdrop" onMouseDown={closeCreateDialog}>
+          <form
+            className="post-category-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="post-category-dialog-title"
+            onSubmit={(event) => void handleSubmit(event)}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="panel-head post-category-dialog-head">
+              <div>
+                <span className="eyebrow">Danh mục bài viết</span>
+                <h2 id="post-category-dialog-title">Tạo danh mục mới</h2>
+                <p>Mã được chuẩn hóa thành chữ in hoa và phải là duy nhất.</p>
+              </div>
+              <button className="icon-btn" type="button" onClick={closeCreateDialog} disabled={busy} aria-label="Đóng">
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="post-category-dialog-body">
+              <label className="field" htmlFor="post-category-code">
+                <span>Mã danh mục <strong className="req">*</strong></span>
+                <input
+                  id="post-category-code"
+                  className="input"
+                  value={form.code}
+                  maxLength={80}
+                  disabled={busy}
+                  autoFocus
+                  placeholder="Ví dụ: LAB_NEWS"
+                  onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))}
+                />
+              </label>
+
+              <label className="field" htmlFor="post-category-name">
+                <span>Tên hiển thị <strong className="req">*</strong></span>
+                <input
+                  id="post-category-name"
+                  className="input"
+                  value={form.name}
+                  maxLength={150}
+                  disabled={busy}
+                  placeholder="Tin tức phòng Lab"
+                  onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+                />
+              </label>
+
+              <label className="field" htmlFor="post-category-description">
+                <span>Mô tả</span>
+                <textarea
+                  id="post-category-description"
+                  className="textarea"
+                  value={form.description}
+                  maxLength={500}
+                  rows={5}
+                  disabled={busy}
+                  onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
+                />
+                <small className="hint">{form.description.length}/500 ký tự</small>
+              </label>
+
+              <Feedback error={formError ?? undefined} />
+            </div>
+
+            <div className="post-category-dialog-actions">
+              <button className="btn" type="button" onClick={closeCreateDialog} disabled={busy}>Hủy</button>
+              <button className="btn primary" type="submit" disabled={busy}>
+                <Tags size={16} aria-hidden="true" /> {busy ? 'Đang tạo...' : 'Tạo danh mục'}
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
     </section>
   )
 }

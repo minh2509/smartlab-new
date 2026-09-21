@@ -837,6 +837,11 @@ select {
 }
 
 .admin-sidebar {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  overflow: hidden;
   border-right: 1px solid rgba(255, 255, 255, .08);
   background: linear-gradient(180deg, #07152b 0%, #0b2242 55%, #051021 100%);
   color: #fff;
@@ -846,8 +851,26 @@ select {
 .admin-sidebar .sticky {
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - 44px);
-  top: 22px;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-color: rgba(255, 255, 255, .28) transparent;
+  scrollbar-width: thin;
+}
+
+.admin-sidebar .sticky::-webkit-scrollbar {
+  width: 6px;
+}
+
+.admin-sidebar .sticky::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.admin-sidebar .sticky::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .28);
 }
 
 .admin-brand {
@@ -4349,12 +4372,17 @@ select {
   }
 
   .admin-sidebar {
+    position: static;
+    height: auto;
+    overflow: visible;
     border-right: 0;
     border-bottom: 1px solid rgba(255, 255, 255, .1);
   }
 
   .admin-sidebar .sticky {
+    height: auto;
     min-height: 0;
+    overflow: visible;
   }
 
   .admin-nav {
