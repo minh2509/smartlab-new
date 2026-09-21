@@ -1,6 +1,7 @@
 import { apiClient, toQuery } from '../../lib/apiClient'
 import type {
   ContentCategory,
+  CreateContentCategoryRequest,
   CreatePostRequest,
   CursorPage,
   CommentScope,
@@ -104,6 +105,14 @@ function fileNameFromDisposition(value: string | null) {
 
 export function listContentCategories(token: string) {
   return apiClient<ContentCategory[]>('/content-categories', { token })
+}
+
+export function createContentCategory(token: string, request: CreateContentCategoryRequest) {
+  return apiClient<ContentCategory>('/admin/content-categories', {
+    method: 'POST',
+    token,
+    body: JSON.stringify(request),
+  })
 }
 
 export function createPost(token: string, request: CreatePostRequest) {

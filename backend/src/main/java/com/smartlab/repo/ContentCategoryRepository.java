@@ -11,7 +11,7 @@ import java.util.Optional;
 public interface ContentCategoryRepository extends JpaRepository<ContentCategoryEntity, Long> {
     List<ContentCategoryEntity> findByIsActiveTrueOrderByIdAsc();
 
-    boolean existsByCode(String code);
+    boolean existsByCodeIgnoreCase(String code);
 
     Optional<ContentCategoryEntity> findByIdAndIsActiveTrue(Long id);
 }

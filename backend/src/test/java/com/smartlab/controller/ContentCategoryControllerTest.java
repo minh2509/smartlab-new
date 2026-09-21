@@ -86,7 +86,7 @@ class ContentCategoryControllerTest {
                         .content("""
                                 {"code":"MEMBER_BLOG","name":"Member Blog","description":"Member updates"}
                                 """))
-                .andExpect(status().isOk())
+                .andExpect(status().isCreated())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.id").value(7))
                 .andExpect(jsonPath("$.code").value("MEMBER_BLOG"))

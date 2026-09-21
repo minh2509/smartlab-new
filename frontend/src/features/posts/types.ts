@@ -60,6 +60,12 @@ export type ContentCategory = PostCategory & {
   description: string | null
 }
 
+export type CreateContentCategoryRequest = {
+  code: string
+  name: string
+  description?: string | null
+}
+
 export type CreatePostRequest = {
   title: string
   excerpt?: string | null
