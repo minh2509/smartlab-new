@@ -8,6 +8,7 @@ public final class AuditVocabulary {
     public static final String PERMISSION_UPDATED = "PERMISSION_UPDATED";
     public static final String USER_ROLES_UPDATED = "USER_ROLES_UPDATED";
     public static final String USER_PROVISIONED = "USER_PROVISIONED";
+    public static final String USER_INFORMATION_UPDATED = "USER_INFORMATION_UPDATED";
     public static final String USER_ACTIVE_STATUS_UPDATED = "USER_ACTIVE_STATUS_UPDATED";
     public static final String USER_PERMISSION_OVERRIDE_SET = "USER_PERMISSION_OVERRIDE_SET";
     public static final String USER_PERMISSION_OVERRIDE_REMOVED = "USER_PERMISSION_OVERRIDE_REMOVED";

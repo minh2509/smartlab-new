@@ -1,6 +1,7 @@
 package com.smartlab.service;
 
 import com.smartlab.dto.request.AccountProvisionRequest;
+import com.smartlab.dto.request.AccountUpdateRequest;
 import com.smartlab.dto.request.InvitationAcceptRequest;
 import com.smartlab.dto.request.PermissionOverrideRequest;
 import com.smartlab.dto.response.AccountResponse;
@@ -11,7 +12,14 @@ import com.smartlab.entity.UserEntity;
 import java.util.Set;
 
 public interface AdminAccountService {
-    PageResponse<AccountResponse> listAccounts(int page, int size);
+    PageResponse<AccountResponse> listAccounts(
+            int page,
+            int size,
+            String query,
+            Boolean active,
+            Boolean verified,
+            String roleCode
+    );
 
     InvitationResponse provision(AccountProvisionRequest request, String adminUserId);
 
@@ -20,6 +28,8 @@ public interface AdminAccountService {
     AccountResponse acceptInvite(InvitationAcceptRequest request);
 
     AccountResponse updateRoles(String userId, Set<String> roleCodes, String adminUserId);
+
+    AccountResponse updateInformation(String userId, AccountUpdateRequest request);
 
     AccountResponse setActive(String userId, boolean active);
 

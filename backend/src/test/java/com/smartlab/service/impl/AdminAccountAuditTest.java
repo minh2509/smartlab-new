@@ -2,6 +2,7 @@ package com.smartlab.service.impl;
 
 import com.smartlab.dto.request.PermissionOverrideRequest;
 import com.smartlab.dto.request.AccountProvisionRequest;
+import com.smartlab.dto.request.AccountUpdateRequest;
 import com.smartlab.entity.AccountInvitationEntity;
 import com.smartlab.entity.MemberProfileEntity;
 import com.smartlab.entity.PermissionEntity;
@@ -75,6 +76,28 @@ class AdminAccountAuditTest {
                 Map.of("isActive", true, "activeStatus", "ACTIVE"),
                 Map.of("isActive", false, "activeStatus", "INACTIVE"));
         verify(users, never()).delete(any(UserEntity.class));
+    }
+
+    @Test void updateInformationNormalizesNameAndAuditsOnlyEditableData() {
+        AccountUpdateRequest request = new AccountUpdateRequest();
+        request.setName("  Nguyen   Van   Member  ");
+
+        var response = service.updateInformation("external-user-id", request);
+
+        assertThat(response.getName()).isEqualTo("Nguyen Van Member");
+        verify(users).save(user);
+        verify(audit).log(USER_INFORMATION_UPDATED, USER, "11",
+                Map.of("name", "Member"), Map.of("name", "Nguyen Van Member"));
+    }
+
+    @Test void updateInformationDoesNotAuditUnchangedNormalizedName() {
+        AccountUpdateRequest request = new AccountUpdateRequest();
+        request.setName(" Member ");
+
+        service.updateInformation("external-user-id", request);
+
+        verify(users, never()).save(any(UserEntity.class));
+        verifyNoInteractions(audit);
     }
 
     @Test void settingSameAccountStatusDoesNotCreateFalseAuditMutation() {

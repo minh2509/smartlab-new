@@ -27,9 +27,31 @@ public interface UserRepository extends JpaRepository<UserEntity,Long> {
     @Query("""
             select u
             from UserEntity u
+            where (
+                :query = ''
+                or lower(u.name) like concat('%', lower(:query), '%')
+                or lower(u.email) like concat('%', lower(:query), '%')
+                or lower(u.userId) like concat('%', lower(:query), '%')
+            )
+              and (:active is null or u.isActive = :active)
+              and (:verified is null or u.isAccountVerified = :verified)
+              and (
+                :roleCode = ''
+                or exists (
+                    select ur.id
+                    from UserRoleEntity ur
+                    where ur.user = u and upper(ur.role.code) = :roleCode
+                )
+              )
             order by lower(u.name), lower(u.email), u.id
             """)
-    Page<UserEntity> findAccounts(Pageable pageable);
+    Page<UserEntity> findAccounts(
+            @Param("query") String query,
+            @Param("active") Boolean active,
+            @Param("verified") Boolean verified,
+            @Param("roleCode") String roleCode,
+            Pageable pageable
+    );
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select u from UserEntity u where u.userId in :userIds order by u.id")

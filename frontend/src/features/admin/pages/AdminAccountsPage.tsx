@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
-import { ChevronLeft, ChevronRight, Edit3, KeyRound, RefreshCw, Save, Send, UserPlus, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Edit3, KeyRound, RefreshCw, RotateCcw, Save, Search, Send, UserPlus, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { ApiClientError } from '../../../lib/apiClient'
 import { useAuth } from '../../auth/authContext'
@@ -15,6 +15,7 @@ import {
   resendInvitation,
   setAccountActive,
   setUserPermissionOverride,
+  updateAccountInformation,
   updateAccountRoles,
 } from '../api'
 import type { AccountResponse, BulkInvitationPreviewResponse, BulkInvitationRow, PaginatedResponse, Permission, Role } from '../../../shared/types/api'
@@ -28,6 +29,7 @@ const PAGE_SIZE = 10
 type AccountDialog = 'provision' | 'resend' | null
 
 type EditDraft = {
+  name: string
   roleCodes: string[]
   activeValue: string
   permissionCode: string
@@ -57,6 +59,11 @@ export function AdminAccountsPage() {
   const [permissions, setPermissions] = useState<Permission[]>([])
   const [accountPage, setAccountPage] = useState<PaginatedResponse<AccountResponse>>(emptyPage)
   const [page, setPage] = useState(0)
+  const [searchInput, setSearchInput] = useState('')
+  const [query, setQuery] = useState('')
+  const [activeFilter, setActiveFilter] = useState('ALL')
+  const [verifiedFilter, setVerifiedFilter] = useState('ALL')
+  const [roleFilter, setRoleFilter] = useState('')
   const [activeDialog, setActiveDialog] = useState<AccountDialog>(null)
   const [editingAccount, setEditingAccount] = useState<AccountResponse | null>(null)
   const [editDraft, setEditDraft] = useState<EditDraft>(createEditDraft(null, []))
@@ -76,15 +83,22 @@ export function AdminAccountsPage() {
   const accounts = accountPage.content
   const pageStart = accountPage.totalElements === 0 ? 0 : accountPage.page * accountPage.size + 1
   const pageEnd = Math.min((accountPage.page + 1) * accountPage.size, accountPage.totalElements)
+  const accountFilters = useMemo(() => ({
+    query,
+    active: activeFilter === 'ALL' ? undefined : activeFilter === 'ACTIVE',
+    verified: verifiedFilter === 'ALL' ? undefined : verifiedFilter === 'VERIFIED',
+    role: roleFilter || undefined,
+  }), [activeFilter, query, roleFilter, verifiedFilter])
+  const hasActiveFilters = Boolean(query || roleFilter || activeFilter !== 'ALL' || verifiedFilter !== 'ALL')
 
   const loadAccounts = useCallback(async (targetPage = page) => {
     if (!token) return
-    const result = await listAccounts(token, targetPage, PAGE_SIZE)
+    const result = await listAccounts(token, targetPage, PAGE_SIZE, accountFilters)
     setAccountPage(result)
     if (result.totalPages > 0 && targetPage >= result.totalPages) {
       setPage(result.totalPages - 1)
     }
-  }, [page, token])
+  }, [accountFilters, page, token])
 
   const loadCatalogs = useCallback(async () => {
     if (!token) return
@@ -94,7 +108,7 @@ export function AdminAccountsPage() {
       const [roleResult, permissionResult, accountResult] = await Promise.all([
         listRoles(token),
         listPermissions(token),
-        listAccounts(token, page, PAGE_SIZE),
+        listAccounts(token, page, PAGE_SIZE, accountFilters),
       ])
       setRoles(roleResult)
       setPermissions(permissionResult)
@@ -109,7 +123,7 @@ export function AdminAccountsPage() {
     } finally {
       setLoading(false)
     }
-  }, [clearAuth, navigate, page, token])
+  }, [accountFilters, clearAuth, navigate, page, token])
 
   useEffect(() => {
     void loadCatalogs()
@@ -240,13 +254,25 @@ export function AdminAccountsPage() {
   async function handleSaveAccount(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!token || !editingAccount || !editDraft.roleCodes.length) return
+    const normalizedName = editDraft.name.trim().replace(/\s+/g, ' ')
+    if (!normalizedName) {
+      setError('Họ tên không được để trống.')
+      return
+    }
+    if (normalizedName.length > 150) {
+      setError('Họ tên không được vượt quá 150 ký tự.')
+      return
+    }
     setError('')
     try {
+      if (normalizedName !== editingAccount.name) {
+        await updateAccountInformation(token, editingAccount.userId, normalizedName)
+      }
       await updateAccountRoles(token, editingAccount.userId, editDraft.roleCodes)
       await setAccountActive(token, editingAccount.userId, editDraft.activeValue === 'true')
       await loadAccounts()
       closeEditDialog()
-      toast.success('Đã cập nhật thành viên', 'Role và trạng thái đã được lưu.')
+      toast.success('Đã cập nhật thành viên', 'Thông tin, role và trạng thái đã được lưu.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không cập nhật được thành viên')
     }
@@ -355,15 +381,70 @@ export function AdminAccountsPage() {
         <div className="panel-head">
           <div>
             <h2>Danh sách thành viên</h2>
-            <p>Bảng chỉ hiển thị thông tin chính. Bấm sửa để cập nhật role, trạng thái và permission riêng.</p>
+            <p>Tìm và lọc tài khoản, sau đó bấm sửa để cập nhật thông tin, role, trạng thái và permission riêng.</p>
           </div>
           <KeyRound />
         </div>
+
+        <form className="account-list-toolbar" onSubmit={(event) => {
+          event.preventDefault()
+          setPage(0)
+          setQuery(searchInput.trim())
+        }}>
+          <label className="account-list-search">
+            <Search aria-hidden="true" />
+            <input
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              placeholder="Tìm theo tên, email hoặc mã người dùng"
+              aria-label="Tìm tài khoản"
+            />
+          </label>
+          <PopupSelect
+            value={activeFilter}
+            onChange={(value) => { setActiveFilter(value); setPage(0) }}
+            ariaLabel="Lọc trạng thái đăng nhập"
+            options={[
+              { value: 'ALL', label: 'Tất cả đăng nhập' },
+              { value: 'ACTIVE', label: 'Đang hoạt động' },
+              { value: 'INACTIVE', label: 'Đã khóa' },
+            ]}
+          />
+          <PopupSelect
+            value={verifiedFilter}
+            onChange={(value) => { setVerifiedFilter(value); setPage(0) }}
+            ariaLabel="Lọc trạng thái kích hoạt"
+            options={[
+              { value: 'ALL', label: 'Tất cả kích hoạt' },
+              { value: 'VERIFIED', label: 'Đã kích hoạt' },
+              { value: 'PENDING', label: 'Chờ invite' },
+            ]}
+          />
+          <PopupSelect
+            value={roleFilter}
+            onChange={(value) => { setRoleFilter(value); setPage(0) }}
+            ariaLabel="Lọc theo role"
+            options={[
+              { value: '', label: 'Tất cả role' },
+              ...roles.map((role) => ({ value: role.code, label: roleOptionLabel(role) })),
+            ]}
+          />
+          <button className="btn brand" type="submit">Tìm kiếm</button>
+          {hasActiveFilters ? <button className="btn ghost" type="button" onClick={() => {
+            setSearchInput('')
+            setQuery('')
+            setActiveFilter('ALL')
+            setVerifiedFilter('ALL')
+            setRoleFilter('')
+            setPage(0)
+          }}><RotateCcw />Đặt lại</button> : null}
+        </form>
 
         <AccountsTable
           accounts={accounts}
           page={accountPage.page}
           size={accountPage.size}
+          filtered={hasActiveFilters}
           onEdit={openEditDialog}
         />
 
@@ -536,15 +617,20 @@ function AccountsTable({
   accounts,
   page,
   size,
+  filtered,
   onEdit,
 }: {
   accounts: AccountResponse[]
   page: number
   size: number
+  filtered: boolean
   onEdit: (account: AccountResponse) => void
 }) {
   if (!accounts.length) {
-    return <EmptyState title="Chưa có thành viên" description="Khi Admin cấp tài khoản, thành viên sẽ xuất hiện ở bảng này." />
+    return <EmptyState
+      title={filtered ? 'Không tìm thấy tài khoản phù hợp' : 'Chưa có thành viên'}
+      description={filtered ? 'Thử đổi từ khóa hoặc đặt lại các bộ lọc.' : 'Khi Admin cấp tài khoản, thành viên sẽ xuất hiện ở bảng này.'}
+    />
   }
 
   return (
@@ -770,7 +856,7 @@ function EditAccountDialog({
         <div className="modal-head">
           <div>
             <h2 id="edit-account-title">Sửa thành viên</h2>
-            <p>Cập nhật role và trạng thái đăng nhập. Permission mặc định sẽ đi theo role.</p>
+            <p>Cập nhật thông tin, role và trạng thái đăng nhập. Permission mặc định sẽ đi theo role.</p>
           </div>
           <button className="icon-btn modal-close" type="button" onClick={onClose} aria-label="Đóng popup">
             <X />
@@ -786,6 +872,22 @@ function EditAccountDialog({
         </div>
 
         <form className="form-stack" onSubmit={onSaveAccount}>
+          <label className="field">
+            <span>Họ tên</span>
+            <input
+              className="input"
+              value={draft.name}
+              onChange={(event) => onDraftChange({ name: event.target.value })}
+              maxLength={150}
+              required
+              autoFocus
+            />
+          </label>
+          <label className="field">
+            <span>Email đăng nhập</span>
+            <input className="input" type="email" value={account.email} readOnly aria-readonly="true" />
+            <small>Email là định danh đăng nhập nên không chỉnh trực tiếp tại đây.</small>
+          </label>
           <fieldset className="field account-role-fieldset">
             <legend>Vai trò</legend>
             <div className="account-role-options">
@@ -819,7 +921,7 @@ function EditAccountDialog({
           </label>
           <button className="btn primary full" type="submit" disabled={!draft.roleCodes.length}>
             <Save />
-            Lưu role & trạng thái
+            Lưu thay đổi
           </button>
         </form>
 
@@ -923,6 +1025,7 @@ function roleOptionLabel(role: Role) {
 
 function createEditDraft(account: AccountResponse | null, permissions: Permission[]): EditDraft {
   return {
+    name: account?.name ?? '',
     roleCodes: [...(account?.roles ?? [])].sort(),
     activeValue: String(account?.isActive ?? true),
     permissionCode: permissions.find((permission) => permission.isActive)?.code || permissions[0]?.code || '',

@@ -2,6 +2,7 @@ package com.smartlab.controller;
 
 import com.smartlab.config.OpenApiConfig;
 import com.smartlab.dto.request.AccountProvisionRequest;
+import com.smartlab.dto.request.AccountUpdateRequest;
 import com.smartlab.dto.request.BulkAccountInvitationRequest;
 import com.smartlab.dto.response.AccountResponse;
 import com.smartlab.dto.request.AssignRolesRequest;
@@ -61,9 +62,30 @@ public class AdminAccountController {
             @Parameter(description = "Zero-based page index", example = "0")
             @RequestParam(defaultValue = "0") int page,
             @Parameter(description = "Page size, capped at 50", example = "10")
-            @RequestParam(defaultValue = "10") int size
+            @RequestParam(defaultValue = "10") int size,
+            @Parameter(description = "Case-insensitive name, email, or public user id search")
+            @RequestParam(defaultValue = "") String query,
+            @Parameter(description = "Optional login status filter")
+            @RequestParam(required = false) Boolean active,
+            @Parameter(description = "Optional invitation/setup status filter")
+            @RequestParam(required = false) Boolean verified,
+            @Parameter(description = "Optional assigned role code filter")
+            @RequestParam(defaultValue = "") String role
     ) {
-        return adminAccountService.listAccounts(page, size);
+        return adminAccountService.listAccounts(page, size, query, active, verified, role);
+    }
+
+    @PatchMapping("/{userId}")
+    @PreAuthorize("hasAuthority('USER_MANAGE')")
+    @Operation(
+            summary = "Update editable account information",
+            description = "Updates the member display name. Login email remains immutable to avoid breaking invitations and account identity. Required permission: USER_MANAGE."
+    )
+    public AccountResponse updateInformation(
+            @Parameter(description = "Public user id") @PathVariable String userId,
+            @Valid @RequestBody AccountUpdateRequest request
+    ) {
+        return adminAccountService.updateInformation(userId, request);
     }
 
     @PostMapping

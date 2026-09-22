@@ -11,6 +11,7 @@ import com.smartlab.entity.UserRoleEntity;
 import com.smartlab.enums.InvitationStatus;
 import com.smartlab.enums.EmailOutboxStatus;
 import com.smartlab.dto.request.AccountProvisionRequest;
+import com.smartlab.dto.request.AccountUpdateRequest;
 import com.smartlab.dto.response.AccountResponse;
 import com.smartlab.dto.request.InvitationAcceptRequest;
 import com.smartlab.dto.response.InvitationResponse;
@@ -77,10 +78,20 @@ public class AdminAccountServiceImpl implements AdminAccountService {
 
     @Transactional(readOnly = true)
     @Override
-    public PageResponse<AccountResponse> listAccounts(int page, int size) {
+    public PageResponse<AccountResponse> listAccounts(
+            int page,
+            int size,
+            String query,
+            Boolean active,
+            Boolean verified,
+            String roleCode
+    ) {
         int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), 50);
-        return PageResponse.from(userRepository.findAccounts(PageRequest.of(safePage, safeSize))
+        String safeQuery = query == null ? "" : query.trim();
+        String safeRoleCode = roleCode == null ? "" : roleCode.trim().toUpperCase();
+        return PageResponse.from(userRepository.findAccounts(
+                        safeQuery, active, verified, safeRoleCode, PageRequest.of(safePage, safeSize))
                 .map(this::toResponse));
     }
 
@@ -183,6 +194,24 @@ public class AdminAccountServiceImpl implements AdminAccountService {
         userSessionService.revokeAllByEmail(user.getEmail());
         auditService.log(USER_ROLES_UPDATED, USER, user.getId().toString(),
                 Map.of("roleCodes", beforeCodes), Map.of("roleCodes", afterCodes));
+        return toResponse(user);
+    }
+
+    @Transactional
+    @Override
+    public AccountResponse updateInformation(String userId, AccountUpdateRequest request) {
+        UserEntity user = getUserByUserId(userId);
+        String normalizedName = request.getName().trim().replaceAll("\\s+", " ");
+        if (normalizedName.length() > 150) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Name must not exceed 150 characters");
+        }
+        String previousName = user.getName();
+        if (!previousName.equals(normalizedName)) {
+            user.setName(normalizedName);
+            userRepository.save(user);
+            auditService.log(USER_INFORMATION_UPDATED, USER, user.getId().toString(),
+                    Map.of("name", previousName), Map.of("name", normalizedName));
+        }
         return toResponse(user);
     }
 

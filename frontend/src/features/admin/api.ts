@@ -7,6 +7,13 @@ export type ProvisionAccountPayload = {
   roleCodes?: string[]
 }
 
+export type AccountListFilters = {
+  query?: string
+  active?: boolean
+  verified?: boolean
+  role?: string
+}
+
 export type RolePayload = {
   code: string
   name: string
@@ -26,8 +33,15 @@ export function listRoles(token: string) {
   return apiClient<Role[]>('/admin/roles', { token })
 }
 
-export function listAccounts(token: string, page = 0, size = 10) {
-  return apiClient<PaginatedResponse<AccountResponse>>(`/admin/accounts${toQuery({ page, size })}`, { token })
+export function listAccounts(token: string, page = 0, size = 10, filters: AccountListFilters = {}) {
+  return apiClient<PaginatedResponse<AccountResponse>>(`/admin/accounts${toQuery({
+    page,
+    size,
+    query: filters.query || undefined,
+    active: filters.active,
+    verified: filters.verified,
+    role: filters.role || undefined,
+  })}`, { token })
 }
 
 export function createRole(token: string, payload: RolePayload) {
@@ -106,6 +120,14 @@ export function updateAccountRoles(token: string, userId: string, roleCodes: str
     method: 'PUT',
     token,
     body: JSON.stringify({ roleCodes }),
+  })
+}
+
+export function updateAccountInformation(token: string, userId: string, name: string) {
+  return apiClient<AccountResponse>(`/admin/accounts/${encodeURIComponent(userId)}`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify({ name }),
   })
 }
 

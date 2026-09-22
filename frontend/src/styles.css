@@ -1504,6 +1504,53 @@ select {
   padding-inline: 18px;
 }
 
+.account-list-toolbar {
+  display: grid;
+  grid-template-columns: minmax(250px, 1fr) repeat(3, minmax(150px, auto)) auto auto;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.account-list-search {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 11px;
+  color: var(--text-3);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+
+.account-list-search:focus-within {
+  border-color: var(--brand-2);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-2) 14%, transparent);
+}
+
+.account-list-search svg {
+  width: 17px;
+  height: 17px;
+  flex: none;
+}
+
+.account-list-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  color: var(--text-1);
+  background: transparent;
+  font: inherit;
+}
+
+.edit-account-modal .input[readonly] {
+  color: var(--text-2);
+  background: var(--surface-2);
+  cursor: not-allowed;
+}
+
 .btn.full {
   width: 100%;
 }
@@ -5052,3 +5099,14 @@ button.notification-popover-main:hover {
 .account-override-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); }
 .account-override-row > span { display: flex; min-width: 0; align-items: center; gap: 8px; }
 .account-override-row strong { overflow: hidden; color: var(--text-1); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 1180px) {
+  .account-list-toolbar { grid-template-columns: minmax(260px, 1fr) repeat(2, minmax(160px, 1fr)); }
+  .account-list-toolbar .account-list-search { grid-column: 1 / -1; }
+}
+
+@media (max-width: 720px) {
+  .account-list-toolbar { grid-template-columns: 1fr; }
+  .account-list-toolbar .account-list-search { grid-column: auto; }
+  .account-list-toolbar .btn { justify-content: center; }
+}
