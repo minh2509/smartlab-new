@@ -25,7 +25,9 @@ import { PostReviewDetailPage } from '../features/posts/pages/PostReviewDetailPa
 import { ArticleArchivePage } from '../features/public/pages/ArticleArchivePage'
 import { ArticleDetailPage } from '../features/public/pages/ArticleDetailPage'
 import { NewsArchivePage } from '../features/public/pages/NewsArchivePage'
+import { NewsDetailPage } from '../features/public/pages/NewsDetailPage'
 import { AchievementArchivePage } from '../features/public/pages/AchievementArchivePage'
+import { AchievementDetailPage } from '../features/public/pages/AchievementDetailPage'
 import { HomePage } from '../features/public/pages/HomePage'
 import { StaticPublicPage } from '../features/public/pages/StaticPublicPage'
 import { PublicDocumentsPage } from '../features/public/pages/PublicDocumentsPage'
@@ -69,7 +71,9 @@ export function App() {
         <Route path="/bai-viet" element={<ArticleArchivePage />} />
         <Route path="/bai-viet/:slug" element={<ArticleDetailPage />} />
         <Route path="/tin-tuc" element={<NewsArchivePage />} />
+        <Route path="/tin-tuc/:id" element={<NewsDetailPage />} />
         <Route path="/thanh-tuu" element={<AchievementArchivePage />} />
+        <Route path="/thanh-tuu/:id" element={<AchievementDetailPage />} />
         <Route path="/blog" element={<Navigate to="/bai-viet" replace />} />
         <Route path="/posts" element={<PostFeedPage />} />
         <Route path="/my-posts" element={<MyPostsPage />} />

@@ -14,7 +14,7 @@ import { listPosts } from "../../posts/api";
 import type { PostFeedItem } from "../../posts/types";
 import { listPublicProjects } from "../../projects/api";
 import type { PublicProjectSummary } from "../../projects/types";
-import { coreValues, operatingSteps } from "../publicData";
+import { coreValues, operatingSteps, aboutQuickFacts } from "../publicData";
 import {
   PublicPostCard,
   PublicProjectCard,
@@ -49,6 +49,7 @@ function countLabel(value: number | null) {
 
 function AboutContent() {
   const valueIcons = [FlaskConical, GraduationCap, BadgeCheck];
+  const factIcons = [Calendar, Building2, MapPin];
   const [projectCount, setProjectCount] = useState<number | null>(null);
 
   useEffect(() => {
@@ -124,7 +125,7 @@ function AboutContent() {
         </div>
       </section>
 
-      {/* Quick facts */}
+      {/* Quick facts (Render động từ aboutQuickFacts) */}
       <section className="about-facts-strip">
         <div className="wrap">
           <div
@@ -135,27 +136,18 @@ function AboutContent() {
             <h2 className="about-section-title">Hồ sơ phòng Lab</h2>
           </div>
           <div className="about-facts-row">
-            <div className="about-fact-card">
-              <div className="about-fact-icon">
-                <Calendar size={20} />
-              </div>
-              <span className="about-fact-label">Thời gian thành lập</span>
-              <span className="about-fact-value">2023</span>
-            </div>
-            <div className="about-fact-card">
-              <div className="about-fact-icon">
-                <Building2 size={20} />
-              </div>
-              <span className="about-fact-label">Trực thuộc</span>
-              <span className="about-fact-value">Đại học FPT Hà Nội</span>
-            </div>
-            <div className="about-fact-card">
-              <div className="about-fact-icon">
-                <MapPin size={20} />
-              </div>
-              <span className="about-fact-label">Địa điểm</span>
-              <span className="about-fact-value">Phòng DE 211 - Tòa Delta</span>
-            </div>
+            {aboutQuickFacts.map((fact, index) => {
+              const IconComponent = factIcons[index] ?? Building2;
+              return (
+                <div className="about-fact-card" key={fact.label}>
+                  <div className="about-fact-icon">
+                    <IconComponent size={20} />
+                  </div>
+                  <span className="about-fact-label">{fact.label}</span>
+                  <span className="about-fact-value">{fact.value}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>

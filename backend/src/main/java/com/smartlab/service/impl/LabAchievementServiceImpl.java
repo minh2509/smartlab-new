@@ -6,6 +6,7 @@ import com.smartlab.dto.response.AchievementYearCountResponse;
 import com.smartlab.dto.response.AdminLabAchievementResponse;
 import com.smartlab.dto.response.LabAchievementResponse;
 import com.smartlab.dto.response.LabAchievementFileResponse;
+import com.smartlab.dto.response.PublicLabAchievementDetailResponse;
 import com.smartlab.dto.response.PublicPageResponse;
 import com.smartlab.dto.response.PublicRelatedProjectResponse;
 import com.smartlab.entity.LabAchievementEntity;
@@ -47,6 +48,26 @@ public class LabAchievementServiceImpl implements LabAchievementService {
     private final StoredFileRepository storedFileRepository;
     private final FileService fileService;
     private final PostContentFileService postContentFileService;
+
+    @Override
+    @Transactional(readOnly = true)
+    public LabAchievementResponse getPublic(Long id) {
+        LabAchievementEntity achievement = achievementRepository.findByIdAndDeletedAtIsNull(id)
+                .filter(e -> Boolean.TRUE.equals(e.getIsPublic()))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Achievement not found"));
+        return toResponse(achievement);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PublicLabAchievementDetailResponse getPublicDetail(Long id) {
+        LabAchievementEntity achievement = achievementRepository.findByIdAndDeletedAtIsNull(id)
+                .filter(e -> Boolean.TRUE.equals(e.getIsPublic()))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Achievement not found"));
+        List<LabAchievementFileResponse> images = achievementFileRepository.findPublicActiveByAchievementId(id)
+                .stream().map(this::toFileResponse).toList();
+        return toDetailResponse(achievement, images);
+    }
 
     @Override
     @Transactional(readOnly = true)
@@ -127,6 +148,15 @@ public class LabAchievementServiceImpl implements LabAchievementService {
     public List<LabAchievementFileResponse> listFiles(Long achievementId) {
         findActive(achievementId);
         return achievementFileRepository.findActiveByAchievementId(achievementId).stream().map(this::toFileResponse).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<LabAchievementFileResponse> listPublicFiles(Long achievementId) {
+        achievementRepository.findByIdAndDeletedAtIsNull(achievementId)
+                .filter(e -> Boolean.TRUE.equals(e.getIsPublic()))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Achievement not found"));
+        return achievementFileRepository.findPublicActiveByAchievementId(achievementId).stream().map(this::toFileResponse).toList();
     }
 
     @Override
@@ -259,6 +289,19 @@ public class LabAchievementServiceImpl implements LabAchievementService {
                 .relatedProject(publicProject)
                 .isPublic(achievement.getIsPublic()).createdAt(achievement.getCreatedAt()).updatedAt(achievement.getUpdatedAt())
                 .build();
+    }
+
+    private PublicLabAchievementDetailResponse toDetailResponse(LabAchievementEntity achievement, List<LabAchievementFileResponse> images) {
+        ProjectEntity project = achievement.getRelatedProject();
+        PublicRelatedProjectResponse publicProject = project != null && project.getDeletedAt() == null && Boolean.TRUE.equals(project.getIsPublic())
+                ? new PublicRelatedProjectResponse(project.getId(), project.getCode(), project.getName()) : null;
+        return new PublicLabAchievementDetailResponse(
+                achievement.getId(), achievement.getTitle(), achievement.getSummary(),
+                achievement.getAchievementType(), achievement.getAchievementYear(), achievement.getAchievementDate(),
+                achievement.getEvidenceUrl(), achievement.getRecognizingOrganization(),
+                publicProject, images,
+                achievement.getCreatedAt(), achievement.getUpdatedAt()
+        );
     }
 
     private AdminLabAchievementResponse toAdminResponse(LabAchievementEntity achievement) {

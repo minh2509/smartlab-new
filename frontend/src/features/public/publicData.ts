@@ -9,10 +9,10 @@ export const stats = [
 ]
 
 export const aboutQuickFacts = [
-  { label: 'Thành lập', value: '2023' },
+  { label: 'Thời Gian Thành lập', value: '2023' },
   { label: 'Trực thuộc', value: 'Đại học FPT Hà Nội' },
-  { label: 'Địa điểm', value: 'Phòng DE 211 - Tòa Delta, Đại học FPT Hà Nội' },
-  { label: 'Lĩnh vực', value: 'AI · Robotics · SE' },
+  { label: 'Địa điểm', value: 'Phòng DE 211 - Tòa Delta' },
+  { label: 'Lĩnh vực Chính', value: 'AI · Robotics · SE' },
 ]
 
 export const coreValues = [
