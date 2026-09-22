@@ -1,247 +1,248 @@
-import { ArrowRight, BadgeCheck, FlaskConical, GraduationCap, Search } from 'lucide-react'
-import type { CSSProperties, ReactNode } from 'react'
-import { Fragment, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { listPosts } from '../../posts/api'
-import type { PostFeedItem } from '../../posts/types'
-import { getResearchFields } from '../../profile/api'
-import { listPublicProjects } from '../../projects/api'
-import type { PublicProjectSummary } from '../../projects/types'
-import { aboutQuickFacts, coreValues, operatingSteps } from '../publicData'
-import { PublicPostCard, PublicProjectCard } from '../components/PublicDataCards'
-import { PublicPageHead } from '../components/PublicPageHead'
-import { listPublicEvents } from '../../events/api'
-import { listLatestNews } from '../newsApi'
-import type { LabNewsArticle } from '../newsTypes'
+import {
+  BadgeCheck,
+  FlaskConical,
+  GraduationCap,
+  Search,
+  Building2,
+  MapPin,
+  Calendar,
+  ArrowRight,
+} from "lucide-react";
+import type { CSSProperties, ReactNode } from "react";
+import { useEffect, useState } from "react";
+import { listPosts } from "../../posts/api";
+import type { PostFeedItem } from "../../posts/types";
+import { listPublicProjects } from "../../projects/api";
+import type { PublicProjectSummary } from "../../projects/types";
+import { coreValues, operatingSteps } from "../publicData";
+import {
+  PublicPostCard,
+  PublicProjectCard,
+} from "../components/PublicDataCards";
+import { PublicPageHead } from "../components/PublicPageHead";
+import "./StaticPublicPage.css";
 
 type StaticPublicPageProps = {
-  title: string
-  description: string
-  kind: 'about' | 'contact' | 'search'
-}
+  title: string;
+  description: string;
+  kind: "about" | "contact" | "search";
+};
 
-export function StaticPublicPage({ title, description, kind }: StaticPublicPageProps) {
+export function StaticPublicPage({
+  title,
+  description,
+  kind,
+}: StaticPublicPageProps) {
   return (
     <>
       <PublicPageHead title={title} description={description} />
-      {kind === 'about' ? <AboutContent /> : null}
-      {kind === 'contact' ? <ContactContent /> : null}
-      {kind === 'search' ? <SearchContent /> : null}
+      {kind === "about" && <AboutContent />}
+      {kind === "contact" && <ContactContent />}
+      {kind === "search" && <SearchContent />}
     </>
-  )
+  );
 }
 
-
+function countLabel(value: number | null) {
+  return value === null ? "..." : String(value);
+}
 
 function AboutContent() {
-  const valueIcons = [FlaskConical, GraduationCap, BadgeCheck]
-  const [counts, setCounts] = useState({ projects: null as number | null, fields: null as number | null, events: null as number | null })
-  const [newsItems, setNewsItems] = useState<LabNewsArticle[]>([])
+  const valueIcons = [FlaskConical, GraduationCap, BadgeCheck];
+  const [projectCount, setProjectCount] = useState<number | null>(null);
 
   useEffect(() => {
-    let active = true
-    void Promise.all([listPublicProjects(0, 1), getResearchFields(), listPublicEvents({ upcoming: true }), listLatestNews(3)])
-      .then(([projects, fields, events, news]) => {
+    let active = true;
+    void listPublicProjects(0, 1)
+      .then((projects) => {
         if (active) {
-          setCounts({ projects: projects.totalElements, fields: fields.length, events: events.length })
-          setNewsItems(news)
+          setProjectCount(projects.totalElements);
         }
       })
-      .catch(() => undefined)
-    return () => { active = false }
-  }, [])
-
-  const liveStats = [
-    { value: countLabel(counts.projects), label: 'dự án có thể xem' },
-    { value: countLabel(counts.events), label: 'sự kiện công khai sắp tới' },
-    { value: countLabel(counts.fields), label: 'lĩnh vực nghiên cứu' },
-  ]
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
-    <>
-      <section className="section">
+    <div className="about-page">
+      {/* Hero */}
+      <section className="about-hero">
         <div className="wrap">
-          <div className="layout-side">
-            <div className="prose">
-              <div className="kicker">Tổng quan</div>
-              <h2 style={{ marginTop: 0 }}>Một phòng Lab của sinh viên, vận hành như một nhóm nghiên cứu thật</h2>
-              <p>
-                Smart Lab được thành lập với mục tiêu tạo môi trường để sinh viên làm nghiên cứu và phát triển sản phẩm một
-                cách bài bản. Thành viên được đưa vào các nhóm dự án có mục tiêu rõ ràng, có leader dẫn dắt và có lịch đánh
-                giá tiến độ định kỳ.
-              </p>
-              <h3>Mục tiêu</h3>
-              <p>
-                Mỗi thành viên hướng tới ít nhất một kết quả công khai được: một bài viết, một sản phẩm chạy được, hoặc một
-                bộ dữ liệu mở trong thời gian tham gia Lab.
-              </p>
-              <h3>Định hướng</h3>
-              <p>
-                Ba lĩnh vực trọng tâm là Trí tuệ nhân tạo, Robotics và Kỹ thuật phần mềm. Lab ưu tiên các bài toán thực tế
-                trong nước và các sản phẩm có thể sử dụng thật.
-              </p>
-              <p>
-                Lab đề cao ba nguyên tắc: nghiên cứu phải thật, người hướng dẫn phải sát, và việc đánh giá phải minh bạch. Đó là những giá trị
-                định hình cách chúng tôi phân công, theo dõi và ghi nhận đóng góp của từng thành viên.
+          <div className="about-hero-inner">
+            <span className="about-badge">Về Smart Lab</span>
+            <h1 className="about-hero-title">
+              Một phòng Lab của sinh viên, vận hành như một nhóm nghiên cứu thật
+            </h1>
+            <p className="about-hero-sub">
+              Smart Lab được thành lập với mục tiêu tạo môi trường để sinh viên
+              làm nghiên cứu và phát triển sản phẩm một cách bài bản. Thành viên
+              được đưa vào các nhóm dự án có mục tiêu rõ ràng, có leader dẫn dắt
+              và có lịch đánh giá tiến độ định kỳ.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Mission */}
+      <section className="about-mission">
+        <div className="wrap">
+          <div className="about-mission-grid">
+            <div className="about-content-col">
+              <h2 className="about-mission-heading">
+                Vì sao Smart Lab ra đời?
+              </h2>
+              <div className="about-content-block">
+                <h3 className="about-content-heading">Mục tiêu</h3>
+                <p className="about-content-text">
+                  Mỗi thành viên hướng tới ít nhất một kết quả công khai được:
+                  một bài viết, một sản phẩm chạy được, hoặc một bộ dữ liệu mở
+                  trong thời gian tham gia Lab.
+                </p>
+              </div>
+
+              <div className="about-content-block">
+                <h3 className="about-content-heading">Định hướng</h3>
+                <p className="about-content-text">
+                  Ba lĩnh vực trọng tâm là <strong>Trí tuệ nhân tạo</strong>,{" "}
+                  <strong>Robotics</strong> và{" "}
+                  <strong>Kỹ thuật phần mềm</strong>. Lab ưu tiên các bài toán
+                  thực tế trong nước và các sản phẩm có thể sử dụng thật.
+                </p>
+              </div>
+            </div>
+
+            <div className="about-quote-card">
+              <p className="about-quote-text">
+                &ldquo;Không lý thuyết suông, không sản phẩm nửa vời. Mỗi dự án
+                tại Smart Lab đều đi từ bài toán thực tế đến tiêu chuẩn nghiệm
+                thu khắt khe của từng lĩnh vực nghiên cứu.&rdquo;
               </p>
             </div>
-            <aside>
-              <div className="side-box sticky">
-                <h4>Thông tin nhanh</h4>
-                <dl className="deflist">
-                  {aboutQuickFacts.map((fact) => (
-                    <Fragment key={fact.label}>
-                      <dt>{fact.label}</dt>
-                      <dd>{fact.label === 'Lĩnh vực'
-                        ? `${countLabel(counts.fields)} hướng nghiên cứu`
-                        : fact.value}</dd>
-                    </Fragment>
-                  ))}
-                </dl>
-                <Link className="btn brand block mt-20" to="/du-an">
-                  Xem dự án đang chạy
-                </Link>
-              </div>
-            </aside>
           </div>
         </div>
       </section>
 
-      <section className="section alt tight">
+      {/* Quick facts */}
+      <section className="about-facts-strip">
         <div className="wrap">
-          <div className="grid c3">
-            {liveStats.map((stat) => (
-              <div className="card pad center stat-card" key={stat.label}>
-                <b>{stat.value}</b>
-                <span className="muted small">{stat.label}</span>
+          <div
+            className="about-section-header"
+            style={{ marginBottom: "32px" }}
+          >
+            <span className="about-section-eyebrow">Về chúng tôi</span>
+            <h2 className="about-section-title">Hồ sơ phòng Lab</h2>
+          </div>
+          <div className="about-facts-row">
+            <div className="about-fact-card">
+              <div className="about-fact-icon">
+                <Calendar size={20} />
               </div>
-            ))}
+              <span className="about-fact-label">Thời gian thành lập</span>
+              <span className="about-fact-value">2023</span>
+            </div>
+            <div className="about-fact-card">
+              <div className="about-fact-icon">
+                <Building2 size={20} />
+              </div>
+              <span className="about-fact-label">Trực thuộc</span>
+              <span className="about-fact-value">Đại học FPT Hà Nội</span>
+            </div>
+            <div className="about-fact-card">
+              <div className="about-fact-icon">
+                <MapPin size={20} />
+              </div>
+              <span className="about-fact-label">Địa điểm</span>
+              <span className="about-fact-value">Phòng DE 211 - Tòa Delta</span>
+            </div>
           </div>
         </div>
       </section>
 
-      <section className="section">
+      {/* Impact Section */}
+      <section className="about-impact-section">
         <div className="wrap">
-          <div className="sec-head">
-            <div className="kicker">Giá trị cốt lõi</div>
-            <h2>Ba điều Lab luôn giữ</h2>
-            <p>Những nguyên tắc này quyết định cách Lab làm việc và cách một thành viên được đánh giá.</p>
+          <div className="about-impact-card">
+            <div className="about-impact-content">
+              <span className="about-section-eyebrow">
+                Thực chiến & Đột phá
+              </span>
+              <h2 className="about-section-title">
+                {countLabel(projectCount)}+ Dự án đã triển khai
+              </h2>
+              <p className="about-impact-desc">
+                Mỗi sản phẩm tại Smart Lab đều trải qua quá trình nghiên cứu,
+                kiểm chứng và phát triển nghiêm ngặt trước khi ứng dụng vào thực
+                tế.
+              </p>
+            </div>
+            <div className="about-impact-action">
+              <a href="/du-an" className="about-impact-btn">
+                Khám phá kho dự án <ArrowRight size={18} />
+              </a>
+            </div>
           </div>
-          <div className="grid c3">
+        </div>
+      </section>
+
+      {/* Core Values */}
+      <section className="about-values">
+        <div className="wrap">
+          <div className="about-section-header">
+            <span className="about-section-eyebrow">Giá trị cốt lõi</span>
+            <h2 className="about-section-title">Ba điều Lab luôn giữ</h2>
+            <p className="about-section-desc">
+              Những nguyên tắc này quyết định cách Lab làm việc và cách một
+              thành viên được đánh giá.
+            </p>
+          </div>
+          <div className="about-values-grid">
             {coreValues.map((value, index) => {
-              const Icon = valueIcons[index] ?? BadgeCheck
-
+              const Icon = valueIcons[index] ?? BadgeCheck;
               return (
-                <div className="fieldcard" style={{ '--c': value.color } as CSSProperties} key={value.title}>
-                  <span className="ico">
-                    <Icon />
-                  </span>
-                  <h3>{value.title}</h3>
-                  <p>{value.description}</p>
+                <div className="about-value-card" key={value.title}>
+                  <div
+                    className="about-value-icon"
+                    style={{ "--c": value.color } as CSSProperties}
+                  >
+                    <Icon size={24} />
+                  </div>
+                  <h3 className="about-value-title">{value.title}</h3>
+                  <p className="about-value-desc">{value.description}</p>
                 </div>
-              )
+              );
             })}
           </div>
         </div>
       </section>
 
-      <section className="section alt">
+      {/* Operating Process */}
+      <section className="about-process">
         <div className="wrap">
-          <div className="layout-side left">
-            <div className="sec-head" style={{ marginBottom: 0 }}>
-              <div className="kicker">Quy trình</div>
-              <h2>Cách Lab vận hành</h2>
-              <p>Từ lúc được cấp tài khoản đến lúc có kết quả, mỗi thành viên đi qua bốn bước sau.</p>
-            </div>
-            <div className="steps">
-              {operatingSteps.map((step, index) => (
-                <div className="step" key={step.title}>
-                  <div className="rail">
-                    <span className="n">{index + 1}</span>
-                    {index < operatingSteps.length - 1 ? <span className="line" /> : null}
-                  </div>
-                  <div className="txt">
-                    <b>{step.title}</b>
-                    <p>{step.description}</p>
-                  </div>
+          <div className="about-section-header">
+            <span className="about-section-eyebrow">Quy trình</span>
+            <h2 className="about-section-title">Cách Lab vận hành</h2>
+            <p className="about-section-desc">
+              Từ lúc được cấp tài khoản đến lúc có kết quả, mỗi thành viên đi
+              qua bốn bước sau.
+            </p>
+          </div>
+          <div className="about-steps">
+            {operatingSteps.map((step, index) => (
+              <div className="about-step" key={step.title}>
+                <div className="about-step-num">{index + 1}</div>
+                <div className="about-step-body">
+                  <h4 className="about-step-title">{step.title}</h4>
+                  <p className="about-step-text">{step.description}</p>
                 </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="section">
-        <div className="wrap">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 16, marginBottom: 32 }}>
-            <div className="sec-head" style={{ marginBottom: 0 }}>
-              <div className="kicker">Truyền thông</div>
-              <h2>Báo chí &amp; Truyền thông nói về Smart Lab</h2>
-              <p>Những bài viết, tin tức và góc nhìn từ các cơ quan báo chí về hoạt động của phòng Lab.</p>
-            </div>
-            <Link className="landing-section-cta" to="/tin-tuc" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 700, color: 'var(--accent)' }}>
-              Xem tất cả tin tức <ArrowRight size={16} />
-            </Link>
-          </div>
-
-          {newsItems.length > 0 ? (
-            <div className="grid c3">
-              {newsItems.map((item) => (
-                <article className="card pad" key={item.id} style={{ display: 'flex', flexDirection: 'column', height: '100%', borderRadius: 'var(--r)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
-                    <span className="chip accent" style={{ fontSize: 11, fontWeight: 700 }}>{item.sourceName}</span>
-                    {item.publishedAt ? (
-                      <span className="muted small">{new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short' }).format(new Date(item.publishedAt))}</span>
-                    ) : null}
-                  </div>
-                  <h3 style={{ fontSize: 16.5, fontWeight: 750, lineHeight: 1.4, margin: '0 0 10px', color: 'var(--text-1)' }}>{item.title}</h3>
-                  {item.excerpt ? (
-                    <p className="muted small" style={{ flex: 1, margin: '0 0 16px', lineHeight: 1.55 }}>
-                      {item.excerpt.length > 120 ? `${item.excerpt.slice(0, 120).trimEnd()}…` : item.excerpt}
-                    </p>
-                  ) : null}
-                  <div style={{ marginTop: 'auto', paddingTop: 12, borderTop: '1px solid var(--line)' }}>
-                    <a
-                      href={item.sourceUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label={`Xem bài viết trên ${item.sourceName}`}
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 700, fontSize: 13, color: 'var(--brand-1)' }}
-                    >
-                      Nguồn bài viết ↗
-                    </a>
-                  </div>
-                </article>
-              ))}
-            </div>
-          ) : (
-            <div className="public-empty empty tight">
-              Đang cập nhật các bài viết và tin tức truyền thông về phòng Lab.
-            </div>
-          )}
-        </div>
-      </section>
-
-      <section className="section">
-        <div className="wrap">
-          <div className="ctaband">
-            <div>
-              <h2>Sẵn sàng làm nghiên cứu thật?</h2>
-              <p>Xem những dự án đang chạy tại Lab hoặc đọc các bài viết mới nhất để hiểu cách các nhóm đang làm việc.</p>
-              <div className="hero-cta">
-                <Link className="btn primary lg" to="/du-an">
-                  Xem dự án đang chạy
-                </Link>
-                <Link className="btn outline-light lg" to="/bai-viet">
-                  Xem bài viết
-                </Link>
               </div>
-            </div>
+            ))}
           </div>
         </div>
       </section>
-    </>
-  )
+    </div>
+  );
 }
 
 function ContactContent() {
@@ -251,7 +252,10 @@ function ContactContent() {
         <div className="layout-side">
           <div className="card pad">
             <h2>Gửi lời nhắn cho Smart Lab</h2>
-            <p className="muted">Form đang để mặc định theo mockup. Khi backend có API liên hệ, phần submit sẽ được nối vào.</p>
+            <p className="muted">
+              Form đang để mặc định theo mockup. Khi backend có API liên hệ,
+              phần submit sẽ được nối vào.
+            </p>
             <div className="form-stack mt-20">
               <label className="field">
                 <span>Họ tên</span>
@@ -263,7 +267,10 @@ function ContactContent() {
               </label>
               <label className="field">
                 <span>Nội dung</span>
-                <textarea className="textarea" placeholder="Bạn muốn trao đổi với Lab về..." />
+                <textarea
+                  className="textarea"
+                  placeholder="Bạn muốn trao đổi với Lab về..."
+                />
               </label>
               <button className="btn primary" type="button">
                 Gửi liên hệ
@@ -283,49 +290,63 @@ function ContactContent() {
         </div>
       </div>
     </section>
-  )
+  );
 }
 
-
 function SearchContent() {
-  const [query, setQuery] = useState('')
-  const [projects, setProjects] = useState<PublicProjectSummary[]>([])
-  const [posts, setPosts] = useState<PostFeedItem[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [reloadKey, setReloadKey] = useState(0)
+  const [query, setQuery] = useState("");
+  const [projects, setProjects] = useState<PublicProjectSummary[]>([]);
+  const [posts, setPosts] = useState<PostFeedItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
-    let active = true
-    setLoading(true)
-    setError(null)
-    void Promise.all([listPublicProjects(0, 48, { query: query.trim() }), listPosts(null, undefined, 30)])
+    let active = true;
+    setLoading(true);
+    setError(null);
+    void Promise.all([
+      listPublicProjects(0, 48, { query: query.trim() }),
+      listPosts(null, undefined, 30),
+    ])
       .then(([projectResult, postResult]) => {
-        if (!active) return
-        setProjects(projectResult.items)
-        setPosts(postResult.items)
+        if (!active) return;
+        setProjects(projectResult.items);
+        setPosts(postResult.items);
       })
       .catch((reason: unknown) => {
-        if (active) setError(messageOf(reason, 'Không tải được dữ liệu tìm kiếm công khai.'))
+        if (active)
+          setError(
+            messageOf(reason, "Không tải được dữ liệu tìm kiếm công khai."),
+          );
       })
-      .finally(() => { if (active) setLoading(false) })
-    return () => { active = false }
-  }, [query, reloadKey])
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [query, reloadKey]);
 
-  const normalized = query.trim().toLocaleLowerCase('vi')
-  const matchingProjects = projects.filter((project) => includesQuery([
-    project.code,
-    project.name,
-    project.description,
-    ...project.leaders.map((leader) => leader.name),
-  ], normalized))
-  const matchingPosts = posts.filter((post) => includesQuery([
-    post.title,
-    post.excerpt,
-    post.author?.name,
-    post.category?.name,
-  ], normalized))
-  const total = matchingProjects.length + matchingPosts.length
+  const normalized = query.trim().toLocaleLowerCase("vi");
+  const matchingProjects = projects.filter((project) =>
+    includesQuery(
+      [
+        project.code,
+        project.name,
+        project.description,
+        ...project.leaders.map((leader) => leader.name),
+      ],
+      normalized,
+    ),
+  );
+  const matchingPosts = posts.filter((post) =>
+    includesQuery(
+      [post.title, post.excerpt, post.author?.name, post.category?.name],
+      normalized,
+    ),
+  );
+  const total = matchingProjects.length + matchingPosts.length;
 
   return (
     <section className="section">
@@ -333,46 +354,98 @@ function SearchContent() {
         <div className="toolbar">
           <div className="searchbar" style={{ flex: 1, minWidth: 220 }}>
             <Search aria-hidden="true" />
-            <input className="input" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm dự án, bài viết..." aria-label="Tìm nội dung công khai" autoFocus />
+            <input
+              className="input"
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Tìm dự án, bài viết..."
+              aria-label="Tìm nội dung công khai"
+              autoFocus
+            />
           </div>
         </div>
-        {loading ? <div className="public-empty empty tight">Đang tải dữ liệu tìm kiếm...</div> : null}
-        {error ? <LoadError message={error} onRetry={() => setReloadKey((value) => value + 1)} /> : null}
-        {!loading && !error && total === 0 ? <div className="public-empty empty tight">Không tìm thấy nội dung phù hợp.</div> : null}
-        {!loading && !error && matchingProjects.length > 0 ? <SearchGroup title={`Dự án (${matchingProjects.length})`}><div className="grid c3">{matchingProjects.map((project) => <PublicProjectCard key={project.id} project={project} />)}</div></SearchGroup> : null}
-        {!loading && !error && matchingPosts.length > 0 ? <SearchGroup title={`Bài viết (${matchingPosts.length})`}><div className="grid c3">{matchingPosts.map((post) => <PublicPostCard key={post.id} post={post} />)}</div></SearchGroup> : null}
+        {loading && (
+          <div className="public-empty empty tight">
+            Đang tải dữ liệu tìm kiếm...
+          </div>
+        )}
+        {error && (
+          <LoadError
+            message={error}
+            onRetry={() => setReloadKey((value) => value + 1)}
+          />
+        )}
+        {!loading && !error && total === 0 && (
+          <div className="public-empty empty tight">
+            Không tìm thấy nội dung phù hợp.
+          </div>
+        )}
+        {!loading && !error && matchingProjects.length > 0 && (
+          <SearchGroup title={`Dự án (${matchingProjects.length})`}>
+            <div className="grid c3">
+              {matchingProjects.map((project) => (
+                <PublicProjectCard key={project.id} project={project} />
+              ))}
+            </div>
+          </SearchGroup>
+        )}
+        {!loading && !error && matchingPosts.length > 0 && (
+          <SearchGroup title={`Bài viết (${matchingPosts.length})`}>
+            <div className="grid c3">
+              {matchingPosts.map((post) => (
+                <PublicPostCard key={post.id} post={post} />
+              ))}
+            </div>
+          </SearchGroup>
+        )}
       </div>
     </section>
-  )
+  );
 }
 
-function SearchGroup({ title, children }: { title: string; children: ReactNode }) {
+function SearchGroup({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
   return (
     <div className="mt-20">
       <h2>{title}</h2>
       {children}
     </div>
-  )
+  );
 }
 
-function LoadError({ message, onRetry }: { message: string; onRetry: () => void }) {
+function LoadError({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}) {
   return (
     <div role="alert">
       <div className="alert error">{message}</div>
-      <button className="btn" type="button" onClick={onRetry}>Thử tải lại</button>
+      <button className="btn" type="button" onClick={onRetry}>
+        Thử tải lại
+      </button>
     </div>
-  )
+  );
 }
 
-function includesQuery(values: Array<string | null | undefined>, normalizedQuery: string) {
-  if (!normalizedQuery) return true
-  return values.some((value) => value?.toLocaleLowerCase('vi').includes(normalizedQuery))
+function includesQuery(
+  values: Array<string | null | undefined>,
+  normalizedQuery: string,
+) {
+  if (!normalizedQuery) return true;
+  return values.some((value) =>
+    value?.toLocaleLowerCase("vi").includes(normalizedQuery),
+  );
 }
 
 function messageOf(reason: unknown, fallback: string) {
-  return reason instanceof Error ? reason.message : fallback
-}
-
-function countLabel(value: number | null) {
-  return value === null ? '-' : String(value)
+  return reason instanceof Error ? reason.message : fallback;
 }
