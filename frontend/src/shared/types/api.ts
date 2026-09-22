@@ -12,6 +12,12 @@ export type AccountResponse = {
   isAccountVerified: boolean
   roles: string[]
   permissions: string[]
+  permissionOverrides: PermissionOverride[]
+}
+
+export type PermissionOverride = {
+  permissionCode: string
+  effect: 'GRANT' | 'DENY'
 }
 
 export type PaginatedResponse<T> = {

@@ -23,6 +23,7 @@ import java.util.Set;
 
 import static com.smartlab.service.AuditVocabulary.*;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -41,9 +42,9 @@ class AdminAccountAuditTest {
         service = new AdminAccountServiceImpl(users, roles, permissions, userRoles, overrides, invitations, memberProfiles,
                 permissionService, emailOutbox, outboxState, sessions, hashes, encoder, audit);
         user = UserEntity.builder().id(11L).userId("external-user-id").email("member@test").name("Member").isActive(true).build();
-        when(users.findByUserId("external-user-id")).thenReturn(Optional.of(user));
-        when(permissionService.getRoleCodes(user)).thenReturn(Set.of());
-        when(permissionService.getEffectivePermissionCodes(user)).thenReturn(Set.of());
+        lenient().when(users.findByUserId("external-user-id")).thenReturn(Optional.of(user));
+        lenient().when(permissionService.getRoleCodes(user)).thenReturn(Set.of());
+        lenient().when(permissionService.getEffectivePermissionCodes(user)).thenReturn(Set.of());
     }
 
     @Test void updateRolesAuditsSortedCodesWithoutSensitiveData() {
@@ -70,7 +71,7 @@ class AdminAccountAuditTest {
     }
 
     @Test void setOverrideAuditsPreviousAndResultingEffectOnly() {
-        PermissionEntity permission = PermissionEntity.builder().id(5L).code("POST_READ").build();
+        PermissionEntity permission = PermissionEntity.builder().id(5L).code("POST_READ").isActive(true).build();
         UserPermissionOverrideEntity existing = UserPermissionOverrideEntity.builder().id(6L).user(user).permission(permission)
                 .effect(PermissionOverrideEffect.DENY).build();
         when(permissions.findByCode("POST_READ")).thenReturn(Optional.of(permission));
@@ -80,6 +81,37 @@ class AdminAccountAuditTest {
         verify(audit).log(USER_PERMISSION_OVERRIDE_SET, USER, "11",
                 Map.of("permissionCode", "POST_READ", "effect", "DENY"),
                 Map.of("permissionCode", "POST_READ", "effect", "GRANT"));
+    }
+
+    @Test void accountResponseExposesSortedOverridesSeparatelyFromEffectivePermissions() {
+        PermissionEntity write = PermissionEntity.builder().id(7L).code("WRITE").isActive(true).build();
+        PermissionEntity read = PermissionEntity.builder().id(5L).code("READ").isActive(true).build();
+        when(overrides.findByUserId(11L)).thenReturn(List.of(
+                UserPermissionOverrideEntity.builder().user(user).permission(write).effect(PermissionOverrideEffect.DENY).build(),
+                UserPermissionOverrideEntity.builder().user(user).permission(read).effect(PermissionOverrideEffect.GRANT).build()));
+
+        var response = service.toResponse(user);
+
+        assertThat(response.getPermissionOverrides())
+                .extracting("permissionCode", "effect")
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple("READ", PermissionOverrideEffect.GRANT),
+                        org.assertj.core.groups.Tuple.tuple("WRITE", PermissionOverrideEffect.DENY));
+    }
+
+    @Test void inactivePermissionCannotBeOverridden() {
+        PermissionEntity permission = PermissionEntity.builder().id(5L).code("POST_READ").isActive(false).build();
+        when(permissions.findByCode("POST_READ")).thenReturn(Optional.of(permission));
+        PermissionOverrideRequest request = new PermissionOverrideRequest();
+        request.setEffect(PermissionOverrideEffect.GRANT);
+
+        assertThatThrownBy(() -> service.setPermissionOverride(
+                "external-user-id", " post_read ", request, "admin"))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                .hasMessageContaining("Inactive permissions");
+
+        verify(overrides, never()).save(any());
+        verifyNoInteractions(sessions, audit);
     }
 
     @Test void removeOverrideAuditsOnlyRealMutation() {

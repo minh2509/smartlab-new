@@ -66,6 +66,21 @@ class AdminRolePermissionAuditTest {
                 Map.of("permissionCodes", List.of("A", "B")), Map.of("permissionCodes", List.of("A", "C")));
     }
 
+    @Test void setPermissionsNormalizesCodesAndRejectsInactiveAssignments() {
+        RoleEntity role = RoleEntity.builder().id(7L).code("ANALYST").build();
+        PermissionEntity active = permission(1L, "READ");
+        PermissionEntity inactive = PermissionEntity.builder().id(2L).code("WRITE").isActive(false).build();
+        when(roles.findByCode("ANALYST")).thenReturn(Optional.of(role));
+        when(permissions.findByCodeIn(Set.of("READ", "WRITE"))).thenReturn(List.of(active, inactive));
+
+        assertThatThrownBy(() -> service.setRolePermissions("analyst", Set.of(" read ", "write")))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("invalid or inactive");
+
+        verify(rolePermissions, never()).deleteByRoleId(any());
+        verifyNoInteractions(audit);
+    }
+
     @Test void systemRoleCannotChangeActiveState() {
         RoleEntity existing = RoleEntity.builder().id(1L).code("ADMIN").name("Admin").description("system")
                 .isSystem(true).isActive(true).build();

@@ -30,4 +30,7 @@ public class AccountResponse {
 
     @Schema(description = "Effective permissions after role permissions and user overrides", example = "[\"PROFILE_READ\", \"PROJECT_READ\"]")
     private Set<String> permissions;
+
+    @Schema(description = "Explicit per-user permission overrides, separate from effective permissions")
+    private Set<PermissionOverrideResponse> permissionOverrides;
 }

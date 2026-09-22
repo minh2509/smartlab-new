@@ -5043,3 +5043,12 @@ button.notification-popover-main:hover {
 @keyframes popup-surface-in { from { opacity:0; transform:translateY(-3px) scale(.99); } to { opacity:1; transform:translateY(0) scale(1); } }
 @media (prefers-reduced-motion: reduce) { .popup-select-menu,.confirm-dialog { animation:none; }.popup-select-trigger { transition:none; } }
 @media (max-width: 560px) { .confirm-dialog-content { grid-template-columns:auto 1fr; padding:18px; }.confirm-dialog footer { grid-column:1 / -1; }.confirm-dialog footer .btn { flex:1; } }
+
+.account-role-fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+.account-role-fieldset legend { margin-bottom: 8px; color: var(--text-2); font-size: 13px; font-weight: 700; }
+.account-role-options { display: grid; gap: 8px; padding: 11px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
+.account-role-options .check-row { margin: 0; }
+.account-override-list { display: grid; gap: 7px; }
+.account-override-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); }
+.account-override-row > span { display: flex; min-width: 0; align-items: center; gap: 8px; }
+.account-override-row strong { overflow: hidden; color: var(--text-1); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }

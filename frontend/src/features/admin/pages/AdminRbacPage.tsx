@@ -11,7 +11,7 @@ import { ConfirmDialog } from '../../../shared/ui/ConfirmDialog'
 import { OverlayPortalHost } from '../../../shared/ui/OverlayPortalHost'
 import { PopupSelect } from '../../../shared/ui/PopupSelect'
 import { useAuth } from '../../auth/authContext'
-import { createRole, listPermissions, listRoles, replaceRolePermissions, updateRole } from '../api'
+import { createPermission, createRole, listPermissions, listRoles, replaceRolePermissions, updatePermission, updateRole } from '../api'
 import './AdminRbacPage.css'
 
 type RoleForm = {
@@ -23,28 +23,42 @@ type RoleForm = {
 }
 
 type PermissionGroup = { module: string; permissions: Permission[] }
+type PermissionForm = {
+  code: string
+  name: string
+  module: string
+  description: string
+  isActive: boolean
+  mode: 'create' | 'update'
+}
 type ConfirmAction = 'discard-role-switch' | 'lock-role' | null
 
 const emptyRoleForm: RoleForm = { code: '', name: '', description: '', isActive: true, mode: 'create' }
+const emptyPermissionForm: PermissionForm = { code: '', name: '', module: '', description: '', isActive: true, mode: 'create' }
 
 export function AdminRbacPage() {
   const navigate = useNavigate()
   const { token, clearAuth } = useAuth()
   const toast = useToast()
   const roleDialogRef = useRef<HTMLDialogElement>(null)
+  const permissionDialogRef = useRef<HTMLDialogElement>(null)
   const [roles, setRoles] = useState<Role[]>([])
   const [permissions, setPermissions] = useState<Permission[]>([])
   const [roleForm, setRoleForm] = useState<RoleForm>(emptyRoleForm)
+  const [permissionForm, setPermissionForm] = useState<PermissionForm>(emptyPermissionForm)
   const [rolePermissionCode, setRolePermissionCode] = useState('')
   const [selectedPermissionCodes, setSelectedPermissionCodes] = useState<string[]>([])
   const [isRoleDialogOpen, setRoleDialogOpen] = useState(false)
+  const [isPermissionDialogOpen, setPermissionDialogOpen] = useState(false)
   const [pendingRoleCode, setPendingRoleCode] = useState<string | null>(null)
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null)
   const [catalogError, setCatalogError] = useState('')
   const [roleDialogError, setRoleDialogError] = useState('')
+  const [permissionDialogError, setPermissionDialogError] = useState('')
   const [workspaceError, setWorkspaceError] = useState('')
   const [isLoading, setLoading] = useState(false)
   const [isSavingRole, setSavingRole] = useState(false)
+  const [isSavingPermission, setSavingPermission] = useState(false)
   const [isSavingPermissions, setSavingPermissions] = useState(false)
   const [isUpdatingRoleState, setUpdatingRoleState] = useState(false)
 
@@ -67,6 +81,13 @@ export function AdminRbacPage() {
     dialog.showModal()
     window.requestAnimationFrame(() => dialog.querySelector<HTMLElement>('[data-role-dialog-initial]')?.focus())
   }, [isRoleDialogOpen])
+
+  useEffect(() => {
+    const dialog = permissionDialogRef.current
+    if (!isPermissionDialogOpen || !dialog || dialog.open) return
+    dialog.showModal()
+    window.requestAnimationFrame(() => dialog.querySelector<HTMLElement>('[data-permission-dialog-initial]')?.focus())
+  }, [isPermissionDialogOpen])
 
   const loadCatalogs = useCallback(async () => {
     if (!token) return
@@ -121,7 +142,9 @@ export function AdminRbacPage() {
 
   function setGroupPermissions(group: PermissionGroup, checked: boolean) {
     setWorkspaceError('')
-    const groupCodes = group.permissions.map((permission) => permission.code)
+    const groupCodes = group.permissions
+      .filter((permission) => !checked || permission.isActive)
+      .map((permission) => permission.code)
     setSelectedPermissionCodes((current) => {
       const next = new Set(current)
       groupCodes.forEach((code) => checked ? next.add(code) : next.delete(code))
@@ -216,6 +239,60 @@ export function AdminRbacPage() {
     }
   }
 
+  function openPermissionDialog(permission?: Permission) {
+    setPermissionDialogError('')
+    setPermissionForm(permission ? {
+      code: permission.code,
+      name: permission.name,
+      module: permission.module ?? '',
+      description: permission.description ?? '',
+      isActive: permission.isActive,
+      mode: 'update',
+    } : emptyPermissionForm)
+    setPermissionDialogOpen(true)
+  }
+
+  function closePermissionDialog() {
+    if (isSavingPermission) return
+    finishPermissionDialog()
+  }
+
+  function finishPermissionDialog() {
+    if (permissionDialogRef.current?.open) permissionDialogRef.current.close()
+    setPermissionDialogOpen(false)
+    setPermissionDialogError('')
+    setPermissionForm(emptyPermissionForm)
+  }
+
+  async function handlePermissionSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!token) return
+    setSavingPermission(true)
+    setPermissionDialogError('')
+    try {
+      const payload = {
+        code: permissionForm.code.trim(),
+        name: permissionForm.name.trim(),
+        module: permissionForm.module.trim() || undefined,
+        description: permissionForm.description.trim() || undefined,
+        isActive: permissionForm.isActive,
+      }
+      const result = permissionForm.mode === 'create'
+        ? await createPermission(token, payload)
+        : await updatePermission(token, permissionForm.code, payload)
+      setPermissions((current) => upsertByCode(current, result))
+      if (!result.isActive) {
+        setSelectedPermissionCodes((current) => current.filter((code) => code !== result.code))
+      }
+      toast.success(permissionForm.mode === 'create' ? 'Đã tạo permission' : 'Đã cập nhật permission')
+      finishPermissionDialog()
+    } catch (err) {
+      setPermissionDialogError(err instanceof Error ? err.message : 'Không lưu được permission')
+    } finally {
+      setSavingPermission(false)
+    }
+  }
+
   function handleConfirm(confirmed: boolean) {
     const action = confirmAction
     setConfirmAction(null)
@@ -255,10 +332,10 @@ export function AdminRbacPage() {
     </section>
 
     <section className="rbac-workspace" aria-labelledby="rbac-workspace-title">
-      <header className="rbac-workspace-head"><div><span className="rbac-section-label">Phạm vi quyền</span><h2 id="rbac-workspace-title">Permission workspace</h2><p>Mở từng module để xem và điều chỉnh quyền đang áp dụng.</p></div>{selectedRole ? <span className="rbac-clean-summary">{hasPermissionChanges ? `${permissionChangeCount} thay đổi chưa lưu` : `${selectedRolePermissionCodes.length} quyền được gán`}</span> : null}</header>
+      <header className="rbac-workspace-head"><div><span className="rbac-section-label">Phạm vi quyền</span><h2 id="rbac-workspace-title">Permission workspace</h2><p>Tạo, cập nhật và gán permission cho vai trò đang chọn.</p></div><div className="rbac-workspace-actions">{selectedRole ? <span className="rbac-clean-summary">{hasPermissionChanges ? `${permissionChangeCount} thay đổi chưa lưu` : `${selectedRolePermissionCodes.length} quyền được gán`}</span> : null}<button className="btn ghost table-btn" type="button" onClick={() => openPermissionDialog()}><Plus aria-hidden="true" />Tạo permission</button></div></header>
       <Feedback error={workspaceError} />
       <form onSubmit={handleRolePermissionsSubmit}>
-        {permissionGroups.length ? <PermissionModuleTable groups={permissionGroups} selectedPermissionSet={selectedPermissionSet} onTogglePermission={togglePermission} onSetGroup={setGroupPermissions} /> : <EmptyState title="Chưa có permission" description="Permission được định nghĩa ở backend và seed dữ liệu hệ thống." />}
+        {permissionGroups.length ? <PermissionModuleTable groups={permissionGroups} selectedPermissionSet={selectedPermissionSet} onTogglePermission={togglePermission} onSetGroup={setGroupPermissions} onEditPermission={openPermissionDialog} /> : <EmptyState title="Chưa có permission" description="Tạo permission đầu tiên để bắt đầu cấu hình quyền." />}
         {hasPermissionChanges ? <div className="rbac-dirty-bar" role="status" aria-live="polite"><strong>{permissionChangeCount} thay đổi chưa lưu</strong><div><button className="btn ghost" type="button" onClick={restoreSelectedRolePermissions} disabled={isSavingPermissions}><RotateCcw aria-hidden="true" />Hoàn tác</button><button className="btn primary" type="submit" disabled={!rolePermissionCode || isSavingPermissions}><Save aria-hidden="true" />{isSavingPermissions ? 'Đang lưu...' : 'Lưu thay đổi'}</button></div></div> : null}
       </form>
     </section>
@@ -272,18 +349,26 @@ export function AdminRbacPage() {
       </form>
     </dialog> : null}
 
+    {isPermissionDialogOpen ? <dialog ref={permissionDialogRef} className="rbac-role-dialog" aria-labelledby="permission-dialog-title" aria-describedby="permission-dialog-description" onCancel={(event) => { event.preventDefault(); closePermissionDialog() }} onClick={(event) => { if (event.target === event.currentTarget) closePermissionDialog() }}>
+      <form className="rbac-role-dialog-shell" onSubmit={handlePermissionSubmit}>
+        <OverlayPortalHost />
+        <header><div><h2 id="permission-dialog-title">{permissionForm.mode === 'create' ? 'Tạo permission' : 'Sửa permission'}</h2><p id="permission-dialog-description">Permission code là định danh ổn định được backend dùng để kiểm tra quyền.</p></div><button className="btn ghost rbac-dialog-close" type="button" aria-label="Đóng cửa sổ permission" onClick={closePermissionDialog} disabled={isSavingPermission}><X aria-hidden="true" /></button></header>
+        <div className="rbac-role-dialog-body"><Feedback error={permissionDialogError} /><label className="field"><span>Permission code</span><input className="input" data-permission-dialog-initial value={permissionForm.code} onChange={(event) => setPermissionForm((form) => ({ ...form, code: event.target.value.toUpperCase() }))} disabled={permissionForm.mode === 'update' || isSavingPermission} required /></label><label className="field"><span>Tên permission</span><input className="input" value={permissionForm.name} onChange={(event) => setPermissionForm((form) => ({ ...form, name: event.target.value }))} disabled={isSavingPermission} required /></label><label className="field"><span>Module</span><input className="input" value={permissionForm.module} onChange={(event) => setPermissionForm((form) => ({ ...form, module: event.target.value.toUpperCase() }))} disabled={isSavingPermission} placeholder="PROJECT" /></label><label className="field"><span>Mô tả</span><textarea className="textarea" value={permissionForm.description} onChange={(event) => setPermissionForm((form) => ({ ...form, description: event.target.value }))} disabled={isSavingPermission} /></label><label className="check-row"><input type="checkbox" checked={permissionForm.isActive} disabled={isSavingPermission} onChange={(event) => setPermissionForm((form) => ({ ...form, isActive: event.target.checked }))} />Đang hoạt động</label>{!permissionForm.isActive ? <p className="rbac-field-note">Permission bị khóa sẽ không còn xuất hiện trong effective permissions.</p> : null}</div>
+        <footer><button className="btn ghost" type="button" onClick={closePermissionDialog} disabled={isSavingPermission}>Hủy</button><button className="btn primary" type="submit" disabled={isSavingPermission}>{permissionForm.mode === 'create' ? <Plus aria-hidden="true" /> : <Save aria-hidden="true" />}{isSavingPermission ? 'Đang lưu...' : permissionForm.mode === 'create' ? 'Tạo permission' : 'Lưu thay đổi'}</button></footer>
+      </form>
+    </dialog> : null}
+
     {confirmAction === 'discard-role-switch' && selectedRole ? <ConfirmDialog title="Bỏ thay đổi chưa lưu?" description={`Các thay đổi quyền của ${selectedRole.code} chưa được lưu.`} cancelLabel="Tiếp tục chỉnh sửa" confirmLabel="Bỏ thay đổi" onClose={handleConfirm} /> : null}
     {confirmAction === 'lock-role' && selectedRole ? <ConfirmDialog title="Khóa vai trò?" description={`Vai trò “${selectedRole.code}” sẽ bị vô hiệu hóa. Người dùng đang sở hữu vai trò này có thể không đăng nhập được.`} cancelLabel="Hủy" confirmLabel="Khóa vai trò" destructive onClose={handleConfirm} /> : null}
   </>
 }
 
-function PermissionModuleTable({ groups, selectedPermissionSet, onTogglePermission, onSetGroup }: { groups: PermissionGroup[]; selectedPermissionSet: Set<string>; onTogglePermission: (permissionCode: string) => void; onSetGroup: (group: PermissionGroup, checked: boolean) => void }) {
+function PermissionModuleTable({ groups, selectedPermissionSet, onTogglePermission, onSetGroup, onEditPermission }: { groups: PermissionGroup[]; selectedPermissionSet: Set<string>; onTogglePermission: (permissionCode: string) => void; onSetGroup: (group: PermissionGroup, checked: boolean) => void; onEditPermission: (permission: Permission) => void }) {
   const [expandedModule, setExpandedModule] = useState<string | null>(null)
   return <div className="rbac-matrix-wrap"><table className="rbac-matrix"><thead><tr><th>Module</th><th>Quyền</th><th>Phạm vi</th><th><span className="sr-only">Thao tác</span></th></tr></thead><tbody>{groups.map((group) => {
     const selectedCount = group.permissions.filter((permission) => selectedPermissionSet.has(permission.code)).length
-    const allSelected = selectedCount === group.permissions.length
     const isExpanded = expandedModule === group.module
-    return <Fragment key={group.module}><tr className={isExpanded ? 'rbac-module-row is-expanded' : 'rbac-module-row'}><td><strong>{group.module}</strong></td><td><span>{selectedCount} / {group.permissions.length}</span></td><td>{describeModule(group)}</td><td><button className="rbac-module-toggle" type="button" onClick={() => setExpandedModule(isExpanded ? null : group.module)} aria-expanded={isExpanded} aria-label={`${isExpanded ? 'Thu gọn' : 'Mở'} quyền module ${group.module}`}><ChevronRight aria-hidden="true" /></button></td></tr>{isExpanded ? <tr className="rbac-module-editor-row"><td colSpan={4}><section className="rbac-module-editor" aria-label={`Quyền của module ${group.module}`}><header><div><strong>{group.module}</strong><span>{selectedCount} / {group.permissions.length} quyền</span></div><div><button className="rbac-text-action" type="button" onClick={() => onSetGroup(group, true)} disabled={allSelected}>Chọn tất cả</button><button className="rbac-text-action" type="button" onClick={() => onSetGroup(group, false)} disabled={!selectedCount}>Bỏ chọn tất cả</button></div></header><div className="rbac-permission-list">{group.permissions.map((permission) => <label className="rbac-permission-row" key={permission.code}><input type="checkbox" checked={selectedPermissionSet.has(permission.code)} onChange={() => onTogglePermission(permission.code)} /><span><strong>{permission.name}</strong><small>{permission.code}</small>{permission.description ? <em>{permission.description}</em> : null}</span></label>)}</div></section></td></tr> : null}</Fragment>
+    return <Fragment key={group.module}><tr className={isExpanded ? 'rbac-module-row is-expanded' : 'rbac-module-row'}><td><strong>{group.module}</strong></td><td><span>{selectedCount} / {group.permissions.length}</span></td><td>{describeModule(group)}</td><td><button className="rbac-module-toggle" type="button" onClick={() => setExpandedModule(isExpanded ? null : group.module)} aria-expanded={isExpanded} aria-label={`${isExpanded ? 'Thu gọn' : 'Mở'} quyền module ${group.module}`}><ChevronRight aria-hidden="true" /></button></td></tr>{isExpanded ? <tr className="rbac-module-editor-row"><td colSpan={4}><section className="rbac-module-editor" aria-label={`Quyền của module ${group.module}`}><header><div><strong>{group.module}</strong><span>{selectedCount} / {group.permissions.length} quyền</span></div><div><button className="rbac-text-action" type="button" onClick={() => onSetGroup(group, true)}>Chọn quyền đang hoạt động</button><button className="rbac-text-action" type="button" onClick={() => onSetGroup(group, false)} disabled={!selectedCount}>Bỏ chọn tất cả</button></div></header><div className="rbac-permission-list">{group.permissions.map((permission) => { const selected = selectedPermissionSet.has(permission.code); return <div className="rbac-permission-row" key={permission.code}><label><input type="checkbox" checked={selected} disabled={!permission.isActive && !selected} onChange={() => onTogglePermission(permission.code)} /><span><strong>{permission.name}</strong><small>{permission.code}{permission.isActive ? '' : ' · Đã khóa'}</small>{permission.description ? <em>{permission.description}</em> : null}</span></label><button className="btn ghost table-btn" type="button" onClick={() => onEditPermission(permission)}>Sửa</button></div> })}</div></section></td></tr> : null}</Fragment>
   })}</tbody></table></div>
 }
 

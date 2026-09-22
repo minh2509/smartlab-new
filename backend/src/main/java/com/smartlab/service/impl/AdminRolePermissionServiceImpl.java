@@ -86,9 +86,16 @@ public class AdminRolePermissionServiceImpl implements AdminRolePermissionServic
     @Override
     public RoleEntity setRolePermissions(String code, Set<String> permissionCodes) {
         RoleEntity role = getRole(code);
-        List<PermissionEntity> permissions = permissionRepository.findByCodeIn(permissionCodes);
-        if (permissions.size() != permissionCodes.size()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "One or more permission codes are invalid");
+        Set<String> normalizedCodes = permissionCodes.stream()
+                .map(permissionCode -> permissionCode == null ? "" : permissionCode.trim().toUpperCase())
+                .collect(java.util.stream.Collectors.toSet());
+        if (normalizedCodes.contains("")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Permission codes cannot be blank");
+        }
+        List<PermissionEntity> permissions = permissionRepository.findByCodeIn(normalizedCodes);
+        if (permissions.size() != normalizedCodes.size()
+                || permissions.stream().anyMatch(permission -> !Boolean.TRUE.equals(permission.getIsActive()))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "One or more permission codes are invalid or inactive");
         }
         List<String> beforeCodes = rolePermissionRepository.findAll().stream()
                 .filter(assignment -> role.getId().equals(assignment.getRole().getId()))

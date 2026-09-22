@@ -28,7 +28,7 @@ const PAGE_SIZE = 10
 type AccountDialog = 'provision' | 'resend' | null
 
 type EditDraft = {
-  roleCode: string
+  roleCodes: string[]
   activeValue: string
   permissionCode: string
   permissionEffect: 'GRANT' | 'DENY'
@@ -239,10 +239,10 @@ export function AdminAccountsPage() {
 
   async function handleSaveAccount(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!token || !editingAccount || !editDraft.roleCode) return
+    if (!token || !editingAccount || !editDraft.roleCodes.length) return
     setError('')
     try {
-      await updateAccountRoles(token, editingAccount.userId, [editDraft.roleCode])
+      await updateAccountRoles(token, editingAccount.userId, editDraft.roleCodes)
       await setAccountActive(token, editingAccount.userId, editDraft.activeValue === 'true')
       await loadAccounts()
       closeEditDialog()
@@ -265,11 +265,11 @@ export function AdminAccountsPage() {
     }
   }
 
-  async function handleRemovePermissionOverride() {
-    if (!token || !editingAccount || !editDraft.permissionCode) return
+  async function handleRemovePermissionOverride(permissionCode = editDraft.permissionCode) {
+    if (!token || !editingAccount || !permissionCode) return
     setError('')
     try {
-      await removeUserPermissionOverride(token, editingAccount.userId, editDraft.permissionCode)
+      await removeUserPermissionOverride(token, editingAccount.userId, permissionCode)
       await loadAccounts()
       closeEditDialog()
       toast.success('Đã xóa permission override')
@@ -747,7 +747,7 @@ function EditAccountDialog({
   onClose: () => void
   onSaveAccount: (event: FormEvent<HTMLFormElement>) => void
   onSavePermission: () => void
-  onRemovePermission: () => void
+  onRemovePermission: (permissionCode?: string) => void
 }) {
   const permissionOptions = useMemo(() => permissions.filter((permission) => permission.isActive), [permissions])
   const [isPermissionOverrideOpen, setPermissionOverrideOpen] = useState(false)
@@ -786,7 +786,28 @@ function EditAccountDialog({
         </div>
 
         <form className="form-stack" onSubmit={onSaveAccount}>
-          <RoleSelect roles={roles} value={draft.roleCode} onChange={(roleCode) => onDraftChange({ roleCode })} />
+          <fieldset className="field account-role-fieldset">
+            <legend>Vai trò</legend>
+            <div className="account-role-options">
+              {roles.map((role) => {
+                const checked = draft.roleCodes.includes(role.code)
+                return <label className="check-row" key={role.code}>
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    disabled={!role.isActive && !checked}
+                    onChange={(event) => onDraftChange({
+                      roleCodes: event.target.checked
+                        ? Array.from(new Set([...draft.roleCodes, role.code])).sort()
+                        : draft.roleCodes.filter((code) => code !== role.code),
+                    })}
+                  />
+                  <span>{roleOptionLabel(role)}{role.isActive ? '' : ' — đã khóa'}</span>
+                </label>
+              })}
+            </div>
+            {!draft.roleCodes.length ? <small className="field-error">Tài khoản phải có ít nhất một role.</small> : null}
+          </fieldset>
           <label className="field">
             <span>Trạng thái đăng nhập</span>
             <PopupSelect
@@ -796,7 +817,7 @@ function EditAccountDialog({
               options={[{ value: 'true', label: 'Mở đăng nhập' }, { value: 'false', label: 'Khoá đăng nhập' }]}
             />
           </label>
-          <button className="btn primary full" type="submit" disabled={!draft.roleCode}>
+          <button className="btn primary full" type="submit" disabled={!draft.roleCodes.length}>
             <Save />
             Lưu role & trạng thái
           </button>
@@ -819,12 +840,21 @@ function EditAccountDialog({
               <h3>Override permission</h3>
               <p>Grant hoặc deny một quyền riêng cho user này, nằm trên role permission.</p>
             </div>
+            {account.permissionOverrides.length ? <div className="account-override-list" aria-label="Permission override hiện có">
+              {account.permissionOverrides.map((override) => <div className="account-override-row" key={override.permissionCode}>
+                <span><strong>{override.permissionCode}</strong><small className={`badge ${override.effect === 'GRANT' ? 'success' : 'danger'}`}>{override.effect}</small></span>
+                <button className="btn table-btn" type="button" onClick={() => onRemovePermission(override.permissionCode)}>Xóa</button>
+              </div>)}
+            </div> : <small>Chưa có permission override.</small>}
             <div className="permission-edit-grid">
               <label className="field">
                 <span>Permission</span>
                 <PopupSelect
                   value={draft.permissionCode}
-                  onChange={(permissionCode) => onDraftChange({ permissionCode })}
+                  onChange={(permissionCode) => onDraftChange({
+                    permissionCode,
+                    permissionEffect: account.permissionOverrides.find((override) => override.permissionCode === permissionCode)?.effect ?? 'GRANT',
+                  })}
                   ariaLabel="Permission riêng"
                   options={[{ value: '', label: 'Chọn permission' }, ...permissionOptions.map((permission) => ({ value: permission.code, label: permission.code }))]}
                 />
@@ -844,7 +874,7 @@ function EditAccountDialog({
                 <Save />
                 Lưu
               </button>
-              <button className="btn" type="button" onClick={onRemovePermission} disabled={!draft.permissionCode}>
+              <button className="btn" type="button" onClick={() => onRemovePermission()} disabled={!draft.permissionCode}>
                 Xoá
               </button>
             </div>
@@ -893,10 +923,10 @@ function roleOptionLabel(role: Role) {
 
 function createEditDraft(account: AccountResponse | null, permissions: Permission[]): EditDraft {
   return {
-    roleCode: account?.roles[0] || '',
+    roleCodes: [...(account?.roles ?? [])].sort(),
     activeValue: String(account?.isActive ?? true),
     permissionCode: permissions.find((permission) => permission.isActive)?.code || permissions[0]?.code || '',
-    permissionEffect: 'GRANT',
+    permissionEffect: account?.permissionOverrides.find((override) => override.permissionCode === permissions.find((permission) => permission.isActive)?.code)?.effect ?? 'GRANT',
   }
 }
 

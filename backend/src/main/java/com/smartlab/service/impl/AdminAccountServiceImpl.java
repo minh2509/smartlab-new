@@ -16,6 +16,7 @@ import com.smartlab.dto.request.InvitationAcceptRequest;
 import com.smartlab.dto.response.InvitationResponse;
 import com.smartlab.dto.response.PageResponse;
 import com.smartlab.dto.request.PermissionOverrideRequest;
+import com.smartlab.dto.response.PermissionOverrideResponse;
 import com.smartlab.repo.AccountInvitationRepository;
 import com.smartlab.repo.EmailOutboxRepository;
 import com.smartlab.repo.MemberProfileRepository;
@@ -207,8 +208,12 @@ public class AdminAccountServiceImpl implements AdminAccountService {
             String adminUserId
     ) {
         UserEntity user = getUserByUserId(userId);
-        PermissionEntity permission = permissionRepository.findByCode(permissionCode)
+        String normalizedPermissionCode = permissionCode.trim().toUpperCase();
+        PermissionEntity permission = permissionRepository.findByCode(normalizedPermissionCode)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Permission not found"));
+        if (!Boolean.TRUE.equals(permission.getIsActive())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Inactive permissions cannot be overridden");
+        }
 
         UserPermissionOverrideEntity override = userPermissionOverrideRepository
                 .findByUserIdAndPermissionId(user.getId(), permission.getId())
@@ -230,7 +235,7 @@ public class AdminAccountServiceImpl implements AdminAccountService {
     @Override
     public AccountResponse removePermissionOverride(String userId, String permissionCode) {
         UserEntity user = getUserByUserId(userId);
-        PermissionEntity permission = permissionRepository.findByCode(permissionCode)
+        PermissionEntity permission = permissionRepository.findByCode(permissionCode.trim().toUpperCase())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Permission not found"));
         userPermissionOverrideRepository.findByUserIdAndPermissionId(user.getId(), permission.getId())
                 .ifPresent(existing -> {
@@ -253,6 +258,13 @@ public class AdminAccountServiceImpl implements AdminAccountService {
                 .isAccountVerified(user.getIsAccountVerified())
                 .roles(permissionService.getRoleCodes(user))
                 .permissions(permissionService.getEffectivePermissionCodes(user))
+                .permissionOverrides(userPermissionOverrideRepository.findByUserId(user.getId()).stream()
+                        .map(override -> PermissionOverrideResponse.builder()
+                                .permissionCode(override.getPermission().getCode())
+                                .effect(override.getEffect())
+                                .build())
+                        .sorted(java.util.Comparator.comparing(PermissionOverrideResponse::getPermissionCode))
+                        .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new)))
                 .build();
     }
 
