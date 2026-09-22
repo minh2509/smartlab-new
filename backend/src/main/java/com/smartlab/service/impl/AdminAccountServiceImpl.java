@@ -106,12 +106,15 @@ public class AdminAccountServiceImpl implements AdminAccountService {
         if (request.getRoleCodes() == null || request.getRoleCodes().isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Select at least one active role");
         }
-        assignRoles(savedUser, request.getRoleCodes(), adminUserId);
+        String actorReference = resolveActorReference(adminUserId);
+        List<String> assignedRoleCodes = assignRoles(savedUser, request.getRoleCodes(), actorReference);
 
-        upsertInvite(savedUser.getEmail(), adminUserId);
+        upsertInvite(savedUser.getEmail(), actorReference);
         AccountInvitationEntity invitation = accountInvitationRepository.findByEmail(savedUser.getEmail())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Invitation not found"));
         queueInvitationEmail(invitation, savedUser.getEmail());
+        auditService.log(USER_PROVISIONED, USER, savedUser.getId().toString(), null,
+                accountSnapshot(savedUser, assignedRoleCodes));
         return InvitationResponse.builder()
                 .email(savedUser.getEmail())
                 .status(InvitationStatus.PENDING)
@@ -125,7 +128,7 @@ public class AdminAccountServiceImpl implements AdminAccountService {
     public InvitationResponse resendInvite(String email, String adminUserId) {
         UserEntity user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + email));
-        upsertInvite(user.getEmail(), adminUserId);
+        upsertInvite(user.getEmail(), resolveActorReference(adminUserId));
         AccountInvitationEntity invitation = accountInvitationRepository.findByEmail(user.getEmail())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Invitation not found"));
         queueInvitationEmail(invitation, user.getEmail());
@@ -176,7 +179,7 @@ public class AdminAccountServiceImpl implements AdminAccountService {
         UserEntity user = getUserByUserId(userId);
         List<String> beforeCodes = userRoleRepository.findRolesByUserId(user.getId()).stream()
                 .map(RoleEntity::getCode).sorted().toList();
-        List<String> afterCodes = assignRoles(user, roleCodes, adminUserId);
+        List<String> afterCodes = assignRoles(user, roleCodes, resolveActorReference(adminUserId));
         userSessionService.revokeAllByEmail(user.getEmail());
         auditService.log(USER_ROLES_UPDATED, USER, user.getId().toString(),
                 Map.of("roleCodes", beforeCodes), Map.of("roleCodes", afterCodes));
@@ -187,14 +190,19 @@ public class AdminAccountServiceImpl implements AdminAccountService {
     @Override
     public AccountResponse setActive(String userId, boolean active) {
         UserEntity user = getUserByUserId(userId);
-        user.setIsActive(active);
-        userRepository.save(user);
         MemberProfileEntity profile = memberProfileRepository.findByUserId(user.getId())
                 .orElseGet(() -> MemberProfileEntity.create(user));
+        Map<String, Object> before = accountStatusSnapshot(user, profile);
+        user.setIsActive(active);
+        userRepository.save(user);
         profile.setActiveStatus(active ? "ACTIVE" : "INACTIVE");
         memberProfileRepository.save(profile);
         if (!active) {
             userSessionService.revokeAllByEmail(user.getEmail());
+        }
+        Map<String, Object> after = accountStatusSnapshot(user, profile);
+        if (!before.equals(after)) {
+            auditService.log(USER_ACTIVE_STATUS_UPDATED, USER, user.getId().toString(), before, after);
         }
         return toResponse(user);
     }
@@ -223,7 +231,7 @@ public class AdminAccountServiceImpl implements AdminAccountService {
                         .build());
         Map<String, Object> before = overrideSnapshot(permission.getCode(), override.getEffect());
         override.setEffect(request.getEffect());
-        override.setChangedBy(adminUserId);
+        override.setChangedBy(resolveActorReference(adminUserId));
         userPermissionOverrideRepository.save(override);
         userSessionService.revokeAllByEmail(user.getEmail());
         auditService.log(USER_PERMISSION_OVERRIDE_SET, USER, user.getId().toString(), before,
@@ -333,6 +341,33 @@ public class AdminAccountServiceImpl implements AdminAccountService {
         Map<String, Object> snapshot = new LinkedHashMap<>();
         snapshot.put("permissionCode", permissionCode);
         snapshot.put("effect", effect == null ? null : effect.toString());
+        return snapshot;
+    }
+
+    private String resolveActorReference(String principal) {
+        if (principal == null || principal.isBlank()) {
+            return null;
+        }
+        return userRepository.findByEmail(principal)
+                .map(UserEntity::getUserId)
+                .orElseGet(() -> principal.length() <= 36 ? principal : null);
+    }
+
+    private static Map<String, Object> accountSnapshot(UserEntity user, List<String> roleCodes) {
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("userId", user.getUserId());
+        snapshot.put("name", user.getName());
+        snapshot.put("email", user.getEmail());
+        snapshot.put("isActive", user.getIsActive());
+        snapshot.put("isAccountVerified", user.getIsAccountVerified());
+        snapshot.put("roleCodes", roleCodes);
+        return snapshot;
+    }
+
+    private static Map<String, Object> accountStatusSnapshot(UserEntity user, MemberProfileEntity profile) {
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("isActive", user.getIsActive());
+        snapshot.put("activeStatus", profile.getActiveStatus());
         return snapshot;
     }
 }

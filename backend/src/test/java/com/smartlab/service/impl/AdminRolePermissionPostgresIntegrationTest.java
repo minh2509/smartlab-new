@@ -71,9 +71,11 @@ class AdminRolePermissionPostgresIntegrationTest {
                     password,
                     is_active,
                     is_account_verified,
-                    reset_otp_expire_at
+                    reset_otp_expire_at,
+                    created_at,
+                    updated_at
                 )
-                values (?, ?, ?, ?, true, true, NULL)
+                values (?, ?, ?, ?, true, true, NULL, now(), now())
                 returning id
                 """,
                 Long.class,
@@ -89,9 +91,11 @@ class AdminRolePermissionPostgresIntegrationTest {
                     name,
                     description,
                     is_system,
-                    is_active
+                    is_active,
+                    created_at,
+                    updated_at
                 )
-                values (?, ?, ?, false, true)
+                values (?, ?, ?, false, true, now(), now())
                 returning id
                 """,
                 Long.class,
