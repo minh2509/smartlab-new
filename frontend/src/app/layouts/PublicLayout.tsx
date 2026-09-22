@@ -1,5 +1,6 @@
 import { Outlet } from 'react-router-dom'
 import { AppHeader } from '../../shared/components/AppHeader'
+import { PublicFooter } from '../../shared/components/PublicFooter'
 
 export function PublicLayout() {
   return (
@@ -8,6 +9,7 @@ export function PublicLayout() {
       <main className="app-main">
         <Outlet />
       </main>
+      <PublicFooter />
     </div>
   )
 }

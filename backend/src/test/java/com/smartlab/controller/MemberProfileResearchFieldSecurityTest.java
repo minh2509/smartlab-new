@@ -42,16 +42,17 @@ class MemberProfileResearchFieldSecurityTest {
     @MockitoBean UserSessionService userSessionService;
 
     @Test
-    void anonymousCannotReadMemberCollectionButCanReadPublicCollections() throws Exception {
+    void anonymousCanReadMemberCollectionAndPublicCollections() throws Exception {
         when(researchFieldService.listActive()).thenReturn(List.of());
 
-        mockMvc.perform(get("/members")).andExpect(status().isUnauthorized());
+        when(memberProfileService.listMembers(null, null, null)).thenReturn(List.of());
+        mockMvc.perform(get("/members")).andExpect(status().isOk());
         mockMvc.perform(get("/research-fields")).andExpect(status().isOk());
         mockMvc.perform(get("/me/profile")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/admin/members")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/admin/research-fields")).andExpect(status().isUnauthorized());
 
-        verifyNoInteractions(memberProfileService);
+        verify(memberProfileService).listMembers(null, null, null);
         verify(researchFieldService).listActive();
     }
 

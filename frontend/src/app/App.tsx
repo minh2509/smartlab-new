@@ -28,6 +28,7 @@ import { NewsArchivePage } from '../features/public/pages/NewsArchivePage'
 import { AchievementArchivePage } from '../features/public/pages/AchievementArchivePage'
 import { HomePage } from '../features/public/pages/HomePage'
 import { StaticPublicPage } from '../features/public/pages/StaticPublicPage'
+import { MemberDirectoryPage } from '../features/public/pages/MemberDirectoryPage'
 import { RequirePermissions } from './RequirePermissions'
 import { FilesPage } from '../features/files/pages/FilesPage'
 import { ProjectListPage } from '../features/projects/pages/ProjectListPage'
@@ -73,6 +74,7 @@ export function App() {
         <Route path="/bai-viet/:slug" element={<ArticleDetailPage />} />
         <Route path="/tin-tuc" element={<NewsArchivePage />} />
         <Route path="/thanh-tuu" element={<AchievementArchivePage />} />
+        <Route path="/thanh-vien" element={<MemberDirectoryPage />} />
         <Route path="/blog" element={<Navigate to="/bai-viet" replace />} />
         <Route path="/posts" element={<PostFeedPage />} />
         <Route path="/my-posts" element={<RequirePermissions allOf={[]}><MyPostsPage /></RequirePermissions>} />

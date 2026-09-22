@@ -1,5 +1,5 @@
 import type { FileResponse, MemberProfile, ResearchField } from '../../shared/types/api'
-import { apiClient } from '../../lib/apiClient'
+import { apiClient, toQuery } from '../../lib/apiClient'
 
 export function getMyMemberProfile(token: string) {
   return apiClient<MemberProfile>('/me/profile', { token })
@@ -7,6 +7,10 @@ export function getMyMemberProfile(token: string) {
 
 export function getResearchFields() {
   return apiClient<ResearchField[]>('/research-fields')
+}
+
+export function listPublicMembers(params: { keyword?: string; fieldCode?: string; status?: 'ACTIVE' | 'ALUMNI' } = {}) {
+  return apiClient<MemberProfile[]>(`/members${toQuery(params)}`)
 }
 
 export function updateMyMemberProfile(

@@ -46,8 +46,7 @@ public class MemberProfileController {
     }
 
     @GetMapping("/members")
-    @Operation(summary = "List member profiles for authenticated workspace use")
-    @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+    @Operation(summary = "List public member profiles")
     public List<MemberProfileResponse> listMembers(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String fieldCode,
