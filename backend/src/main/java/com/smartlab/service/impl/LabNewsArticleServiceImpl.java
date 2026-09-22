@@ -43,6 +43,15 @@ public class LabNewsArticleServiceImpl implements LabNewsArticleService {
 
     @Override
     @Transactional(readOnly = true)
+    public LabNewsArticleResponse getPublic(Long id) {
+        LabNewsArticleEntity article = articleRepository.findByIdAndDeletedAtIsNull(id)
+                .filter(e -> Boolean.TRUE.equals(e.getIsPublic()))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "News article not found"));
+        return toResponse(article);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public PublicPageResponse<LabNewsArticleResponse> listPublicArchive(int page, int size) {
         if (page < 0) throw badRequest("Page must not be negative");
         if (size < 1 || size > 48) throw badRequest("Size must be between 1 and 48");

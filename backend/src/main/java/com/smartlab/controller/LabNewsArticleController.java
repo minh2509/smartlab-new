@@ -29,6 +29,11 @@ import java.util.List;
 public class LabNewsArticleController {
     private final LabNewsArticleService articleService;
 
+    @GetMapping("/news/{id}")
+    public PublicLabNewsArticleResponse getPublic(@PathVariable Long id) {
+        return toPublicResponse(articleService.getPublic(id));
+    }
+
     @GetMapping("/news")
     public List<PublicLabNewsArticleResponse> list(@RequestParam(defaultValue = "3") int limit) {
         return articleService.listPublic(limit).stream().map(this::toPublicResponse).toList();

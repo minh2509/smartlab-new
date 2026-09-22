@@ -47,15 +47,20 @@ const mainNav: readonly NavItem[] = [
         label: "Tài liệu",
         description: "Tri thức cho hành trình nghiên cứu",
       },
-    ],
+    ], 
   },
   {
-    label: "Tin tức",
+    label: "Truyền thông",
     children: [
+      {
+        to: "/tin-tuc",
+        label: "Tin tức",
+        description: "Tin tức và truyền thông về Phòng Lab.",
+      },
       {
         to: "/bai-viet",
         label: "Bài viết",
-        description: "Góc nhìn và những chia sẻ khác nhau.",
+        description: "Những góc nhìn và chia sẻ khác nhau.",
       },
       {
         to: "/su-kien",

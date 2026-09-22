@@ -124,102 +124,47 @@ export function ArticleArchivePage() {
         title="Bài viết"
         description="Các bài viết, chia sẻ và nội dung chuyên môn được Smart Lab công bố."
       />
-      <section className="section article-archive-section">
-        <div className="wrap">
+      <section className="article-archive-section">
+        <div className="article-archive-header">
           <div className="article-archive-intro">
             <div>
-              <div className="kicker">BÀI VIẾT SMART LAB</div>
+              <div className="kicker">BÀI VIẾT</div>
               <h2>Bài viết</h2>
-              <p>Các bài viết, chia sẻ và nội dung chuyên môn được Smart Lab công bố.</p>
+              <p>Bài viết, chia sẻ và nội dung chuyên môn của Smart Lab.</p>
             </div>
-            <span className="public-archive-page-size">12 bài viết / trang</span>
+            <span className="public-archive-page-size">{PAGE_SIZE} bài / trang</span>
           </div>
 
-          <div className="article-archive-toolbar" role="search">
-            <label className="article-archive-search">
-              <span className="sr-only">Tìm kiếm bài viết</span>
-              <Search aria-hidden="true" />
-              <input
-                className="input"
-                type="search"
-                value={query}
-                onChange={(event) => updateFilter('q', event.target.value)}
-                placeholder="Tìm theo tiêu đề hoặc nội dung..."
-              />
-            </label>
-
-            <PopupSelect
-              value={year ? String(year) : 'ALL'}
-              options={yearOptions}
-              onChange={(value) => updateFilter('year', value)}
-              ariaLabel="Lọc theo năm xuất bản"
-              className="article-archive-filter"
-              disabled={yearsError}
-            />
-
-            <PopupSelect
-              value={sort}
-              options={sortOptions}
-              onChange={(value) => updateFilter('sort', value)}
-              ariaLabel="Sắp xếp bài viết"
-              className="article-archive-filter"
-            />
-
-            {hasFilters ? (
-              <button className="article-archive-reset" type="button" onClick={resetFilters}>
-                <RotateCcw size={15} aria-hidden="true" />
-                Đặt lại
-              </button>
-            ) : null}
+          <div className="article-archive-toolbar">
+            <div className="article-archive-search">
+              <Search size={16} />
+              <input className="input" type="search" value={query} onChange={(e) => updateFilter('q', e.target.value)} placeholder="Tìm bài viết..." />
+            </div>
+            <PopupSelect value={year ? String(year) : 'ALL'} options={yearOptions} onChange={(v) => updateFilter('year', v)} ariaLabel="Lọc theo năm" className="article-archive-filter" disabled={yearsError} />
+            <PopupSelect value={sort} options={sortOptions} onChange={(v) => updateFilter('sort', v)} ariaLabel="Sắp xếp" className="article-archive-filter" />
+            {hasFilters && <button className="article-archive-reset" type="button" onClick={resetFilters}><RotateCcw size={14} /> Đặt lại</button>}
           </div>
-
-          {error ? (
-            <div className="article-archive-request-state" role="alert">
-              <Feedback error={error} />
-              <button className="btn" type="button" onClick={() => setReloadKey((value) => value + 1)}>
-                Thử tải lại
-              </button>
-            </div>
-          ) : null}
-
-          {loading && items.length === 0 ? (
-            <div className="public-empty empty tight article-archive-request-state" aria-busy="true">
-              Đang tải bài viết...
-            </div>
-          ) : null}
-
-          {!loading && !error && items.length === 0 ? (
-            <EmptyState
-              title={hasFilters ? 'Không tìm thấy bài viết phù hợp' : 'Chưa có bài viết nào'}
-              description={
-                hasFilters
-                  ? 'Thử thay đổi từ khóa hoặc bộ lọc.'
-                  : 'Các bài viết công khai của Smart Lab sẽ xuất hiện tại đây.'
-              }
-            />
-          ) : null}
-
-          {items.length > 0 ? (
-            <>
-              <div className="article-archive-results-bar">
-                <p className="article-archive-summary" aria-live="polite">
-                  {formatRange(page, PAGE_SIZE, totalElements)} · {totalElements} bài viết
-                </p>
-                {loading ? (
-                  <span className="article-archive-refreshing" aria-live="polite">
-                    Đang cập nhật...
-                  </span>
-                ) : null}
-              </div>
-              <div className="grid c3 landing-article-grid" aria-busy={loading}>
-                {items.map((item) => (
-                  <PublicArticleCard key={item.id} article={item} />
-                ))}
-              </div>
-              <Pagination page={page} totalPages={totalPages} onChange={updatePage} />
-            </>
-          ) : null}
         </div>
+
+        {error && <div className="article-archive-error" role="alert"><Feedback error={error} /><button className="btn" type="button" onClick={() => setReloadKey((k) => k + 1)}>Thử lại</button></div>}
+
+        {loading && items.length === 0 && <div className="article-archive-empty" aria-busy="true">Đang tải bài viết...</div>}
+
+        {!loading && !error && items.length === 0 && <EmptyState title={hasFilters ? 'Không tìm thấy' : 'Chưa có bài viết công khai'} />}
+
+        {items.length > 0 && (
+          <>
+            <div className="article-archive-results">
+              <p className="article-archive-summary">{formatRange(page, PAGE_SIZE, totalElements)} · {totalElements} bài viết{loading && <span className="article-archive-refreshing">Đang cập nhật...</span>}</p>
+              <div className="article-archive-grid">
+                {items.map((item) => <PublicArticleCard key={item.id} article={item} />)}
+              </div>
+            </div>
+            <div className="article-archive-pagination">
+              <Pagination page={page} totalPages={totalPages} onChange={updatePage} />
+            </div>
+          </>
+        )}
       </section>
     </>
   )
