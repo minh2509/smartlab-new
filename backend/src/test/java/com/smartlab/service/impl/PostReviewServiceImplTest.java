@@ -36,6 +36,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Map;
 import java.util.Optional;
 
@@ -338,7 +339,9 @@ class PostReviewServiceImplTest {
         assertThat(review.getDecision()).isEqualTo(decision);
         assertThat(review.getReason()).isEqualTo(reason);
         assertThat(review.getCreatedAt()).isEqualTo(post.getUpdatedAt());
-        assertThat(review.getCreatedAt()).isAfterOrEqualTo(beforeReview).isBeforeOrEqualTo(afterReview);
+        assertThat(review.getCreatedAt())
+                .isAfterOrEqualTo(beforeReview.minus(1, ChronoUnit.MICROS))
+                .isBeforeOrEqualTo(afterReview.plus(1, ChronoUnit.MICROS));
         assertThat(post.getStatus()).isEqualTo(expectedStatus);
         assertThat(response.getStatus()).isEqualTo(expectedStatus);
         assertThat(response.getUpdatedAt()).isEqualTo(post.getUpdatedAt());

@@ -106,7 +106,8 @@ class PostEntityMappingTest {
         assertThat(field("projectId").getType()).isEqualTo(Long.class);
         assertThat(field("categoryId").getType()).isEqualTo(Long.class);
         assertThat(field("coverFileId").getType()).isEqualTo(Long.class);
-        assertThat(Arrays.stream(PostEntity.class.getDeclaredFields()))
+        assertThat(Arrays.stream(PostEntity.class.getDeclaredFields())
+                .filter(field -> !field.isSynthetic()))
                 .noneMatch(field -> field.isAnnotationPresent(ManyToOne.class)
                         || field.isAnnotationPresent(OneToOne.class)
                         || field.isAnnotationPresent(OneToMany.class)
@@ -198,6 +199,7 @@ class PostEntityMappingTest {
 
     private static Set<String> fieldNames() {
         return Arrays.stream(PostEntity.class.getDeclaredFields())
+                .filter(field -> !field.isSynthetic())
                 .map(Field::getName)
                 .collect(java.util.stream.Collectors.toSet());
     }

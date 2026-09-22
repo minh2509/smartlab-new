@@ -1,8 +1,10 @@
 package com.smartlab.controller;
 
 import com.smartlab.dto.response.ErrorResponse;
+import jakarta.validation.ConstraintViolationException;
 import org.springframework.context.support.DefaultMessageSourceResolvable;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -50,6 +52,21 @@ public class ApiExceptionHandler {
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException exception) {
         return ResponseEntity.badRequest().body(error("Invalid value for " + exception.getName()));
+    }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ErrorResponse> handleConstraintViolation(ConstraintViolationException exception) {
+        String message = exception.getConstraintViolations().stream()
+                .map(violation -> violation.getMessage())
+                .filter(value -> value != null && !value.isBlank())
+                .findFirst()
+                .orElse("Request validation failed");
+        return ResponseEntity.badRequest().body(error(message));
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleUnreadableBody(HttpMessageNotReadableException exception) {
+        return ResponseEntity.badRequest().body(error("Malformed request body"));
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)

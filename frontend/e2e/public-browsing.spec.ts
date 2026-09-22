@@ -5,7 +5,7 @@ import { expectOk } from './support/http'
 test.describe('public browsing', () => {
   test('guest can browse the public information architecture without being forced to login', async ({ page }) => {
     const routes = [
-      { path: '/', heading: /Nơi sinh viên làm/i },
+      { path: '/', heading: /Nghiên cứu thật/i },
       { path: '/gioi-thieu', heading: 'Về phòng Smart Lab' },
       { path: '/linh-vuc', heading: 'Lĩnh vực nghiên cứu' },
       { path: '/thanh-vien', heading: 'Thành viên' },

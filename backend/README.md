@@ -19,6 +19,7 @@ database:
 11. `sql/011_achievement_editor_v2_repair.sql`
 12. `sql/012_bulk_account_invitations.sql`
 13. `sql/013_email_template_copy_refresh.sql`
+14. `sql/014_password_recovery_hardening.sql`
 
 These are manual, operator-executed SQL migrations. The repository does not
 contain Flyway, Liquibase, or another automatic numbered migration runner.
@@ -30,7 +31,7 @@ passwords in shell history, command output, tickets, or documentation.
 
 ## Fresh bootstrap and current-lineage upgrades
 
-On an empty database, apply `001` through `013` in numeric order. `001` creates
+On an empty database, apply `001` through `014` in numeric order. `001` creates
 the current backend schema, roles, permissions, and foundational seed data;
 `002` adds the social-feed reaction and comment tables. Both scripts are
 designed to be re-run safely for the current `001`/`002` lineage.
@@ -51,6 +52,7 @@ The later migrations extend that foundation:
 - `011` verifies and repairs partial achievement editor v2 installations.
 - `012` adds durable batches, item-level outcomes, DB-backed invitation-email templates, and an email outbox for bulk account invitations.
 - `013` refreshes only the original default invitation and password-reset copy; templates already customized by an operator are preserved.
+- `014` hardens password recovery by widening the reset-code hash column, adding failed-attempt and request-time tracking, and invalidating legacy plaintext reset codes.
 
 ### Migration 010 prerequisite and lineage decision
 
@@ -79,7 +81,7 @@ achievement editor v2 schema. It provisions or verifies
 `recognizing_organization`, the achievement attachment table, its sequence,
 required indexes, constraints, and runtime grants. It does not rewrite
 achievement rows and does not replace `009` or `010` on a fresh installation.
-In a complete fresh `001` through `013` chain, its schema additions should
+In a complete fresh `001` through `014` chain, its schema additions should
 already exist and the repair operations should effectively be no-ops while
 the final assertions still verify compatibility.
 
@@ -157,7 +159,7 @@ objects in `public` are not included.
 ## Verification workflow
 
 Use a new disposable PostgreSQL database for a migration rehearsal. Apply the
-approved `001` through `013` fresh-install sequence, then inspect the resulting
+approved `001` through `014` fresh-install sequence, then inspect the resulting
 schema, enum checks, role seed, permission count, role-permission count, grants,
 and affected endpoint health. Re-run only migrations whose source explicitly
 documents idempotent behavior. Do not point a rehearsal at an existing

@@ -28,6 +28,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Map;
 import java.util.Optional;
 
@@ -116,7 +117,9 @@ class PostPublishServiceImplTest {
         verify(postRepository).findActiveByIdForUpdate(POST_ID);
         assertThat(post.getStatus()).isEqualTo(PostStatus.PUBLISHED);
         assertThat(post.getPublishedAt()).isNotNull().isEqualTo(post.getUpdatedAt());
-        assertThat(post.getPublishedAt()).isAfterOrEqualTo(beforePublish).isBeforeOrEqualTo(afterPublish);
+        assertThat(post.getPublishedAt())
+                .isAfterOrEqualTo(beforePublish.minus(1, ChronoUnit.MICROS))
+                .isBeforeOrEqualTo(afterPublish.plus(1, ChronoUnit.MICROS));
         assertThat(response.getStatus()).isEqualTo(PostStatus.PUBLISHED);
         assertThat(response.getPublishedAt()).isEqualTo(post.getPublishedAt());
         assertThat(response.getUpdatedAt()).isEqualTo(post.getUpdatedAt());

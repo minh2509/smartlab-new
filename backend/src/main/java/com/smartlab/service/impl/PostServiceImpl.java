@@ -44,6 +44,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -91,7 +92,7 @@ public class PostServiceImpl implements PostService {
                 : request.getContentJson();
         validateContentFileReferences(contentJson, author.getId());
         String contentHtml = postContentRenderer.renderAndSanitize(contentJson).orElse(null);
-        Instant creationTime = Instant.now();
+        Instant creationTime = databaseTimestamp();
         for (int candidateNumber = 1; candidateNumber <= postSlugGenerator.maxCandidates(); candidateNumber++) {
             String candidate = postSlugGenerator.candidateFor(request.getTitle(), candidateNumber);
             if (postRepository.existsBySlug(candidate)) {
@@ -156,7 +157,7 @@ public class PostServiceImpl implements PostService {
         PostVisibility resolvedVisibility = request.hasVisibility() ? request.getVisibility() : post.getVisibility();
         Long requestedProjectId = request.hasProjectId() ? request.getProjectId() : post.getProjectId();
         Long resolvedProjectId = resolveProjectId(viewer, resolvedVisibility, requestedProjectId, false);
-        Instant transitionInstant = Instant.now();
+        Instant transitionInstant = databaseTimestamp();
 
         post.applyDraftUpdate(
                 resolvedTitle,
@@ -189,7 +190,7 @@ public class PostServiceImpl implements PostService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Only draft or revision-required posts can be submitted for review");
         }
 
-        post.submitForReview(Instant.now());
+        post.submitForReview(databaseTimestamp());
         return toDetailResponse(post, findCategoryResponse(post.getCategoryId()), toAuthorResponse(author));
     }
 
@@ -208,7 +209,7 @@ public class PostServiceImpl implements PostService {
         }
 
         Map<String, Object> auditBefore = Map.of("status", post.getStatus().name());
-        Instant reviewInstant = Instant.now();
+        Instant reviewInstant = databaseTimestamp();
         PostReviewEntity review = PostReviewEntity.create(
                 post.getId(),
                 reviewer.getId(),
@@ -245,7 +246,7 @@ public class PostServiceImpl implements PostService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Only approved posts can be published");
         }
 
-        post.publish(Instant.now());
+        post.publish(databaseTimestamp());
         return toDetailResponse(post, findCategoryResponse(post.getCategoryId()),
                 findAuthorResponse(post.getAuthorUserId()));
     }
@@ -269,7 +270,7 @@ public class PostServiceImpl implements PostService {
             requireProjectLeaderDirectPublish(post, author, permissions);
         }
 
-        Instant publicationInstant = Instant.now();
+        Instant publicationInstant = databaseTimestamp();
         post.publishDirect(publicationInstant);
         if (post.getVisibility() == PostVisibility.PROJECT) {
             notifyActiveProjectMembers(post, author, publicationInstant);
@@ -309,7 +310,7 @@ public class PostServiceImpl implements PostService {
     @Transactional
     public void deletePost(String authenticatedEmail, Long id) {
         UserEntity author = resolveActiveAuthor(authenticatedEmail);
-        Instant transitionInstant = Instant.now();
+        Instant transitionInstant = databaseTimestamp();
         int affectedRows = postRepository.softDeleteOwnedDraft(id, author.getId(), transitionInstant);
 
         if (affectedRows == 1) {
@@ -688,6 +689,12 @@ public class PostServiceImpl implements PostService {
 
     private static String reviewNotificationType(ReviewDecision decision) {
         return "POST_REVIEW_" + decision.name();
+    }
+
+    private static Instant databaseTimestamp() {
+        // PostgreSQL stores timestamptz values with microsecond precision. Normalize before
+        // persistence so entities, API responses, and workflow history use one exact instant.
+        return Instant.now().truncatedTo(ChronoUnit.MICROS);
     }
 
     private ResponseStatusException postNotFound() {

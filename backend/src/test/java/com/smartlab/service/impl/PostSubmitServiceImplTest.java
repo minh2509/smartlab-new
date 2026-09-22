@@ -28,6 +28,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -109,7 +110,9 @@ class PostSubmitServiceImplTest {
         verify(userRepository).findByEmail(OWNER_EMAIL);
         verify(postRepository).findActiveByIdForUpdate(POST_ID);
         assertThat(post.getStatus()).isEqualTo(PostStatus.PENDING_REVIEW);
-        assertThat(post.getUpdatedAt()).isAfterOrEqualTo(beforeSubmit).isBeforeOrEqualTo(afterSubmit);
+        assertThat(post.getUpdatedAt())
+                .isAfterOrEqualTo(beforeSubmit.minus(1, ChronoUnit.MICROS))
+                .isBeforeOrEqualTo(afterSubmit.plus(1, ChronoUnit.MICROS));
         assertThat(response).extracting(
                         PostDetailResponse::getId,
                         PostDetailResponse::getTitle,
