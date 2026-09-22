@@ -125,9 +125,9 @@ public class MemberProfileServiceImpl implements MemberProfileService {
             UserEntity user,
             boolean admin
     ) {
-        if (phone != null) profile.setPhone(phone.trim());
-        if (publicEmail != null) profile.setPublicEmail(publicEmail.trim());
-        if (bio != null) profile.setBio(bio.trim());
+        if (phone != null) profile.setPhone(normalizeOptional(phone));
+        if (publicEmail != null) profile.setPublicEmail(normalizeOptional(publicEmail));
+        if (bio != null) profile.setBio(normalizeOptional(bio));
         if (Boolean.TRUE.equals(removeAvatar)) {
             profile.setAvatarFile(null);
         } else if (avatarFileId != null) {
@@ -158,6 +158,11 @@ public class MemberProfileServiceImpl implements MemberProfileService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "One or more research fields are invalid or inactive");
         }
         return new LinkedHashSet<>(fields);
+    }
+
+    private String normalizeOptional(String value) {
+        String normalized = value.trim();
+        return normalized.isEmpty() ? null : normalized;
     }
 
     private MemberProfileEntity ensureProfile(UserEntity user) {

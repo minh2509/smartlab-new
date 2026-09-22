@@ -1,6 +1,5 @@
 package com.smartlab.dto.request;
 
-import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
@@ -13,7 +12,10 @@ public class UpdateMemberProfileRequest {
     @Size(max = 40)
     private String phone;
 
-    @Email
+    @Pattern(
+            regexp = "^$|^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+            message = "Public email must be a valid email address or empty"
+    )
     @Size(max = 190)
     private String publicEmail;
 

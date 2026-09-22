@@ -126,6 +126,35 @@ class MemberProfileServiceImplTest {
                         exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
     }
 
+    @Test
+    void ownProfileUpdateNormalizesEditableFieldsAndCannotChangeSystemIdentity() {
+        UserEntity user = user(7L, true, true);
+        user.setName("System Name");
+        user.setEmail("login@lab.test");
+        MemberProfileEntity profile = MemberProfileEntity.create(user);
+        profile.setPublicEmail("old@public.test");
+        profile.setPhone("0900000000");
+        profile.setBio("Old bio");
+        UpdateMemberProfileRequest request = new UpdateMemberProfileRequest();
+        request.setPhone(" 0901234567 ");
+        request.setPublicEmail("   ");
+        request.setBio("  New bio  ");
+
+        when(userRepository.findByEmail("login@lab.test")).thenReturn(Optional.of(user));
+        when(memberProfileRepository.findByUserId(7L)).thenReturn(Optional.of(profile));
+        when(memberProfileRepository.save(profile)).thenReturn(profile);
+
+        var response = service.updateOwnProfile("login@lab.test", request);
+
+        assertThat(profile.getPhone()).isEqualTo("0901234567");
+        assertThat(profile.getPublicEmail()).isNull();
+        assertThat(profile.getBio()).isEqualTo("New bio");
+        assertThat(user.getName()).isEqualTo("System Name");
+        assertThat(user.getEmail()).isEqualTo("login@lab.test");
+        assertThat(response.getPhone()).isEqualTo("0901234567");
+        assertThat(response.getPublicEmail()).isNull();
+    }
+
     private UserEntity user(Long id, boolean active, boolean verified) {
         return UserEntity.builder()
                 .id(id)

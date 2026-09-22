@@ -14,6 +14,17 @@ type FormState = {
   avatarFileId?: number
 }
 
+type ValidationErrors = {
+  phone?: string
+  publicEmail?: string
+  bio?: string
+}
+
+const phonePattern = /^(|0[35789]\d{8}|\+84[35789]\d{8})$/
+const publicEmailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const allowedAvatarTypes = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp'])
+const maxAvatarSizeBytes = 25 * 1024 * 1024
+
 export function ProfilePage() {
   const { token, profile: account } = useAuth()
   const toast = useToast()
@@ -26,8 +37,7 @@ export function ProfilePage() {
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [validationError, setValidationError] = useState<string | null>(null)
-  const phonePattern = /^(|0[35789]\d{8}|\+84[35789]\d{8})$/
+  const [validationErrors, setValidationErrors] = useState<ValidationErrors>({})
 
   useEffect(() => {
     if (!token) return
@@ -98,18 +108,44 @@ export function ProfilePage() {
     }))
   }
 
+  const payloadFromForm = (value: FormState) => ({
+    phone: value.phone.trim(),
+    publicEmail: value.publicEmail.trim(),
+    bio: value.bio.trim(),
+    avatarFileId: value.avatarFileId,
+    researchFieldIds: value.researchFieldIds,
+  })
+
+  const validateForm = (value: FormState): ValidationErrors => {
+    const errors: ValidationErrors = {}
+    const phone = value.phone.trim()
+    const publicEmail = value.publicEmail.trim()
+    if (!phonePattern.test(phone)) {
+      errors.phone = 'Số điện thoại phải có dạng 0xxxxxxxxx hoặc +84xxxxxxxxx.'
+    }
+    if (publicEmail && !publicEmailPattern.test(publicEmail)) {
+      errors.publicEmail = 'Email công khai không hợp lệ.'
+    }
+    if (value.bio.length > 10000) {
+      errors.bio = 'Giới thiệu không được vượt quá 10.000 ký tự.'
+    }
+    return errors
+  }
+
   const handleSave = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!token || !canUpdate) return
-    if (!phonePattern.test(form.phone.trim())) {
-      setValidationError('Số điện thoại phải có dạng 0xxxxxxxxx hoặc +84xxxxxxxxx.')
+    const errors = validateForm(form)
+    if (Object.keys(errors).length) {
+      setValidationErrors(errors)
       return
     }
     setSaving(true)
-    setValidationError(null)
+    setValidationErrors({})
     try {
-      const updated = await updateMyMemberProfile(token, form)
+      const updated = await updateMyMemberProfile(token, payloadFromForm(form))
       setMember(updated)
+      setForm({ ...form, ...payloadFromForm(form), avatarFileId: updated.avatar?.id })
       toast.success('Đã lưu hồ sơ', 'Thông tin thành viên đã được cập nhật.')
     } catch (reason: unknown) {
       toast.error('Không thể lưu hồ sơ', reason instanceof Error ? reason.message : 'Vui lòng thử lại.')
@@ -121,10 +157,20 @@ export function ProfilePage() {
   const handleAvatar = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file || !token || !canUpdate) return
+    if (!allowedAvatarTypes.has(file.type)) {
+      toast.error('Ảnh đại diện không hợp lệ', 'Chỉ hỗ trợ JPG, PNG, GIF hoặc WebP.')
+      event.target.value = ''
+      return
+    }
+    if (file.size > maxAvatarSizeBytes) {
+      toast.error('Ảnh đại diện quá lớn', 'Kích thước ảnh không được vượt quá 25 MB.')
+      event.target.value = ''
+      return
+    }
     setUploading(true)
     try {
       const uploaded = await uploadAvatar(token, file)
-      const updated = await updateMyMemberProfile(token, { ...form, avatarFileId: uploaded.id })
+      const updated = await updateMyMemberProfile(token, { ...payloadFromForm(form), avatarFileId: uploaded.id })
       setMember(updated)
       setForm((current) => ({ ...current, avatarFileId: uploaded.id }))
       toast.success('Đã cập nhật ảnh đại diện')
@@ -140,7 +186,7 @@ export function ProfilePage() {
     if (!token || !member?.avatar || !canUpdate) return
     setSaving(true)
     try {
-      const updated = await updateMyMemberProfile(token, { ...form, avatarFileId: undefined, removeAvatar: true })
+      const updated = await updateMyMemberProfile(token, { ...payloadFromForm(form), avatarFileId: undefined, removeAvatar: true })
       setMember(updated)
       setForm((current) => ({ ...current, avatarFileId: undefined }))
       toast.success('Đã gỡ ảnh đại diện')
@@ -201,9 +247,9 @@ export function ProfilePage() {
             <UserRound size={20} aria-hidden="true" />
           </div>
           <div className="form-stack">
-            <label className="field"><span>Số điện thoại</span><input className="input" type="tel" inputMode="tel" placeholder="0901234567" value={form.phone} onChange={(event) => { setForm({ ...form, phone: event.target.value }); setValidationError(null) }} disabled={!canUpdate} aria-invalid={Boolean(validationError)} aria-describedby={validationError ? 'profile-phone-error' : undefined} /><small className="muted">Để trống nếu không muốn khai báo. Ví dụ: 0901234567 hoặc +84901234567.</small>{validationError && <small className="field-error profile-phone-validation" id="profile-phone-error" role="alert"><AlertCircle aria-hidden="true" />{validationError}</small>}</label>
-            <label className="field"><span>Email công khai</span><input className="input" type="email" value={form.publicEmail} onChange={(event) => setForm({ ...form, publicEmail: event.target.value })} disabled={!canUpdate} /></label>
-            <label className="field"><span>Giới thiệu</span><textarea className="textarea" rows={6} value={form.bio} onChange={(event) => setForm({ ...form, bio: event.target.value })} disabled={!canUpdate} /></label>
+            <label className="field"><span>Số điện thoại</span><input className="input" type="tel" inputMode="tel" maxLength={40} pattern="(|0[35789][0-9]{8}|\+84[35789][0-9]{8})" placeholder="0901234567" value={form.phone} onChange={(event) => { setForm({ ...form, phone: event.target.value }); setValidationErrors((current) => ({ ...current, phone: undefined })) }} disabled={!canUpdate} aria-invalid={Boolean(validationErrors.phone)} aria-describedby={validationErrors.phone ? 'profile-phone-error' : undefined} /><small className="muted">Để trống nếu không muốn khai báo. Ví dụ: 0901234567 hoặc +84901234567.</small>{validationErrors.phone && <small className="field-error profile-phone-validation" id="profile-phone-error" role="alert"><AlertCircle aria-hidden="true" />{validationErrors.phone}</small>}</label>
+            <label className="field"><span>Email công khai</span><input className="input" type="email" maxLength={190} value={form.publicEmail} onChange={(event) => { setForm({ ...form, publicEmail: event.target.value }); setValidationErrors((current) => ({ ...current, publicEmail: undefined })) }} disabled={!canUpdate} aria-invalid={Boolean(validationErrors.publicEmail)} aria-describedby={validationErrors.publicEmail ? 'profile-public-email-error' : undefined} />{validationErrors.publicEmail && <small className="field-error" id="profile-public-email-error" role="alert"><AlertCircle aria-hidden="true" />{validationErrors.publicEmail}</small>}</label>
+            <label className="field"><span>Giới thiệu</span><textarea className="textarea" rows={6} maxLength={10000} value={form.bio} onChange={(event) => { setForm({ ...form, bio: event.target.value }); setValidationErrors((current) => ({ ...current, bio: undefined })) }} disabled={!canUpdate} aria-invalid={Boolean(validationErrors.bio)} aria-describedby={validationErrors.bio ? 'profile-bio-error' : undefined} />{validationErrors.bio && <small className="field-error" id="profile-bio-error" role="alert"><AlertCircle aria-hidden="true" />{validationErrors.bio}</small>}</label>
           </div>
         </section>
 
