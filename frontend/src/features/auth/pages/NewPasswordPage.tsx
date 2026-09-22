@@ -3,11 +3,14 @@ import type { FormEvent } from 'react'
 import { KeyRound } from 'lucide-react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { resetPassword } from '../api'
+import { useAuth } from '../authContext'
+import { validateNewPassword } from '../passwordPolicy'
 import { Feedback } from '../../../shared/components/Feedback'
 import { Logo } from '../../../shared/components/Logo'
 import { RESET_EMAIL_KEY, RESET_OTP_KEY } from './ForgotPasswordPage'
 
 export function NewPasswordPage() {
+  const { clearAuth } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const { email, otp } = useMemo(() => {
@@ -33,10 +36,12 @@ export function NewPasswordPage() {
     setSubmitting(true)
     setError('')
     try {
+      validateNewPassword(newPassword)
       if (newPassword !== confirmPassword) {
         throw new Error('Mật khẩu nhập lại không khớp')
       }
       await resetPassword({ email, otp, newPassword })
+      clearAuth()
       sessionStorage.removeItem(RESET_EMAIL_KEY)
       sessionStorage.removeItem(RESET_OTP_KEY)
       navigate('/login', { replace: true, state: { resetPasswordDone: true } })
@@ -51,7 +56,7 @@ export function NewPasswordPage() {
     <section className="auth auth-shell">
       <div className="auth-side">
         <h2>Đặt mật khẩu mới</h2>
-        <p>Sau khi đổi mật khẩu, backend sẽ thu hồi toàn bộ phiên đăng nhập cũ của tài khoản.</p>
+        <p>Chọn mật khẩu có ít nhất 6 ký tự. Sau khi đổi, bạn cần đăng nhập lại trên các thiết bị đang sử dụng.</p>
       </div>
 
       <div className="auth-form">
@@ -68,6 +73,8 @@ export function NewPasswordPage() {
               className="input"
               type="password"
               autoComplete="new-password"
+              minLength={6}
+              maxLength={72}
               value={newPassword}
               onChange={(event) => setNewPassword(event.target.value)}
               required

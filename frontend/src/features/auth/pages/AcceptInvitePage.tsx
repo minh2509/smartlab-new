@@ -3,12 +3,13 @@ import type { FormEvent } from 'react'
 import { CheckCircle2, KeyRound } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { acceptInvitation } from '../api'
+import { validateNewPassword } from '../passwordPolicy'
 import type { AccountResponse } from '../../../shared/types/api'
 import { Feedback } from '../../../shared/components/Feedback'
 import { Logo } from '../../../shared/components/Logo'
 
 export function AcceptInvitePage() {
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const token = useMemo(() => searchParams.get('token')?.trim() ?? '', [searchParams])
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -22,6 +23,7 @@ export function AcceptInvitePage() {
     setError('')
     setAccount(null)
     try {
+      validateNewPassword(password)
       if (!token) {
         throw new Error('Link invite không hợp lệ hoặc thiếu token')
       }
@@ -30,6 +32,7 @@ export function AcceptInvitePage() {
       }
       const result = await acceptInvitation({ token, password })
       setAccount(result)
+      setSearchParams({}, { replace: true })
       setPassword('')
       setConfirmPassword('')
     } catch (err) {
@@ -43,7 +46,7 @@ export function AcceptInvitePage() {
     <section className="auth auth-shell">
       <div className="auth-side">
         <h2>Hoàn tất tài khoản được cấp phát</h2>
-        <p>Mở link invite trong email, đặt mật khẩu mới và kích hoạt tài khoản Smart Lab.</p>
+        <p>Mở lời mời trong email, đặt mật khẩu mới và kích hoạt tài khoản Smart Lab.</p>
       </div>
 
       <div className="auth-form">
@@ -51,10 +54,10 @@ export function AcceptInvitePage() {
           <Logo />
           <div>
             <h1>Kích hoạt tài khoản</h1>
-            <p className="muted">Invite được xác thực bằng token trong link email. Bạn chỉ cần đặt mật khẩu.</p>
+            <p className="muted">Lời mời chỉ dùng một lần. Đặt mật khẩu có ít nhất 6 ký tự để kích hoạt tài khoản.</p>
           </div>
           <Feedback error={error} />
-          {!token ? (
+          {!token && !account ? (
             <div className="alert error">
               <KeyRound />
               <span>Link invite không hợp lệ. Hãy mở đúng link được gửi qua email.</span>
@@ -72,6 +75,8 @@ export function AcceptInvitePage() {
               className="input"
               type="password"
               autoComplete="new-password"
+              minLength={6}
+              maxLength={72}
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               required

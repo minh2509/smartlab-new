@@ -146,6 +146,44 @@ class AdminAccountInvitationTest {
         return request;
     }
 
+    @Test
+    void pendingInvitationCannotResetAnAlreadyVerifiedAccount() {
+        UserEntity user = invitedUser();
+        user.setIsAccountVerified(true);
+        when(tokenHashService.sha256(RAW_TOKEN)).thenReturn(TOKEN_HASH);
+        when(accountInvitationRepository.findByTokenHash(TOKEN_HASH))
+                .thenReturn(Optional.of(invitation(InvitationStatus.PENDING, Instant.now().plusSeconds(60))));
+        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
+
+        assertBadRequest(() -> service.acceptInvite(request()));
+
+        assertThat(user.getPassword()).isEqualTo("temporary-password");
+        verifyNoInteractions(passwordEncoder, userSessionService, outboxStateService);
+    }
+
+    @Test
+    void resendCannotCreatePasswordResetBackdoorForVerifiedOrDisabledVerifiedAccount() {
+        UserEntity user = invitedUser();
+        user.setIsAccountVerified(true);
+        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> service.resendInvite(EMAIL, "admin"))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+
+        verify(accountInvitationRepository, never()).save(any());
+        verifyNoInteractions(emailOutboxRepository);
+    }
+
+    @Test
+    void expiredStatusCannotBeReusedEvenIfExpirationTimestampIsInFuture() {
+        when(tokenHashService.sha256(RAW_TOKEN)).thenReturn(TOKEN_HASH);
+        when(accountInvitationRepository.findByTokenHash(TOKEN_HASH))
+                .thenReturn(Optional.of(invitation(InvitationStatus.EXPIRED, Instant.now().plusSeconds(60))));
+        assertBadRequest(() -> service.acceptInvite(request()));
+        verifyNoInteractions(userRepository, passwordEncoder, userSessionService);
+    }
+
     private static UserEntity invitedUser() {
         return UserEntity.builder()
                 .id(41L)

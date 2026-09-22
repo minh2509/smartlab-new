@@ -45,7 +45,7 @@ export function VerifyResetOtpPage() {
     <section className="auth auth-shell">
       <div className="auth-side">
         <h2>Xác thực OTP</h2>
-        <p>Nhập mã OTP đã gửi tới email để tiếp tục sang bước đặt mật khẩu mới.</p>
+        <p>Nếu email thuộc tài khoản đủ điều kiện, mã OTP sẽ được gửi tới hộp thư của bạn. Kiểm tra cả thư rác. Mã có hiệu lực 15 phút và tối đa 5 lần nhập sai.</p>
       </div>
 
       <div className="auth-form">
@@ -62,6 +62,9 @@ export function VerifyResetOtpPage() {
               className="input"
               inputMode="numeric"
               autoComplete="one-time-code"
+              pattern="[0-9]{6}"
+              minLength={6}
+              maxLength={6}
               value={otp}
               onChange={(event) => setOtp(event.target.value)}
               required
@@ -72,7 +75,7 @@ export function VerifyResetOtpPage() {
             {isSubmitting ? 'Đang kiểm tra...' : 'Xác nhận OTP'}
           </button>
           <Link className="muted-link" to="/forgot-password">
-            Đổi email
+            Đổi email hoặc yêu cầu mã mới (cách nhau ít nhất 60 giây)
           </Link>
         </form>
       </div>

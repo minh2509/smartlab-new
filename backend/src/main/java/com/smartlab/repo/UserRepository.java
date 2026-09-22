@@ -18,6 +18,10 @@ import java.util.Optional;
 public interface UserRepository extends JpaRepository<UserEntity,Long> {
     Optional<UserEntity> findByEmail(String email);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select u from UserEntity u where u.email = :email")
+    Optional<UserEntity> findByEmailForUpdate(@Param("email") String email);
+
     Optional<UserEntity> findByUserId(String userId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

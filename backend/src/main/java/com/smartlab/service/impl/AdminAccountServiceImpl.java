@@ -29,6 +29,7 @@ import com.smartlab.repo.UserRoleRepository;
 import com.smartlab.service.AdminAccountService;
 import com.smartlab.service.AuditService;
 import com.smartlab.service.PermissionService;
+import com.smartlab.service.PasswordPolicy;
 import com.smartlab.service.TokenHashService;
 import com.smartlab.service.UserSessionService;
 import lombok.RequiredArgsConstructor;
@@ -137,8 +138,14 @@ public class AdminAccountServiceImpl implements AdminAccountService {
     @Transactional
     @Override
     public InvitationResponse resendInvite(String email, String adminUserId) {
+        // Use the same invitation-first lock order as acceptance and delivery.
+        accountInvitationRepository.findByEmailForUpdate(email);
         UserEntity user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + email));
+        if (Boolean.TRUE.equals(user.getIsAccountVerified())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Tài khoản đã kích hoạt. Hãy sử dụng chức năng quên mật khẩu.");
+        }
         upsertInvite(user.getEmail(), resolveActorReference(adminUserId));
         AccountInvitationEntity invitation = accountInvitationRepository.findByEmail(user.getEmail())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Invitation not found"));
@@ -151,23 +158,31 @@ public class AdminAccountServiceImpl implements AdminAccountService {
                 .build();
     }
 
-    @Transactional(noRollbackFor = ResponseStatusException.class)
+    @Transactional(noRollbackFor = ExpiredInvitationException.class)
     @Override
     public AccountResponse acceptInvite(InvitationAcceptRequest request) {
+        PasswordPolicy.validate(request.getPassword());
         AccountInvitationEntity invitation = accountInvitationRepository.findByTokenHash(tokenHashService.sha256(request.getToken()))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invitation token is invalid"));
-        if (invitation.getExpiresAt().isBefore(Instant.now())) {
+        if (invitation.getStatus() != InvitationStatus.PENDING || invitation.getAcceptedAt() != null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Lời mời đã được sử dụng hoặc không còn hiệu lực.");
+        }
+        if (!Instant.now().isBefore(invitation.getExpiresAt())) {
             invitation.setStatus(InvitationStatus.EXPIRED);
             accountInvitationRepository.save(invitation);
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invitation expired");
-        }
-        if (invitation.getStatus() == InvitationStatus.ACCEPTED) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invitation already accepted");
+            throw new ExpiredInvitationException();
         }
 
         UserEntity user = userRepository.findByEmail(invitation.getEmail())
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + invitation.getEmail()));
+        if (Boolean.TRUE.equals(user.getIsAccountVerified()) || permissionService.hasInactiveAssignedRole(user)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Lời mời không còn hiệu lực. Vui lòng liên hệ quản trị viên.");
+        }
         user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setResetOtp(null);
+        user.setResetOtpExpireAt(null);
+        user.setResetOtpFailedAttempts(0);
+        user.setResetOtpRequestedAt(null);
         user.setIsActive(true);
         user.setIsAccountVerified(true);
         userRepository.save(user);
@@ -195,6 +210,12 @@ public class AdminAccountServiceImpl implements AdminAccountService {
         auditService.log(USER_ROLES_UPDATED, USER, user.getId().toString(),
                 Map.of("roleCodes", beforeCodes), Map.of("roleCodes", afterCodes));
         return toResponse(user);
+    }
+
+    public static class ExpiredInvitationException extends ResponseStatusException {
+        public ExpiredInvitationException() {
+            super(HttpStatus.BAD_REQUEST, "Lời mời đã hết hạn. Vui lòng liên hệ quản trị viên để nhận lời mời mới.");
+        }
     }
 
     @Transactional

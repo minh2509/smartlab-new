@@ -9,11 +9,12 @@ import lombok.Data;
 @Schema(description = "Public request for accepting an account invitation.")
 public class InvitationAcceptRequest {
     @NotBlank(message = "Token is required")
+    @Size(max = 512)
     @Schema(description = "Raw invitation token from the invite email link", example = "mUsOD7zti7x9u6oP3S8d")
     private String token;
 
     @NotBlank(message = "Password is required")
-    @Size(min = 6, message = "Password atleast 6 characters")
+    @Size(min = 6, max = 72, message = "Mật khẩu phải có từ 6 đến 72 ký tự")
     @Schema(description = "Password to set for the account", example = "Member@123456")
     private String password;
 }

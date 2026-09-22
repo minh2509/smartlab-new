@@ -774,7 +774,7 @@ function AccountActionDialog({
         <div className="modal-head">
           <div>
             <h2 id="account-dialog-title">{activeDialog === 'provision' ? 'Cấp tài khoản' : 'Gửi lại invite'}</h2>
-            <p>{activeDialog === 'provision' ? 'Tạo tài khoản nội bộ và gửi link invite qua email.' : 'Cấp lại token invite mới cho tài khoản đã được tạo.'}</p>
+            <p>{activeDialog === 'provision' ? 'Tạo tài khoản nội bộ và gửi link invite qua email.' : 'Gửi lời mời mới cho tài khoản chưa kích hoạt. Tài khoản đã kích hoạt cần dùng chức năng quên mật khẩu.'}</p>
           </div>
           <button className="icon-btn modal-close" type="button" onClick={onClose} aria-label="Đóng popup">
             <X />

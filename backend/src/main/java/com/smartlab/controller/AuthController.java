@@ -23,6 +23,9 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
@@ -41,6 +44,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.validation.annotation.Validated;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -49,6 +53,7 @@ import java.util.Map;
 
 @RestController
 @RequiredArgsConstructor
+@Validated
 @Tag(name = "Authentication", description = "Login, logout, session check, and forgot password flow.")
 public class AuthController {
     private final AuthenticationManager authenticationManager;
@@ -129,24 +134,17 @@ public class AuthController {
             description = "Sends a short-lived OTP to a provisioned account email. This endpoint is public so users can reset forgotten passwords."
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Reset OTP sent"),
-            @ApiResponse(responseCode = "404", description = "Account email does not exist",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "500", description = "Email could not be sent",
+            @ApiResponse(responseCode = "200", description = "Request accepted without disclosing whether the account exists"),
+            @ApiResponse(responseCode = "400", description = "Email format is invalid",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<?> sendResetOtp(
             @Parameter(description = "Provisioned account email", example = "member@smartlab.local")
-            @RequestParam String email
+            @RequestParam @NotBlank @Email @Size(max = 254) String email
     ) {
-        try {
-            passwordResetService.sendResetOtp(email);
-            return ResponseEntity.ok().build();
-        } catch (UsernameNotFoundException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error("Account email does not exist"));
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error(e.getMessage()));
-        }
+        passwordResetService.sendResetOtp(email);
+        return ResponseEntity.ok().body(Map.of("message",
+                "Nếu email thuộc tài khoản đủ điều kiện, bạn sẽ nhận được mã OTP. Vui lòng kiểm tra cả thư rác."));
     }
 
     @PostMapping("/verify-reset-otp")
@@ -156,20 +154,12 @@ public class AuthController {
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Reset OTP is valid"),
-            @ApiResponse(responseCode = "400", description = "OTP invalid or expired",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "404", description = "Account email does not exist",
+            @ApiResponse(responseCode = "400", description = "OTP or recovery request is invalid, expired or exhausted",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<?> verifyResetOtp(@Valid @RequestBody VerifyResetOtpRequest request) {
-        try {
-            passwordResetService.verifyResetOtp(request.getEmail(), request.getOtp());
-            return ResponseEntity.ok().build();
-        } catch (UsernameNotFoundException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error("Account email does not exist"));
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error(e.getMessage()));
-        }
+        passwordResetService.verifyResetOtp(request.getEmail(), request.getOtp());
+        return ResponseEntity.ok().build();
     }
 
     @PostMapping("/reset-password")
@@ -179,25 +169,16 @@ public class AuthController {
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Password reset successful and old sessions revoked"),
-            @ApiResponse(responseCode = "400", description = "OTP invalid/expired or reset failed",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "404", description = "Account email does not exist",
+            @ApiResponse(responseCode = "400", description = "Invalid password or invalid/expired/exhausted recovery request",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<?> resetPassword(@Valid @RequestBody ResetPasswordRequest resetPasswordRequest) {
-        try {
-            passwordResetService.resetPassword(
+        passwordResetService.resetPassword(
                     resetPasswordRequest.getEmail(),
                     resetPasswordRequest.getOtp(),
                     resetPasswordRequest.getNewPassword()
             );
-            userSessionService.revokeAllByEmail(resetPasswordRequest.getEmail());
-            return ResponseEntity.ok().build();
-        } catch (UsernameNotFoundException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error("Account email does not exist"));
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error(e.getMessage()));
-        }
+        return clearAuthenticationCookies(ResponseEntity.ok().build());
     }
 
     @PostMapping("/refresh")

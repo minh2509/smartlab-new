@@ -34,6 +34,10 @@ public class UserEntity {
     private Boolean isAccountVerified;
     private String resetOtp;
     private Instant resetOtpExpireAt;
+    @Builder.Default
+    @Column(nullable = false)
+    private Integer resetOtpFailedAttempts = 0;
+    private Instant resetOtpRequestedAt;
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private Timestamp createdAt;

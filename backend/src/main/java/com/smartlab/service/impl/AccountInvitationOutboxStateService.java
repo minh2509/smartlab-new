@@ -6,6 +6,7 @@ import com.smartlab.enums.BulkInvitationItemStatus;
 import com.smartlab.enums.EmailOutboxStatus;
 import com.smartlab.enums.InvitationStatus;
 import com.smartlab.repo.AccountInvitationItemRepository;
+import com.smartlab.repo.AccountInvitationRepository;
 import com.smartlab.repo.EmailOutboxRepository;
 import com.smartlab.repo.UserRepository;
 import com.smartlab.service.TokenHashService;
@@ -28,6 +29,7 @@ public class AccountInvitationOutboxStateService {
     private final AccountInvitationItemRepository itemRepository;
     private final UserRepository userRepository;
     private final TokenHashService tokenHashService;
+    private final AccountInvitationRepository invitationRepository;
     private final SecureRandom secureRandom = new SecureRandom();
 
     @Value("${smartlab.invite.ttl-hours:72}")
@@ -76,13 +78,20 @@ public class AccountInvitationOutboxStateService {
     @Transactional
     public PreparedInvitation prepare(Long outboxId, String frontendBaseUrl) {
         EmailOutboxEntity outbox = requireProcessing(outboxId);
-        AccountInvitationEntity invitation = outbox.getInvitation();
+        AccountInvitationEntity invitation = invitationRepository.findByIdForUpdate(outbox.getInvitation().getId())
+                .orElseThrow(() -> new IllegalStateException("Invitation not found"));
+        UserEntity recipient = userRepository.findByEmail(outbox.getRecipientEmail())
+                .orElseThrow(() -> new IllegalStateException("Invitation recipient not found"));
+        if (invitation.getStatus() == InvitationStatus.ACCEPTED || invitation.getAcceptedAt() != null
+                || Boolean.TRUE.equals(recipient.getIsAccountVerified())) {
+            throw new IllegalStateException("Invitation recipient is already activated");
+        }
         String rawToken = randomToken(48);
         invitation.setTokenHash(tokenHashService.sha256(rawToken));
         invitation.setStatus(InvitationStatus.PENDING);
         invitation.setExpiresAt(Instant.now().plus(invitationTtlHours, ChronoUnit.HOURS));
         String fullName = outbox.getBatchItem() == null
-                ? userRepository.findByEmail(outbox.getRecipientEmail()).map(UserEntity::getName).orElse("")
+                ? recipient.getName()
                 : outbox.getBatchItem().getFullName();
         String link = frontendBaseUrl.replaceAll("/+$", "") + "/accept-invite?token=" + rawToken;
         return new PreparedInvitation(outbox.getRecipientEmail(), fullName, link, invitation.getExpiresAt());
@@ -96,6 +105,7 @@ public class AccountInvitationOutboxStateService {
         outbox.setLastError(null);
         if (outbox.getBatchItem() != null) {
             AccountInvitationItemEntity item = outbox.getBatchItem();
+            if (item.getStatus() == BulkInvitationItemStatus.ACTIVATED) return;
             item.setStatus(BulkInvitationItemStatus.SENT);
             item.setFailureCode(null);
             item.setFailureMessage(null);
@@ -107,12 +117,14 @@ public class AccountInvitationOutboxStateService {
     public void markFailed(Long outboxId, Exception exception) {
         EmailOutboxEntity outbox = requireProcessing(outboxId);
         String reason = safeMessage(exception);
-        boolean terminal = outbox.getAttemptCount() >= maxAttempts;
+        boolean terminal = outbox.getAttemptCount() >= maxAttempts
+                || outbox.getInvitation().getStatus() == InvitationStatus.ACCEPTED;
         outbox.setLastError(reason);
         outbox.setStatus(terminal ? EmailOutboxStatus.FAILED : EmailOutboxStatus.QUEUED);
         if (!terminal) outbox.setNextAttemptAt(Instant.now().plusSeconds(30L * outbox.getAttemptCount()));
         if (outbox.getBatchItem() != null) {
             AccountInvitationItemEntity item = outbox.getBatchItem();
+            if (item.getStatus() == BulkInvitationItemStatus.ACTIVATED) return;
             item.setFailureCode("SMTP_DELIVERY_FAILED");
             item.setFailureMessage(reason);
             item.setStatus(terminal ? BulkInvitationItemStatus.EMAIL_FAILED : BulkInvitationItemStatus.QUEUED);
