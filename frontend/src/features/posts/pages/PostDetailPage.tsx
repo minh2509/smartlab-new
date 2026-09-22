@@ -150,7 +150,7 @@ export function PostDetailPage() {
               <div className="post-page-eyebrow">
                 {post.category ? <span className="post-page-category">{post.category.name}</span> : null}
               </div>
-              <h1 className="post-page-title">{post.title}</h1>
+              <h1 className="post-page-title">{post.title.trim() || 'Bản nháp chưa có tiêu đề'}</h1>
               {post.excerpt ? <p className="post-page-excerpt">{post.excerpt}</p> : null}
               <div className="post-page-meta">
                 <span className="post-page-dates">

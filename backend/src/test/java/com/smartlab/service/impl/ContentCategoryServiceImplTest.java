@@ -10,6 +10,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -63,8 +64,8 @@ class ContentCategoryServiceImplTest {
     @Test
     void createsAnActiveCategoryAndMapsPersistedResponse() {
         CreateContentCategoryRequest request = request("MEMBER_BLOG", "Member Blog", "Member updates");
-        when(contentCategoryRepository.existsByCode("MEMBER_BLOG")).thenReturn(false);
-        when(contentCategoryRepository.save(any(ContentCategoryEntity.class))).thenReturn(
+        when(contentCategoryRepository.existsByCodeIgnoreCase("MEMBER_BLOG")).thenReturn(false);
+        when(contentCategoryRepository.saveAndFlush(any(ContentCategoryEntity.class))).thenReturn(
                 category(7L, "MEMBER_BLOG", "Member Blog", "Member updates")
         );
 
@@ -77,7 +78,7 @@ class ContentCategoryServiceImplTest {
                         ContentCategoryResponse::getDescription)
                 .containsExactly(7L, "MEMBER_BLOG", "Member Blog", "Member updates");
         ArgumentCaptor<ContentCategoryEntity> savedCategory = ArgumentCaptor.forClass(ContentCategoryEntity.class);
-        verify(contentCategoryRepository).save(savedCategory.capture());
+        verify(contentCategoryRepository).saveAndFlush(savedCategory.capture());
         assertThat(savedCategory.getValue())
                 .extracting(ContentCategoryEntity::getCode,
                         ContentCategoryEntity::getName,
@@ -89,8 +90,8 @@ class ContentCategoryServiceImplTest {
     @Test
     void acceptsNullDescription() {
         CreateContentCategoryRequest request = request("NEWS", "News", null);
-        when(contentCategoryRepository.existsByCode("NEWS")).thenReturn(false);
-        when(contentCategoryRepository.save(any(ContentCategoryEntity.class))).thenReturn(
+        when(contentCategoryRepository.existsByCodeIgnoreCase("NEWS")).thenReturn(false);
+        when(contentCategoryRepository.saveAndFlush(any(ContentCategoryEntity.class))).thenReturn(
                 category(3L, "NEWS", "News", null)
         );
 
@@ -98,20 +99,110 @@ class ContentCategoryServiceImplTest {
 
         assertThat(response.getDescription()).isNull();
         ArgumentCaptor<ContentCategoryEntity> savedCategory = ArgumentCaptor.forClass(ContentCategoryEntity.class);
-        verify(contentCategoryRepository).save(savedCategory.capture());
+        verify(contentCategoryRepository).saveAndFlush(savedCategory.capture());
         assertThat(savedCategory.getValue().getDescription()).isNull();
     }
 
     @Test
     void rejectsKnownDuplicateCodeWithoutSaving() {
         CreateContentCategoryRequest request = request("NEWS", "News", null);
-        when(contentCategoryRepository.existsByCode("NEWS")).thenReturn(true);
+        when(contentCategoryRepository.existsByCodeIgnoreCase("NEWS")).thenReturn(true);
 
         assertThatThrownBy(() -> contentCategoryService.createCategory(request))
                 .isInstanceOfSatisfying(ResponseStatusException.class,
                         exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
 
-        verify(contentCategoryRepository, never()).save(any(ContentCategoryEntity.class));
+        verify(contentCategoryRepository, never()).saveAndFlush(any(ContentCategoryEntity.class));
+    }
+
+    @Test
+    void returnsActiveAndInactiveCategoriesForAdmin() {
+        when(contentCategoryRepository.findAllByOrderByIdAsc()).thenReturn(List.of(
+                category(2L, "NEWS", "News", null),
+                ContentCategoryEntity.builder().id(3L).code("OLD").name("Old").isActive(false).build()
+        ));
+
+        assertThat(contentCategoryService.getAllCategories())
+                .extracting(ContentCategoryResponse::getId, ContentCategoryResponse::getIsActive)
+                .containsExactly(tuple(2L, true), tuple(3L, false));
+    }
+
+    @Test
+    void normalizesCategoryFieldsBeforeCheckingAndSaving() {
+        CreateContentCategoryRequest request = request("  member_blog  ", "  Member Blog  ", "  Member updates  ");
+        when(contentCategoryRepository.existsByCodeIgnoreCase("MEMBER_BLOG")).thenReturn(false);
+        when(contentCategoryRepository.saveAndFlush(any(ContentCategoryEntity.class))).thenAnswer(invocation -> {
+            ContentCategoryEntity category = invocation.getArgument(0);
+            return ContentCategoryEntity.builder()
+                    .id(7L)
+                    .code(category.getCode())
+                    .name(category.getName())
+                    .description(category.getDescription())
+                    .isActive(true)
+                    .build();
+        });
+
+        ContentCategoryResponse response = contentCategoryService.createCategory(request);
+
+        assertThat(response)
+                .extracting(ContentCategoryResponse::getCode,
+                        ContentCategoryResponse::getName,
+                        ContentCategoryResponse::getDescription)
+                .containsExactly("MEMBER_BLOG", "Member Blog", "Member updates");
+    }
+
+    @Test
+    void mapsConcurrentUniqueConstraintViolationToConflict() {
+        CreateContentCategoryRequest request = request("NEWS", "News", null);
+        when(contentCategoryRepository.existsByCodeIgnoreCase("NEWS")).thenReturn(false);
+        when(contentCategoryRepository.saveAndFlush(any(ContentCategoryEntity.class)))
+                .thenThrow(new DataIntegrityViolationException("duplicate"));
+
+        assertThatThrownBy(() -> contentCategoryService.createCategory(request))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+    }
+
+    @Test
+    void updatesCategoryActiveStatus() {
+        ContentCategoryEntity category = category(3L, "NEWS", "News", null);
+        when(contentCategoryRepository.findById(3L)).thenReturn(java.util.Optional.of(category));
+        when(contentCategoryRepository.saveAndFlush(category)).thenReturn(category);
+
+        ContentCategoryResponse response = contentCategoryService.setCategoryActive(3L, false);
+
+        assertThat(response.getIsActive()).isFalse();
+        assertThat(category.getIsActive()).isFalse();
+    }
+
+    @Test
+    void rejectsActiveUpdateForMissingCategory() {
+        when(contentCategoryRepository.findById(99L)).thenReturn(java.util.Optional.empty());
+
+        assertThatThrownBy(() -> contentCategoryService.setCategoryActive(99L, true))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
+    }
+
+    @Test
+    void deletesExistingCategory() {
+        ContentCategoryEntity category = category(3L, "NEWS", "News", null);
+        when(contentCategoryRepository.findById(3L)).thenReturn(java.util.Optional.of(category));
+
+        contentCategoryService.deleteCategory(3L);
+
+        verify(contentCategoryRepository).delete(category);
+        verify(contentCategoryRepository).flush();
+    }
+
+    @Test
+    void rejectsDeleteForMissingCategory() {
+        when(contentCategoryRepository.findById(99L)).thenReturn(java.util.Optional.empty());
+
+        assertThatThrownBy(() -> contentCategoryService.deleteCategory(99L))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
+        verify(contentCategoryRepository, never()).delete(any());
     }
 
     private static ContentCategoryEntity category(Long id, String code, String name, String description) {

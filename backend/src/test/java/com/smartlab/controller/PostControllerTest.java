@@ -127,6 +127,17 @@ class PostControllerTest {
     }
 
     @Test
+    void adminQueueDelegatesTrustedAuthenticationName() throws Exception {
+        when(postService.getAdminPostQueue(EMAIL)).thenReturn(List.of());
+
+        mockMvc.perform(get("/posts/admin-queue").principal(authentication()))
+                .andExpect(status().isOk())
+                .andExpect(content().json("[]"));
+
+        verify(postService).getAdminPostQueue(EMAIL);
+    }
+
+    @Test
     void reviewerDetailDelegatesTrustedAuthenticationNameAndPostId() throws Exception {
         Authentication authentication = authentication();
         when(postService.getReviewablePost(EMAIL, 17L)).thenReturn(detailResponse());
@@ -174,7 +185,7 @@ class PostControllerTest {
     }
 
     @Test
-    void postMappingReturnsOkAndValidatesBody() throws Exception {
+    void postMappingAllowsAnUntitledDraft() throws Exception {
         when(postService.createPost(any(), any())).thenReturn(detailResponse());
 
         mockMvc.perform(post("/posts")
@@ -192,7 +203,7 @@ class PostControllerTest {
                         .principal(authentication())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"title\":\"\"}"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isOk());
     }
 
     @Test
@@ -302,13 +313,17 @@ class PostControllerTest {
     void mapsReviewerReadsWithExactStaticPathsAndAuthority() throws NoSuchMethodException {
         Method list = PostController.class.getMethod("getReviewQueue", Authentication.class);
         Method detail = PostController.class.getMethod("getReviewQueuePost", Authentication.class, Long.class);
+        Method admin = PostController.class.getMethod("getAdminPostQueue", Authentication.class);
 
         assertThat(list.getAnnotation(GetMapping.class).value()).containsExactly("/review-queue");
         assertThat(detail.getAnnotation(GetMapping.class).value()).containsExactly("/review-queue/{id}");
+        assertThat(admin.getAnnotation(GetMapping.class).value()).containsExactly("/admin-queue");
         assertThat(list.getAnnotation(PreAuthorize.class).value())
                 .isEqualTo("hasAuthority('posts.review')");
         assertThat(detail.getAnnotation(PreAuthorize.class).value())
                 .isEqualTo("hasAuthority('posts.review')");
+        assertThat(admin.getAnnotation(PreAuthorize.class).value())
+                .isEqualTo("hasRole('ADMIN') and hasAuthority('posts.review') and hasAuthority('posts.publish')");
     }
 
     private static boolean hasValidAnnotation(Annotation[] annotations) {

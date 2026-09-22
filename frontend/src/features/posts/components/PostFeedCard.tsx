@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { FolderKanban, LogIn, MessageCircle } from 'lucide-react'
 import { PostReactionPicker } from './PostReactionPicker'
 import { PostContent } from './PostContent'
-import { parsePostContent } from '../postContent'
+import { extractPostPlainText, parsePostContent } from '../postContent'
 import { representativeReactions } from '../reactions'
 import { exactDateTime, relativeTime } from '../relativeTime'
 import type { PostFeedItem, ReactionState, ReactionType } from '../types'
@@ -37,8 +37,8 @@ export function PostFeedCard({
   onRequireLogin,
 }: Props) {
   const content = parsePostContent(post.contentJson)
-  const body = content?.body ?? null
-  const hasRenderableContent = Boolean(content && (content.body || content.files?.length))
+  const body = extractPostPlainText(content)
+  const hasRenderableContent = Boolean(content && (body || content.files?.length))
   const [expanded, setExpanded] = useState(false)
   const long = Boolean(body && (body.length > 520 || body.split('\n').length > 7))
   const reactionIcons = representativeReactions(post.reactionCounts)

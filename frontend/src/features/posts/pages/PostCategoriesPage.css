@@ -1,0 +1,142 @@
+.post-categories-title {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.post-categories-count {
+  flex: none;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.post-categories-title-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.post-category-list {
+  width: 100%;
+  padding: 24px;
+}
+
+.post-category-table-wrap {
+  overflow-x: auto;
+}
+
+.post-category-table {
+  width: 100%;
+  min-width: 820px;
+  border-collapse: collapse;
+}
+
+.post-category-table th:nth-child(1) { width: 28%; }
+.post-category-table th:nth-child(2) { width: 25%; }
+
+.post-category-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.post-category-table th,
+.post-category-table td {
+  padding: 13px 12px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.post-category-table th {
+  color: var(--text-3);
+  font-size: 12px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.post-category-table code {
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text-1);
+  font-size: 12px;
+}
+
+.post-category-dialog-backdrop {
+  position: fixed;
+  z-index: 120;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(12 16 22 / .62);
+  backdrop-filter: blur(2px);
+}
+
+.post-category-dialog {
+  width: min(100%, 560px);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface-card, #fdfbf7);
+  box-shadow: 0 24px 70px rgb(0 0 0 / .25);
+}
+
+.post-category-dialog-head {
+  margin: 0;
+  padding: 22px 24px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.post-category-dialog-head h2 {
+  margin-top: 4px;
+}
+
+.post-category-dialog-body {
+  display: grid;
+  gap: 17px;
+  padding: 22px 24px;
+}
+
+.post-category-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px 22px;
+  border-top: 1px solid var(--line);
+}
+
+@media (max-width: 560px) {
+  .post-categories-title {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .post-categories-title-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .post-category-list {
+    padding: 16px;
+  }
+
+  .post-category-dialog-backdrop {
+    align-items: end;
+    padding: 12px;
+  }
+
+  .post-category-dialog {
+    max-height: calc(100vh - 24px);
+  }
+}

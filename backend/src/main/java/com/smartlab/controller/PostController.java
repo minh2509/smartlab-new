@@ -181,6 +181,12 @@ public class PostController {
         return postService.getReviewablePosts(authentication.getName());
     }
 
+    @GetMapping("/admin-queue")
+    @PreAuthorize("hasRole('ADMIN') and hasAuthority('posts.review') and hasAuthority('posts.publish')")
+    public List<PostSummaryResponse> getAdminPostQueue(Authentication authentication) {
+        return postService.getAdminPostQueue(authentication.getName());
+    }
+
     @GetMapping("/review-queue/{id}")
     @PreAuthorize("hasAuthority('posts.review')")
     public PostDetailResponse getReviewQueuePost(Authentication authentication, @PathVariable Long id) {

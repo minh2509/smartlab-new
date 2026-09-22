@@ -14,6 +14,7 @@ import com.smartlab.repo.PostRepository;
 import com.smartlab.repo.PostReviewRepository;
 import com.smartlab.repo.UserRepository;
 import com.smartlab.service.NotificationService;
+import com.smartlab.service.PermissionService;
 import com.smartlab.service.PostSlugGenerator;
 import com.smartlab.service.PostContentRenderer;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,6 +28,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.lang.reflect.Field;
@@ -35,6 +37,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -71,6 +74,7 @@ class PostReadServiceImplTest {
     @Mock private com.smartlab.service.AuditService auditService;
     @Mock private com.smartlab.repo.ProjectRepository projectRepository;
     @Mock private com.smartlab.repo.ProjectMemberRepository projectMemberRepository;
+    @Mock private PermissionService permissionService;
 
     private PostServiceImpl postService;
 
@@ -89,6 +93,7 @@ class PostReadServiceImplTest {
                 projectRepository,
                 projectMemberRepository
         );
+        ReflectionTestUtils.setField(postService, "permissionService", permissionService);
     }
 
     @Test
@@ -167,6 +172,23 @@ class PostReadServiceImplTest {
         verify(postRepository, never()).findActiveByIdForUpdate(any());
         verify(postRepository, never()).save(any(PostEntity.class));
         verifyNoInteractions(postReviewRepository, notificationService, auditService, postCreateAttemptService);
+    }
+
+    @Test
+    void adminQueueIncludesApprovedPostsAndReviewablePendingPostsInRepositoryOrder() {
+        PostEntity approved = post(9L, VIEWER_ID, PostStatus.APPROVED,
+                PostVisibility.LAB, null, "approved-for-publish", 9);
+        PostEntity pending = post(8L, 98L, PostStatus.PENDING_REVIEW,
+                PostVisibility.PUBLIC, null, "pending-for-review", 8);
+        activeViewer();
+        when(postRepository.findActiveAdminPostQueue(VIEWER_ID)).thenReturn(List.of(approved, pending));
+
+        List<PostSummaryResponse> responses = postService.getAdminPostQueue(VIEWER_EMAIL);
+
+        assertThat(responses).extracting(PostSummaryResponse::getStatus)
+                .containsExactly(PostStatus.APPROVED, PostStatus.PENDING_REVIEW);
+        verify(postRepository).findActiveAdminPostQueue(VIEWER_ID);
+        verify(postRepository, never()).save(any(PostEntity.class));
     }
 
     @Test
@@ -436,6 +458,21 @@ class PostReadServiceImplTest {
 
         assertThat(response.getReviewFeedback()).isNull();
         verifyNoInteractions(postReviewRepository);
+    }
+
+    @Test
+    void publisherCanOpenApprovedPostFromAdminQueue() {
+        PostEntity post = post(1L, 99L, PostStatus.APPROVED, PostVisibility.LAB,
+                null, "approved-for-publish", 1);
+        activeViewer();
+        when(postRepository.findActiveBySlug("approved-for-publish")).thenReturn(Optional.of(post));
+        when(permissionService.getEffectivePermissionCodes(any(UserEntity.class)))
+                .thenReturn(Set.of("posts.publish"));
+
+        PostDetailResponse response = postService.getPostBySlug(VIEWER_EMAIL, "approved-for-publish");
+
+        assertThat(response.getStatus()).isEqualTo(PostStatus.APPROVED);
+        assertThat(response.getSlug()).isEqualTo("approved-for-publish");
     }
 
     @Test

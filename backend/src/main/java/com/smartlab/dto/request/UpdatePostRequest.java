@@ -130,10 +130,10 @@ public class UpdatePostRequest {
                 || projectIdPresent;
     }
 
-    @AssertTrue(message = "title must be nonblank and at most 250 characters when provided")
+    @AssertTrue(message = "title must be at most 250 characters when provided")
     @JsonIgnore
     public boolean isTitleValid() {
-        return !titlePresent || (title != null && !title.isBlank() && title.length() <= 250);
+        return !titlePresent || title == null || title.length() <= 250;
     }
 
     @AssertTrue(message = "excerpt must be at most 500 characters when provided")

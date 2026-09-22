@@ -273,6 +273,17 @@ class PostContentFileServiceImplTest {
         assertStatus(HttpStatus.NOT_FOUND, () -> postService.downloadPostFile(reviewerAuthentication(), "pending", 999L));
     }
 
+    @Test
+    void authorizedPublisherReadsApprovedInlineMedia() {
+        PostEntity approved = post(PostStatus.APPROVED, PostVisibility.LAB, AUTHOR_ID, files());
+        activeViewer();
+        when(postRepository.findActiveBySlug("approved")).thenReturn(Optional.of(approved));
+        readableFile(12L);
+
+        assertThat(postService.downloadPostFile(publisherAuthentication(), "approved", 12L).content())
+                .containsExactly((byte) 1);
+    }
+
     private void assertCreateRejected(Long id, Optional<PostContentFileService.FileMetadata> result) {
         when(contentFiles.findActiveMetadata(id)).thenReturn(result);
         assertStatus(HttpStatus.BAD_REQUEST, () -> postService.createPost(AUTHOR_EMAIL,
@@ -294,6 +305,7 @@ class PostContentFileServiceImplTest {
     private static Authentication authentication(String email) { Authentication auth = org.mockito.Mockito.mock(Authentication.class); when(auth.isAuthenticated()).thenReturn(true); when(auth.getName()).thenReturn(email); return auth; }
     private static Authentication nonReviewerAuthentication() { Authentication auth = authentication(VIEWER_EMAIL); org.mockito.Mockito.doReturn(List.of()).when(auth).getAuthorities(); return auth; }
     private static Authentication reviewerAuthentication() { Authentication auth = authentication(VIEWER_EMAIL); org.mockito.Mockito.doReturn(List.of(new SimpleGrantedAuthority("posts.review"))).when(auth).getAuthorities(); return auth; }
+    private static Authentication publisherAuthentication() { Authentication auth = authentication(VIEWER_EMAIL); org.mockito.Mockito.doReturn(List.of(new SimpleGrantedAuthority("posts.publish"))).when(auth).getAuthorities(); return auth; }
     private static PostEntity post(PostStatus status, PostVisibility visibility, long authorId, Map<String, Object> content) { PostEntity post = PostEntity.createDraft(authorId, "Title", "post", null, content, visibility, null, Instant.parse("2026-01-01T00:00:00Z")); set(post, "id", 55L); set(post, "status", status); return post; }
     private static void set(Object target, String field, Object value) { ReflectionTestUtils.setField(target, field, value); }
     private static void assertStatus(HttpStatus expected, Runnable work) { assertThatThrownBy(work::run).isInstanceOf(ResponseStatusException.class).extracting(error -> ((ResponseStatusException) error).getStatusCode()).isEqualTo(expected); }

@@ -58,6 +58,7 @@ import static com.smartlab.service.AuditVocabulary.POST_REVIEWED;
 @Service
 @RequiredArgsConstructor
 public class PostServiceImpl implements PostService {
+    private static final String PUBLISH_PERMISSION = "posts.publish";
     private static final String DIRECT_PUBLISH_PERMISSION = "posts.publish.direct";
     private static final String PROJECT_MANAGE_PERMISSION = "PROJECT_MANAGE";
     private static final String PROJECT_ANNOUNCEMENT_PUBLISHED = "PROJECT_ANNOUNCEMENT_PUBLISHED";
@@ -89,18 +90,19 @@ public class PostServiceImpl implements PostService {
         Map<String, Object> contentJson = request.getContentJson() == null
                 ? new LinkedHashMap<>()
                 : request.getContentJson();
+        String draftTitle = request.getTitle() == null ? "" : request.getTitle();
         validateContentFileReferences(contentJson, author.getId());
         String contentHtml = postContentRenderer.renderAndSanitize(contentJson).orElse(null);
         Instant creationTime = Instant.now();
         for (int candidateNumber = 1; candidateNumber <= postSlugGenerator.maxCandidates(); candidateNumber++) {
-            String candidate = postSlugGenerator.candidateFor(request.getTitle(), candidateNumber);
+            String candidate = postSlugGenerator.candidateFor(draftTitle, candidateNumber);
             if (postRepository.existsBySlug(candidate)) {
                 continue;
             }
 
             PostEntity post = PostEntity.createDraft(
                     author.getId(),
-                    request.getTitle(),
+                    draftTitle,
                     candidate,
                     request.getExcerpt(),
                     contentJson,
@@ -141,7 +143,7 @@ public class PostServiceImpl implements PostService {
             resolvedCategoryId = suppliedCategory == null ? null : suppliedCategory.getId();
         }
 
-        String resolvedTitle = request.hasTitle() ? request.getTitle() : post.getTitle();
+        String resolvedTitle = request.hasTitle() ? Objects.requireNonNullElse(request.getTitle(), "") : post.getTitle();
         String resolvedExcerpt = request.hasExcerpt() ? request.getExcerpt() : post.getExcerpt();
         Map<String, Object> resolvedContentJson = request.hasContentJson()
                 ? request.getContentJson() == null ? new LinkedHashMap<>() : request.getContentJson()
@@ -189,6 +191,7 @@ public class PostServiceImpl implements PostService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Only draft or revision-required posts can be submitted for review");
         }
 
+        requireCompleteForWorkflow(post);
         post.submitForReview(Instant.now());
         return toDetailResponse(post, findCategoryResponse(post.getCategoryId()), toAuthorResponse(author));
     }
@@ -206,7 +209,6 @@ public class PostServiceImpl implements PostService {
         if (post.getStatus() != PostStatus.PENDING_REVIEW) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Only pending-review posts can be reviewed");
         }
-
         Map<String, Object> auditBefore = Map.of("status", post.getStatus().name());
         Instant reviewInstant = Instant.now();
         PostReviewEntity review = PostReviewEntity.create(
@@ -245,6 +247,7 @@ public class PostServiceImpl implements PostService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Only approved posts can be published");
         }
 
+        requireCompleteForWorkflow(post);
         post.publish(Instant.now());
         return toDetailResponse(post, findCategoryResponse(post.getCategoryId()),
                 findAuthorResponse(post.getAuthorUserId()));
@@ -268,6 +271,7 @@ public class PostServiceImpl implements PostService {
         if (!permissions.contains(DIRECT_PUBLISH_PERMISSION)) {
             requireProjectLeaderDirectPublish(post, author, permissions);
         }
+        requireCompleteForWorkflow(post);
 
         Instant publicationInstant = Instant.now();
         post.publishDirect(publicationInstant);
@@ -372,6 +376,18 @@ public class PostServiceImpl implements PostService {
 
     @Override
     @Transactional(readOnly = true)
+    public List<PostSummaryResponse> getAdminPostQueue(String authenticatedEmail) {
+        UserEntity admin = resolveActiveAuthor(authenticatedEmail);
+        List<PostEntity> posts = postRepository.findActiveAdminPostQueue(admin.getId());
+        Map<Long, PostCategoryResponse> categoriesById = findCategoryResponses(posts);
+        Map<Long, PostAuthorResponse> authorsById = findAuthorResponses(posts);
+        return posts.stream()
+                .map(post -> toSummaryResponse(post, categoryFor(post, categoriesById), authorFor(post, authorsById)))
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public PostDetailResponse getReviewablePost(String authenticatedEmail, Long postId) {
         UserEntity reviewer = resolveActiveAuthor(authenticatedEmail);
         PostEntity post = postRepository.findActivePendingReviewableByIdAndReviewerUserId(
@@ -401,6 +417,11 @@ public class PostServiceImpl implements PostService {
         if (post.getAuthorUserId() != null && post.getAuthorUserId().equals(viewer.getId())) {
             return toDetailResponse(post, findCategoryResponse(post.getCategoryId()),
                     findAuthorResponse(post.getAuthorUserId()), findReviewFeedbackForAuthor(post));
+        }
+        if (post.getStatus() == PostStatus.APPROVED
+                && permissionService.getEffectivePermissionCodes(viewer).contains(PUBLISH_PERMISSION)) {
+            return toDetailResponse(post, findCategoryResponse(post.getCategoryId()),
+                    findAuthorResponse(post.getAuthorUserId()));
         }
         if (!isReadableBy(post, activeProjectIdsOrNoMatch(viewer.getId()))) {
             throw postNotFound();
@@ -446,6 +467,9 @@ public class PostServiceImpl implements PostService {
                 && postRepository.findActivePendingReviewableByIdAndReviewerUserId(post.getId(), viewer.getId()).isPresent()) {
             return post;
         }
+        if (post.getStatus() == PostStatus.APPROVED && isAuthorizedPublisher(authentication)) {
+            return post;
+        }
         if (!isReadableBy(post, activeProjectIdsOrNoMatch(viewer.getId()))) {
             throw postNotFound();
         }
@@ -475,6 +499,12 @@ public class PostServiceImpl implements PostService {
         return authentication.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
                 .anyMatch("posts.review"::equals);
+    }
+
+    private boolean isAuthorizedPublisher(Authentication authentication) {
+        return authentication.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch(PUBLISH_PERMISSION::equals);
     }
 
     private UserEntity resolveActiveAuthor(String authenticatedEmail) {
@@ -680,10 +710,40 @@ public class PostServiceImpl implements PostService {
 
     private static String reviewNotificationMessage(ReviewDecision decision) {
         return switch (decision) {
-            case APPROVED -> "Bài viết của bạn đã được duyệt và xuất bản.";
+            case APPROVED -> "Bài viết của bạn đã được duyệt và đang chờ xuất bản.";
             case REVISION_REQUIRED -> "Bài viết của bạn cần được chỉnh sửa.";
             case REJECTED -> "Bài viết của bạn đã bị từ chối.";
         };
+    }
+
+    private void requireCompleteForWorkflow(PostEntity post) {
+        List<String> missing = new java.util.ArrayList<>();
+        if (post.getTitle() == null || post.getTitle().isBlank()) missing.add("title");
+        if (post.getCategoryId() == null) missing.add("category");
+        if (!hasMeaningfulContent(post.getContentJson())) missing.add("content");
+        if (!missing.isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Bài viết cần có tiêu đề, nội dung và danh mục trước khi gửi duyệt hoặc xuất bản. Thiếu: "
+                            + String.join(", ", missing)
+            );
+        }
+    }
+
+    private boolean hasMeaningfulContent(Map<String, Object> contentJson) {
+        if (contentJson == null) return false;
+        if (contentJson.get("body") instanceof String body && !body.isBlank()) return true;
+        return contentJson.get("content") instanceof List<?> nodes && nodes.stream().anyMatch(this::hasMeaningfulNode);
+    }
+
+    private boolean hasMeaningfulNode(Object rawNode) {
+        if (!(rawNode instanceof Map<?, ?> node)) return false;
+        if (node.get("text") instanceof String text && !text.isBlank()) return true;
+        if ("image".equals(node.get("type")) && node.get("attrs") instanceof Map<?, ?> attrs) {
+            Object rawFileId = attrs.get("fileId");
+            if (rawFileId instanceof Number number && number.longValue() > 0) return true;
+        }
+        return node.get("content") instanceof List<?> children && children.stream().anyMatch(this::hasMeaningfulNode);
     }
 
     private static String reviewNotificationType(ReviewDecision decision) {

@@ -10,4 +10,5 @@ public class ContentCategoryResponse {
     String code;
     String name;
     String description;
+    Boolean isActive;
 }
