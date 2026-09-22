@@ -101,17 +101,22 @@ public class TaskServiceImpl implements TaskService {
         return file;
     }
 
-    /** Admin, project LEADER, or user with TASK_MANAGE permission can manage tasks */
+    /**
+     * Admins can manage every project. Scoped project leaders retain management
+     * access; a delegated TASK_MANAGE permission only applies to active memberships.
+     */
     private void requireTaskManageAccess(UserEntity user, Long projectId) {
         Set<String> roles = permissionService.getRoleCodes(user);
         if (roles.contains(ADMIN)) return;
         Set<String> perms = permissionService.getEffectivePermissionCodes(user);
-        if (perms.contains(TASK_MANAGE)) return;
+        if (perms.contains(TASK_MANAGE) && projectMemberRepository.existsByProject_IdAndUser_IdAndStatus(
+                projectId, user.getId(), ProjectMemberStatus.ACTIVE
+        )) return;
         boolean isLeader = projectMemberRepository.existsByProject_IdAndUser_IdAndProjectRoleAndStatus(
                 projectId, user.getId(), ProjectRole.LEADER, ProjectMemberStatus.ACTIVE
         );
         if (!isLeader) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Insufficient permissions");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Insufficient permissions for this project");
         }
     }
 

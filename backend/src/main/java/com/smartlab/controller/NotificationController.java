@@ -44,6 +44,7 @@ public class NotificationController {
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasAuthority('notifications.mark_read_own')")
     public void softDelete(Authentication authentication, @PathVariable Long id) {
         notificationService.softDelete(authentication.getName(), id);
     }

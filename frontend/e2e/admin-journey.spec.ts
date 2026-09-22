@@ -196,9 +196,9 @@ test.describe('ADMIN authorization boundaries', () => {
 
     await page.goto('/admin/accounts')
 
-    await expect(page).toHaveURL(/\/profile$/)
+    await expect(page).toHaveURL(/\/admin\/accounts$/)
     await expect(
-      page.getByRole('heading', { level: 1, name: 'Hồ sơ của tôi' }),
+      page.getByRole('heading', { level: 1, name: 'Bạn không có quyền mở trang này' }),
     ).toBeVisible()
 
     const response = await request.get(

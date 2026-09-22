@@ -7,7 +7,6 @@ import com.smartlab.service.AppUserDetailService;
 import com.smartlab.service.NotificationService;
 import com.smartlab.service.UserSessionService;
 import com.smartlab.util.JwtUtil;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -17,8 +16,6 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -82,14 +79,18 @@ class NotificationControllerTest {
     }
 
     @Test
-    void deleteRequiresOnlyGlobalAuthenticationAndNoNotificationAuthority() throws Exception {
+    void deleteRequiresNotificationMutationAuthority() throws Exception {
         mockMvc.perform(delete("/me/notifications/{id}", 17L)).andExpect(status().isUnauthorized());
         verifyNoInteractions(notificationService);
 
         mockMvc.perform(delete("/me/notifications/{id}", 17L).with(authenticated()))
+                .andExpect(status().isForbidden());
+        verifyNoInteractions(notificationService);
+
+        mockMvc.perform(delete("/me/notifications/{id}", 17L)
+                        .with(authenticated("notifications.mark_read_own")))
                 .andExpect(status().isNoContent());
         verify(notificationService).softDelete(EMAIL, 17L);
-        verify(notificationService, never()).getNotifications(any());
     }
 
     private static org.springframework.test.web.servlet.request.RequestPostProcessor authenticated(String... authorities) {

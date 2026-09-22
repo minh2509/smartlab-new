@@ -209,8 +209,6 @@ class TaskServiceImplTest {
     @Test
     void ordinaryMemberWithoutTaskManagementCapabilityCannotDeleteTask() {
         when(permissionService.getEffectivePermissionCodes(user)).thenReturn(Set.of());
-        when(projectMemberRepository.existsByProject_IdAndUser_IdAndProjectRoleAndStatus(
-                PROJECT_ID, user.getId(), ProjectRole.LEADER, ProjectMemberStatus.ACTIVE)).thenReturn(false);
 
         assertStatus(() -> service.delete(TASK_ID, EMAIL), HttpStatus.FORBIDDEN);
 
@@ -223,8 +221,6 @@ class TaskServiceImplTest {
         when(projectMemberRepository.existsByProject_IdAndUser_IdAndStatus(
                 PROJECT_ID, user.getId(), ProjectMemberStatus.ACTIVE)).thenReturn(true);
         when(permissionService.getEffectivePermissionCodes(user)).thenReturn(Set.of());
-        when(projectMemberRepository.existsByProject_IdAndUser_IdAndProjectRoleAndStatus(
-                PROJECT_ID, user.getId(), ProjectRole.LEADER, ProjectMemberStatus.ACTIVE)).thenReturn(false);
         when(storedFileRepository.findById(FILE_ID)).thenReturn(Optional.of(activeFile(FILE_ID, user(2L, "other@smartlab.test"))));
 
         assertStatus(() -> service.submitTask(TASK_ID, submitRequest(FILE_ID), EMAIL), HttpStatus.FORBIDDEN);
@@ -239,8 +235,6 @@ class TaskServiceImplTest {
         when(projectMemberRepository.existsByProject_IdAndUser_IdAndStatus(
                 PROJECT_ID, user.getId(), ProjectMemberStatus.ACTIVE)).thenReturn(false);
         when(permissionService.getEffectivePermissionCodes(user)).thenReturn(Set.of());
-        when(projectMemberRepository.existsByProject_IdAndUser_IdAndProjectRoleAndStatus(
-                PROJECT_ID, user.getId(), ProjectRole.LEADER, ProjectMemberStatus.ACTIVE)).thenReturn(false);
 
         assertStatus(
                 () -> service.submitTask(TASK_ID, submitRequest(FILE_ID), EMAIL),
@@ -259,8 +253,6 @@ class TaskServiceImplTest {
         when(projectMemberRepository.existsByProject_IdAndUser_IdAndStatus(
                 PROJECT_ID, user.getId(), ProjectMemberStatus.ACTIVE)).thenReturn(true);
         when(permissionService.getEffectivePermissionCodes(user)).thenReturn(Set.of());
-        when(projectMemberRepository.existsByProject_IdAndUser_IdAndProjectRoleAndStatus(
-                PROJECT_ID, user.getId(), ProjectRole.LEADER, ProjectMemberStatus.ACTIVE)).thenReturn(false);
         when(storedFileRepository.findById(FILE_ID)).thenReturn(Optional.of(file));
         when(taskAssigneeRepository.findAllByTask_Id(TASK_ID)).thenReturn(List.of());
         when(taskAttachmentRepository.findAllByTaskId(TASK_ID)).thenReturn(List.of());
@@ -278,18 +270,62 @@ class TaskServiceImplTest {
         when(projectMemberRepository.existsByProject_IdAndUser_IdAndStatus(
                 PROJECT_ID, user.getId(), ProjectMemberStatus.ACTIVE)).thenReturn(true);
         when(permissionService.getEffectivePermissionCodes(user)).thenReturn(Set.of());
-        when(projectMemberRepository.existsByProject_IdAndUser_IdAndProjectRoleAndStatus(
-                PROJECT_ID, user.getId(), ProjectRole.LEADER, ProjectMemberStatus.ACTIVE)).thenReturn(false);
 
         assertThat(service.requireSubmissionUploadProjectId(TASK_ID, EMAIL)).isEqualTo(PROJECT_ID);
     }
 
     @Test
-    void submissionUploadPrecheckAllowsATaskManagerWhoIsNotAnAssignee() {
+    void submissionUploadPrecheckAllowsAnActiveTaskManagerWhoIsNotAnAssignee() {
         when(taskAssigneeRepository.existsById_TaskIdAndId_UserId(TASK_ID, user.getId())).thenReturn(false);
         when(permissionService.getEffectivePermissionCodes(user)).thenReturn(Set.of("TASK_MANAGE"));
+        when(projectMemberRepository.existsByProject_IdAndUser_IdAndStatus(
+                PROJECT_ID, user.getId(), ProjectMemberStatus.ACTIVE)).thenReturn(true);
 
         assertThat(service.requireSubmissionUploadProjectId(TASK_ID, EMAIL)).isEqualTo(PROJECT_ID);
+    }
+
+    @Test
+    void taskManagePermissionCannotAccessAnUnrelatedProject() {
+        when(taskAssigneeRepository.existsById_TaskIdAndId_UserId(TASK_ID, user.getId())).thenReturn(false);
+        when(permissionService.getEffectivePermissionCodes(user)).thenReturn(Set.of("TASK_MANAGE"));
+        when(projectMemberRepository.existsByProject_IdAndUser_IdAndStatus(
+                PROJECT_ID, user.getId(), ProjectMemberStatus.ACTIVE)).thenReturn(false);
+
+        assertStatus(
+                () -> service.requireSubmissionUploadProjectId(TASK_ID, EMAIL),
+                HttpStatus.FORBIDDEN
+        );
+    }
+
+    @Test
+    void delegatedTaskManagerCannotMutateTasksOutsideActiveMembership() {
+        when(permissionService.getEffectivePermissionCodes(user)).thenReturn(Set.of("TASK_MANAGE"));
+        when(projectMemberRepository.existsByProject_IdAndUser_IdAndStatus(
+                PROJECT_ID, user.getId(), ProjectMemberStatus.ACTIVE)).thenReturn(false);
+        UpdateTaskRequest update = new UpdateTaskRequest();
+        update.setTitle("Unauthorized change");
+        AddAssigneesRequest assignment = new AddAssigneesRequest();
+        assignment.setUserIds(List.of(2L));
+
+        assertStatus(() -> service.update(TASK_ID, update, EMAIL), HttpStatus.FORBIDDEN);
+        assertStatus(() -> service.delete(TASK_ID, EMAIL), HttpStatus.FORBIDDEN);
+        assertStatus(() -> service.addAssignees(TASK_ID, assignment, EMAIL), HttpStatus.FORBIDDEN);
+        assertStatus(() -> service.removeAssignee(TASK_ID, 2L, EMAIL), HttpStatus.FORBIDDEN);
+
+        assertThat(task.getTitle()).isEqualTo("Task");
+        assertThat(task.getDeletedAt()).isNull();
+        verifyNoInteractions(taskAssigneeRepository, notificationService);
+    }
+
+    @Test
+    void activeProjectLeaderCanManageWithoutGlobalTaskManage() {
+        when(permissionService.getEffectivePermissionCodes(user)).thenReturn(Set.of());
+        when(projectMemberRepository.existsByProject_IdAndUser_IdAndProjectRoleAndStatus(
+                PROJECT_ID, user.getId(), ProjectRole.LEADER, ProjectMemberStatus.ACTIVE)).thenReturn(true);
+
+        service.delete(TASK_ID, EMAIL);
+
+        assertThat(task.getDeletedAt()).isNotNull();
     }
 
     @Test
@@ -431,11 +467,9 @@ class TaskServiceImplTest {
     }
 
     @Test
-    void addAssigneesRejectsNonLeaderAndNonAdmin() {
+    void addAssigneesRejectsNonLeaderWithoutTaskManagePermission() {
         when(permissionService.getRoleCodes(user)).thenReturn(Set.of());
         when(permissionService.getEffectivePermissionCodes(user)).thenReturn(Set.of());
-        when(projectMemberRepository.existsByProject_IdAndUser_IdAndProjectRoleAndStatus(
-                PROJECT_ID, user.getId(), ProjectRole.LEADER, ProjectMemberStatus.ACTIVE)).thenReturn(false);
 
         AddAssigneesRequest request = new AddAssigneesRequest();
         request.setUserIds(List.of(2L));

@@ -81,7 +81,7 @@ export function NotificationPopover() {
   }
 
   async function removeNotification(notification: Notification) {
-    if (!token || pending) return
+    if (!token || pending || !canMarkRead) return
     setPending(`delete:${notification.id}`)
     setError(null)
     try {
@@ -205,7 +205,7 @@ export function NotificationPopover() {
                     ) : (
                       <div className="notification-popover-main">{content}</div>
                     )}
-                    <button
+                    {canMarkRead ? <button
                       className="notification-delete"
                       type="button"
                       disabled={Boolean(pending)}
@@ -214,7 +214,7 @@ export function NotificationPopover() {
                       onClick={() => void removeNotification(notification)}
                     >
                       <Trash2 aria-hidden="true" />
-                    </button>
+                    </button> : null}
                   </div>
                 )
               })}

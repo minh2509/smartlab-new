@@ -1,4 +1,5 @@
 export const accessPolicies = {
+  profile: ['PROFILE_READ'],
   files: ['FILE_UPLOAD'],
   projects: ['PROJECT_READ'],
   tasks: ['TASK_READ'],

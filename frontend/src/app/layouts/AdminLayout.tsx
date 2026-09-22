@@ -32,10 +32,10 @@ export function AdminLayout() {
 
             <nav className="admin-nav" aria-label="Điều hướng không gian làm việc">
               <span className="admin-nav-label">Tổng quan</span>
-              <NavLink to="/profile">
+              {can(accessPolicies.profile) && <NavLink to="/profile">
                 <UserCircle />
                 Tài khoản của tôi
-              </NavLink>
+              </NavLink>}
               {can(accessPolicies.files) && <NavLink to="/files">
                 <Files />
                 Tệp của tôi

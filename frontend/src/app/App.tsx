@@ -75,7 +75,7 @@ export function App() {
         <Route path="/thanh-tuu" element={<AchievementArchivePage />} />
         <Route path="/blog" element={<Navigate to="/bai-viet" replace />} />
         <Route path="/posts" element={<PostFeedPage />} />
-        <Route path="/my-posts" element={<MyPostsPage />} />
+        <Route path="/my-posts" element={<RequirePermissions allOf={[]}><MyPostsPage /></RequirePermissions>} />
         <Route path="/posts/new" element={<RequirePermissions allOf={[]}><PostCreatePage /></RequirePermissions>} />
         <Route path="/posts/review-queue" element={<RequirePermissions allOf={['posts.review']}><PostReviewQueuePage /></RequirePermissions>} />
         <Route path="/posts/review-queue/:id" element={<RequirePermissions allOf={['posts.review']}><PostReviewDetailPage /></RequirePermissions>} />
@@ -134,7 +134,7 @@ export function App() {
       </Route>
 
       <Route element={<AdminLayout />}>
-        <Route path="/profile" element={<RequirePermissions allOf={['PROFILE_READ']}><ProfilePage /></RequirePermissions>} />
+        <Route path="/profile" element={<RequirePermissions allOf={accessPolicies.profile}><ProfilePage /></RequirePermissions>} />
         <Route path="/my-evaluations" element={<MyEvaluationsPage />} />
         <Route path="/files" element={<RequirePermissions allOf={accessPolicies.files}><FilesPage /></RequirePermissions>} />
         <Route path="/admin/projects" element={<RequirePermissions allOf={accessPolicies.projects}><ProjectManagementPage /></RequirePermissions>} />

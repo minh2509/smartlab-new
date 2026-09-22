@@ -1476,6 +1476,36 @@ select {
   min-height: calc(100vh - 150px);
 }
 
+.route-access-denied {
+  display: grid;
+  grid-template-columns: auto minmax(0, 560px);
+  justify-content: center;
+  align-content: start;
+  gap: 20px;
+  min-height: min(520px, calc(100dvh - 180px));
+  padding: clamp(32px, 7vw, 88px) 24px;
+  color: var(--text-1);
+}
+
+.route-access-denied-icon {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  place-items: center;
+  color: var(--danger);
+  background: var(--danger-bg);
+  border: 1px solid color-mix(in srgb, var(--danger) 20%, transparent);
+  border-radius: 15px;
+}
+
+.route-access-denied-icon svg { width: 26px; height: 26px; }
+.route-access-denied h1 { margin: 7px 0 10px; font-size: clamp(25px, 4vw, 34px); }
+.route-access-denied p { max-width: 540px; margin: 0 0 20px; color: var(--text-2); line-height: 1.65; }
+
+@media (max-width: 560px) {
+  .route-access-denied { grid-template-columns: 1fr; justify-items: start; padding-inline: 8px; }
+}
+
 .full-span {
   grid-column: 1 / -1;
 }
