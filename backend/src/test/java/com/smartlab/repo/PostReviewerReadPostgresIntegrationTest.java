@@ -188,6 +188,7 @@ class PostReviewerReadPostgresIntegrationTest {
             case PUBLISHED -> {
                 post.submitForReview(mutationInstant);
                 post.applyReviewDecision(ReviewDecision.APPROVED, mutationInstant.plusSeconds(1));
+                post.publish(mutationInstant.plusSeconds(2));
             }
             case REJECTED -> {
                 post.submitForReview(mutationInstant);

@@ -205,7 +205,7 @@ class PostWorkflowDatabaseRbacSecurityIntegrationTest {
                 .andExpect(status().isForbidden());
         perform(admin, "/posts/1313/reviews", reviewBody())
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("PUBLISHED"));
+                .andExpect(jsonPath("$.status").value("APPROVED"));
         perform(admin, "/posts/1313/publish", null)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("PUBLISHED"));
@@ -464,7 +464,7 @@ class PostWorkflowDatabaseRbacSecurityIntegrationTest {
 
     private void stubReview(String email) {
         when(postService.reviewPost(eq(email), eq(POST_ID), any(ReviewPostRequest.class)))
-                .thenReturn(response(PostStatus.PUBLISHED));
+                .thenReturn(response(PostStatus.APPROVED));
     }
 
     private void stubPublish(String email) {

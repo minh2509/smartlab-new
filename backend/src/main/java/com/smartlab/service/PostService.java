@@ -31,6 +31,8 @@ public interface PostService {
 
     List<PostSummaryResponse> getReviewablePosts(String authenticatedEmail);
 
+    List<PostSummaryResponse> getAdminPostQueue(String authenticatedEmail);
+
     PostDetailResponse getReviewablePost(String authenticatedEmail, Long postId);
 
     /** authenticatedEmail is null only for the dedicated anonymous public permalink. */

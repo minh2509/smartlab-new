@@ -66,6 +66,19 @@ class PostRepositoryContractTest {
     }
 
     @Test
+    void adminQueueReturnsApprovedBeforeNonSelfPendingPosts() throws NoSuchMethodException {
+        Method method = PostRepository.class.getMethod("findActiveAdminPostQueue", Long.class);
+        String query = method.getAnnotation(Query.class).value();
+
+        assertThat(query).contains("p.deletedAt is null");
+        assertThat(query).contains("PostStatus.PENDING_REVIEW", "PostStatus.APPROVED");
+        assertThat(query).contains("p.authorUserId is null", "p.authorUserId <> :adminUserId");
+        assertThat(query).contains("case when p.status = com.smartlab.enums.PostStatus.APPROVED then 0 else 1 end");
+        assertThat(method.isAnnotationPresent(Lock.class)).isFalse();
+        assertThat(method.isAnnotationPresent(Modifying.class)).isFalse();
+    }
+
+    @Test
     void reviewerDetailQueryConcealsEveryPostOutsideTheSameReviewabilityPredicate()
             throws NoSuchMethodException {
         Method method = PostRepository.class.getMethod(

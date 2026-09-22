@@ -106,6 +106,19 @@ public interface PostRepository extends JpaRepository<PostEntity, Long> {
 
     @Query("""
             select p from PostEntity p
+            where p.deletedAt is null
+              and (
+                (p.status = com.smartlab.enums.PostStatus.PENDING_REVIEW
+                 and (p.authorUserId is null or p.authorUserId <> :adminUserId))
+                or p.status = com.smartlab.enums.PostStatus.APPROVED
+              )
+            order by case when p.status = com.smartlab.enums.PostStatus.APPROVED then 0 else 1 end,
+                     p.updatedAt desc, p.id desc
+            """)
+    List<PostEntity> findActiveAdminPostQueue(@Param("adminUserId") Long adminUserId);
+
+    @Query("""
+            select p from PostEntity p
             where p.id = :id
               and p.deletedAt is null
               and p.status = com.smartlab.enums.PostStatus.PENDING_REVIEW

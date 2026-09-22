@@ -50,9 +50,24 @@ export type PostContentFileReference = {
 
 export type PostContentAttachmentReference = PostContentImageReference | PostContentFileReference
 
+export type PostContentMark = {
+  type: string
+  attrs?: Record<string, unknown>
+}
+
+export type PostContentNode = {
+  type: string
+  attrs?: Record<string, unknown>
+  content?: PostContentNode[]
+  marks?: PostContentMark[]
+  text?: string
+}
+
 export type PostContentDocument = {
   type: 'doc'
-  body: string
+  /** Legacy plain-text body. New posts use structured `content`. */
+  body?: string
+  content?: PostContentNode[]
   files?: PostContentAttachmentReference[]
 }
 

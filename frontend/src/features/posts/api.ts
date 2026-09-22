@@ -181,6 +181,10 @@ export function listReviewablePosts(token: string) {
   return apiClient<PostSummary[]>('/posts/review-queue', { token })
 }
 
+export function listAdminPostQueue(token: string) {
+  return apiClient<PostSummary[]>('/posts/admin-queue', { token })
+}
+
 export function getReviewablePost(token: string, id: string | number) {
   return apiClient<PostDetail>(`/posts/review-queue/${encodeURIComponent(String(id))}`, { token })
 }
