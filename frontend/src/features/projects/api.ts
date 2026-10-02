@@ -34,6 +34,11 @@ export type PublicProjectFilters = {
   researchFieldCode?: string
   projectType?: ProjectType
   status?: PublicProjectStatus
+  year?: number
+}
+
+export function listPublicProjectYears(signal?: AbortSignal) {
+  return apiClient<number[]>('/projects/public/years', { signal })
 }
 
 export function listPublicRecruitingProjects(page = 0, size = 6) {
@@ -42,7 +47,7 @@ export function listPublicRecruitingProjects(page = 0, size = 6) {
 
 export function listPublicProjects(
   page = 0,
-  size = 12,
+  size = 6,
   filters: PublicProjectFilters = {},
   signal?: AbortSignal,
 ) {
@@ -54,6 +59,7 @@ export function listPublicProjects(
     field: filters.researchFieldCode,
     projectType: filters.projectType,
     status: filters.status,
+    year: filters.year,
   })}`, { signal })
 }
 

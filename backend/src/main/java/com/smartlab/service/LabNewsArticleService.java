@@ -10,6 +10,7 @@ import java.util.List;
 
 public interface LabNewsArticleService {
     List<LabNewsArticleResponse> listPublic(int limit);
+    LabNewsArticleResponse getPublic(Long id);
     PublicPageResponse<LabNewsArticleResponse> listPublicArchive(int page, int size);
     PublicPageResponse<LabNewsArticleResponse> listPublicArchive(String query, String source, Integer year,
                                                                   PublicNewsSort sort, int page, int size);

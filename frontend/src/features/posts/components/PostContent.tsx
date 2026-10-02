@@ -1,8 +1,9 @@
 import { Download, FileText } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { downloadPostContentFile } from '../api'
-import { parsePostContent } from '../postContent'
+import { inlineImageFileIds, parsePostContent } from '../postContent'
 import type { PostContentAttachmentReference, PostContentDocument } from '../types'
+import { PostRichText } from './PostRichText'
 
 type PostContentProps = {
   contentJson: Record<string, unknown>
@@ -21,29 +22,37 @@ export function PostContent({ contentJson, slug, token, parsedContent, className
   }
   return (
     <div className={className}>
-      <p className={bodyClassName}>{content.body}</p>
-      <PostContentAttachments slug={slug} token={token} references={content.files ?? []} />
+      <PostRichText
+        document={content}
+        className={bodyClassName}
+        renderImage={(fileId, alt, key) => <PostImage key={key} slug={slug} token={token} reference={{ type: 'image', fileId, alt }} inline />}
+      />
+      <PostContentAttachments slug={slug} token={token} references={content.files ?? []} inlineImageIds={inlineImageFileIds(content)} />
     </div>
   )
 }
 
-function PostContentAttachments({ slug, token, references }: {
+function PostContentAttachments({ slug, token, references, inlineImageIds }: {
   slug: string
   token?: string | null
   references: PostContentAttachmentReference[]
+  inlineImageIds: Set<number>
 }) {
-  if (!references.length) return null
+  const standaloneReferences = references.filter((reference) => reference.type !== 'image' || !inlineImageIds.has(reference.fileId))
+  if (!standaloneReferences.length) return null
   return <div className="post-content-attachments">
-    {references.map((reference) => reference.type === 'image'
+    {standaloneReferences.map((reference) => reference.type === 'image'
       ? <PostImage key={`${reference.type}-${reference.fileId}`} slug={slug} token={token} reference={reference} />
       : <PostFile key={`${reference.type}-${reference.fileId}`} slug={slug} token={token} reference={reference} />)}
   </div>
 }
 
-function PostImage({ slug, token, reference }: { slug: string, token?: string | null, reference: Extract<PostContentAttachmentReference, { type: 'image' }> }) {
+function PostImage({ slug, token, reference, inline = false }: { slug: string, token?: string | null, reference: Extract<PostContentAttachmentReference, { type: 'image' }>, inline?: boolean }) {
   const { url, error } = usePostMediaUrl(slug, reference.fileId, token)
   if (error) return <p className="post-media-unavailable">Không thể tải ảnh đính kèm.</p>
-  return url ? <img className="post-content-image" src={url} alt={reference.alt ?? ''} /> : <p className="post-media-loading">Đang tải ảnh...</p>
+  if (!url) return <p className="post-media-loading">Đang tải ảnh...</p>
+  if (inline) return <figure className="post-rich-inline-image"><img src={url} alt={reference.alt ?? ''} />{reference.alt ? <figcaption>{reference.alt}</figcaption> : null}</figure>
+  return <img className="post-content-image" src={url} alt={reference.alt ?? ''} />
 }
 
 function PostFile({ slug, token, reference }: { slug: string, token?: string | null, reference: Extract<PostContentAttachmentReference, { type: 'file' }> }) {

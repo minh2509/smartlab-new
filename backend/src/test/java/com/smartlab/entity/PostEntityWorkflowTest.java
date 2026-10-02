@@ -58,14 +58,14 @@ class PostEntityWorkflowTest {
     }
 
     @Test
-    void approvedReviewPublishesWithTheSuppliedTimestamp() {
+    void approvedReviewWaitsForAnExplicitPublishStep() {
         PostEntity post = pendingReview();
 
         post.applyReviewDecision(ReviewDecision.APPROVED, REVIEWED_AT);
 
-        assertThat(post.getStatus()).isEqualTo(PostStatus.PUBLISHED);
+        assertThat(post.getStatus()).isEqualTo(PostStatus.APPROVED);
         assertThat(post.getUpdatedAt()).isEqualTo(REVIEWED_AT);
-        assertThat(post.getPublishedAt()).isEqualTo(REVIEWED_AT);
+        assertThat(post.getPublishedAt()).isNull();
     }
 
     @Test

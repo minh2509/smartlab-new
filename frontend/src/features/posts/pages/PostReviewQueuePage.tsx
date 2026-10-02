@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AlertTriangle, ArrowRight, CalendarDays, Globe, Lock, Newspaper, Users } from 'lucide-react'
 import { useAuth } from '../../auth/authContext'
-import { listReviewablePosts } from '../api'
+import { listAdminPostQueue, listReviewablePosts } from '../api'
 import type { PostStatus, PostSummary, PostVisibility } from '../types'
 
 const VISIBILITY: Record<PostVisibility, { label: string; Icon: typeof Globe }> = {
@@ -22,8 +22,8 @@ const STATUS: Record<PostStatus, { label: string; tone: 'ok' | 'warn' | 'danger'
 
 const SKELETON_KEYS = ['review-sk-1', 'review-sk-2', 'review-sk-3']
 
-export function PostReviewQueuePage() {
-  const { token } = useAuth()
+export function PostReviewQueuePage({ adminMode = false }: { adminMode?: boolean }) {
+  const { token, profile } = useAuth()
   const [posts, setPosts] = useState<PostSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -37,27 +37,32 @@ export function PostReviewQueuePage() {
     setLoading(true)
     setError(null)
 
-    void listReviewablePosts(token)
+    void (adminMode ? listAdminPostQueue(token) : listReviewablePosts(token))
       .then(setPosts)
       .catch((value: unknown) => {
         setError(value instanceof Error ? value.message : 'Không thể tải hàng chờ duyệt bài.')
       })
       .finally(() => setLoading(false))
-  }, [token])
+  }, [adminMode, token])
+
+  const canPublish = profile?.permissions.includes('posts.publish') ?? false
+  const visiblePosts = posts.filter((post) => post.status === 'PENDING_REVIEW' || (canPublish && post.status === 'APPROVED'))
 
   return (
     <section className="post-feed-page">
       <div className="post-feed-shell">
         <header className="post-feed-head">
-          <span className="post-feed-kicker">Quy trình duyệt</span>
+          <span className="post-feed-kicker">{adminMode ? 'Quản trị nội dung' : 'Quy trình duyệt'}</span>
           <div className="post-feed-headline">
-            <h1>Hàng chờ duyệt bài</h1>
-            {!loading && !error && posts.length > 0 ? (
-              <span className="post-feed-count">{posts.length}</span>
+            <h1>{adminMode ? 'Quản lý bài viết' : 'Hàng chờ duyệt bài'}</h1>
+            {!loading && !error && visiblePosts.length > 0 ? (
+              <span className="post-feed-count">{visiblePosts.length}</span>
             ) : null}
           </div>
           <p className="post-feed-sub">
-            Các bài viết đang chờ quyết định theo quyền truy cập hiện tại của bạn.
+            {adminMode
+              ? 'Duyệt các bài đang chờ và xuất bản những bài đã được phê duyệt.'
+              : 'Các bài viết đang chờ quyết định theo quyền truy cập hiện tại của bạn.'}
           </p>
         </header>
 
@@ -85,23 +90,25 @@ export function PostReviewQueuePage() {
           </div>
         ) : null}
 
-        {!loading && !error && posts.length === 0 ? (
+        {!loading && !error && visiblePosts.length === 0 ? (
           <div className="post-feed-state">
             <span className="post-feed-state-icon" aria-hidden="true">
               <Newspaper />
             </span>
-            <h2>Không có bài chờ duyệt</h2>
-            <p>Hiện không có bài viết nào cần quyết định từ bạn.</p>
+            <h2>Không có bài cần xử lý</h2>
+            <p>Hiện không có bài viết nào đang chờ duyệt hoặc chờ xuất bản.</p>
           </div>
         ) : null}
 
-        {!loading && !error && posts.length > 0 ? (
+        {!loading && !error && visiblePosts.length > 0 ? (
           <div className="post-feed">
-            {posts.map((post) => {
+            {visiblePosts.map((post) => {
               const audience = VISIBILITY[post.visibility]
               const AudienceIcon = audience.Icon
               const status = STATUS[post.status]
-              const href = `/posts/review-queue/${encodeURIComponent(String(post.id))}`
+              const href = post.status === 'APPROVED'
+                ? `/posts/${encodeURIComponent(post.slug)}`
+                : `/posts/review-queue/${encodeURIComponent(String(post.id))}`
 
               return (
                 <article className="post-card" key={post.id}>
@@ -132,7 +139,7 @@ export function PostReviewQueuePage() {
                       </span>
                     </span>
                     <Link className="post-card-action" to={href}>
-                      Mở để duyệt
+                      {post.status === 'APPROVED' ? 'Mở để xuất bản' : 'Mở để duyệt'}
                       <ArrowRight aria-hidden="true" />
                     </Link>
                   </div>

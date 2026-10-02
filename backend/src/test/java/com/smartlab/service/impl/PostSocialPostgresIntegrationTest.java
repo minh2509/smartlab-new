@@ -179,7 +179,7 @@ class PostSocialPostgresIntegrationTest {
     }
 
     @Test
-    void approvedReviewImmediatelyPublishesIntoFeedWithProjectVisibility() {
+    void approvedReviewWaitsForPublishBeforeAppearingInFeedWithProjectVisibility() {
         UserFixture reviewer = insertUser("reviewer");
         UserFixture author = insertUser("publish-author");
         UserFixture member = insertUser("publish-member");
@@ -192,14 +192,14 @@ class PostSocialPostgresIntegrationTest {
         assertThat(postService.getReviewablePosts(reviewer.email()))
                 .extracting(item -> item.getId()).contains(postId);
 
-        var published = postService.reviewPost(
+        var approved = postService.reviewPost(
                 reviewer.email(),
                 postId,
                 new ReviewPostRequest(ReviewDecision.APPROVED, "ready")
         );
 
-        assertThat(published.getStatus()).isEqualTo(PostStatus.PUBLISHED);
-        assertThat(published.getPublishedAt()).isNotNull().isEqualTo(published.getUpdatedAt());
+        assertThat(approved.getStatus()).isEqualTo(PostStatus.APPROVED);
+        assertThat(approved.getPublishedAt()).isNull();
         assertThat(jdbc.queryForObject("select decision from post_reviews where post_id = ?", String.class, postId))
                 .isEqualTo("APPROVED");
         assertThat(postService.getReviewablePosts(reviewer.email()))
@@ -210,6 +210,14 @@ class PostSocialPostgresIntegrationTest {
                 new ReviewPostRequest(ReviewDecision.APPROVED, "again")
         )).isInstanceOfSatisfying(ResponseStatusException.class,
                 exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+
+        assertNotFound(() -> postService.getPostBySlug(member.email(), slug));
+        assertThat(socialService.getFeed(member.email(), null, 50).items())
+                .extracting(PostFeedResponse::getId).doesNotContain(postId);
+
+        var published = postService.publishPost(reviewer.email(), postId);
+        assertThat(published.getStatus()).isEqualTo(PostStatus.PUBLISHED);
+        assertThat(published.getPublishedAt()).isNotNull().isEqualTo(published.getUpdatedAt());
 
         assertThat(postService.getPostBySlug(member.email(), slug).getId()).isEqualTo(postId);
         assertThat(socialService.getFeed(member.email(), null, 50).items())

@@ -43,4 +43,8 @@ public class ContentCategoryEntity {
                 .isActive(true)
                 .build();
     }
+
+    public void setActive(boolean active) {
+        this.isActive = active;
+    }
 }

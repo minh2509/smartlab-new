@@ -165,7 +165,7 @@ class ProjectControllerSecurityTest {
 
     @Test
     void anonymousCanReadPublicProjectArchive() throws Exception {
-        when(projectService.listPublic(0, 12, null, null, null, null, null))
+        when(projectService.listPublic(0, 12, null, null, null, null, null, null))
                 .thenReturn(new PublicPageResponse<>(java.util.List.of(publicSummaryResponse()), 0, 12, 1, 1));
 
         mockMvc.perform(get("/projects/public"))
@@ -178,7 +178,7 @@ class ProjectControllerSecurityTest {
                 .andExpect(jsonPath("$.items[0].updatedAt").doesNotExist())
                 .andExpect(jsonPath("$.items[0].leaders[0].userId").doesNotExist());
 
-        verify(projectService).listPublic(0, 12, null, null, null, null, null);
+        verify(projectService).listPublic(0, 12, null, null, null, null, null, null);
     }
 
     @Test
@@ -521,6 +521,8 @@ class ProjectControllerSecurityTest {
                 "Public goal",
                 ProjectType.RESEARCH,
                 com.smartlab.enums.PublicProjectStatus.RECRUITING,
+                java.time.LocalDate.of(2026, 1, 1),
+                null,
                 java.util.List.of(),
                 java.util.List.of(leader)
         );

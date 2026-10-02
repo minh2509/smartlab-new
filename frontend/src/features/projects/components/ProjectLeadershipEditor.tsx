@@ -5,6 +5,7 @@ import { updateProjectLeadership } from '../api'
 import type { Project, ProjectLeaderCandidate } from '../types'
 import { ProjectLeaderPicker } from './ProjectLeaderPicker'
 import { confirmDialog } from '../../../shared/ui/projectConfirmDialog'
+import { useAuth } from '../../auth/authContext'
 
 type ProjectLeadershipEditorProps = {
   project: Project
@@ -27,11 +28,18 @@ export function ProjectLeadershipEditor({
   onSavingChange,
   onDirtyChange,
 }: ProjectLeadershipEditorProps) {
+  const { profile } = useAuth()
   const [leaders, setLeaders] = useState<ProjectLeaderCandidate[]>(() => toDraftLeaders(project))
   const [primaryLeaderUserId, setPrimaryLeaderUserId] = useState<string | null>(
     project.primaryLeader?.userId ?? null,
   )
   const [saving, setSaving] = useState(false)
+
+  const isAdmin = Boolean(profile?.roles.includes('ADMIN'))
+  const isPrimaryLeader = Boolean(
+    profile && project.primaryLeader && project.primaryLeader.userId === profile.userId,
+  )
+  const canRemoveLeaders = isAdmin || isPrimaryLeader
 
   const dirty = useMemo(
     () => !sameLeadership(project, leaders, primaryLeaderUserId),
@@ -104,20 +112,28 @@ export function ProjectLeadershipEditor({
         token={token}
         leaders={leaders}
         primaryLeaderUserId={primaryLeaderUserId}
+        canRemoveLeaders={canRemoveLeaders}
         disabled={disabled || saving}
         onLeadersChange={setLeaders}
         onPrimaryLeaderChange={setPrimaryLeaderUserId}
       />
 
-      <div className="project-overview-action-footer project-leadership-action-footer">
-        <span className="muted small" aria-live="polite">
-          {dirty ? 'Có thay đổi chưa lưu.' : 'Nhóm leader đã được đồng bộ.'}
-        </span>
-        <div className="form-actions">
-          <button className="btn ghost" type="button" disabled={!dirty || disabled || saving} onClick={resetDraft}><Undo2 aria-hidden="true" /> Hủy thay đổi</button>
-          <button className="btn primary" type="submit" disabled={!dirty || disabled || saving}><Save aria-hidden="true" />{saving ? 'Đang lưu...' : 'Lưu thay đổi leader'}</button>
+      {dirty ? (
+        <div className="project-overview-action-footer project-leadership-action-footer">
+          <span className="project-leadership-dirty-text" aria-live="polite">
+            <span className="project-leadership-dirty-dot" aria-hidden="true" />
+            Có thay đổi chưa lưu trong nhóm leader.
+          </span>
+          <div className="form-actions">
+            <button className="btn ghost" type="button" disabled={disabled || saving} onClick={resetDraft}>
+              <Undo2 aria-hidden="true" /> Hủy thay đổi
+            </button>
+            <button className="btn primary" type="submit" disabled={disabled || saving}>
+              <Save aria-hidden="true" /> {saving ? 'Đang lưu...' : 'Lưu thay đổi leader'}
+            </button>
+          </div>
         </div>
-      </div>
+      ) : null}
     </form>
   )
 }

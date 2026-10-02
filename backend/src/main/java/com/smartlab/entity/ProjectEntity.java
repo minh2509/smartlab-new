@@ -78,6 +78,9 @@ public class ProjectEntity {
     @Column(name = "is_recruiting", nullable = false)
     private Boolean isRecruiting;
 
+    @Column(name = "cover_url", length = 500)
+    private String coverUrl;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by_user_id")
     private UserEntity createdBy;
@@ -109,6 +112,27 @@ public class ProjectEntity {
             Boolean isRecruiting,
             UserEntity createdBy
     ) {
+        return create(code, name, description, goal, projectType, leader, status, startDate, expectedEndDate,
+                actualEndDate, isPublic, isFeatured, isRecruiting, createdBy, null);
+    }
+
+    public static ProjectEntity create(
+            String code,
+            String name,
+            String description,
+            String goal,
+            ProjectType projectType,
+            UserEntity leader,
+            ProjectStatus status,
+            LocalDate startDate,
+            LocalDate expectedEndDate,
+            LocalDate actualEndDate,
+            Boolean isPublic,
+            Boolean isFeatured,
+            Boolean isRecruiting,
+            UserEntity createdBy,
+            String coverUrl
+    ) {
         return ProjectEntity.builder()
                 .code(code)
                 .name(name)
@@ -124,6 +148,7 @@ public class ProjectEntity {
                 .isFeatured(isFeatured)
                 .isRecruiting(isRecruiting)
                 .createdBy(createdBy)
+                .coverUrl(coverUrl)
                 .build();
     }
 

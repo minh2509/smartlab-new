@@ -37,6 +37,21 @@ export type Achievement = {
   updatedAt: string
 }
 
+export type AchievementImage = {
+  id: number
+  fileId: number
+  originalName: string
+  mimeType: string
+  sizeBytes: number
+  label: string | null
+  sortOrder: number
+  createdAt: string
+}
+
+export type AchievementDetail = Achievement & {
+  images: AchievementImage[]
+}
+
 export type YearCount = {
   year: number
   count: number

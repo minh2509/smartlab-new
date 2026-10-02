@@ -129,13 +129,8 @@ class PostReviewNotificationPostgresIntegrationTest {
         assertThat(persisted.decision()).isEqualTo(reviewCase.decision());
         assertThat(persisted.reason()).isEqualTo(reviewCase.reason());
         assertThat(reviewCount(postId)).isEqualTo(1L);
-        if (reviewCase.decision() == ReviewDecision.APPROVED) {
-            assertThat(persisted.postPublishedAt()).isEqualTo(persisted.reviewCreatedAt());
-            assertThat(response.getPublishedAt()).isEqualTo(persisted.reviewCreatedAt());
-        } else {
-            assertThat(persisted.postPublishedAt()).isNull();
-            assertThat(response.getPublishedAt()).isNull();
-        }
+        assertThat(persisted.postPublishedAt()).isNull();
+        assertThat(response.getPublishedAt()).isNull();
 
         assertThat(notification.id()).isPositive();
         assertThat(notification.recipientUserId()).isEqualTo(author.id());
@@ -176,9 +171,9 @@ class PostReviewNotificationPostgresIntegrationTest {
         PostReviewSnapshot persisted = inNewTransaction(() -> readPostReview(postId));
         DatabaseCounts after = inNewTransaction(this::databaseCounts);
 
-        assertThat(response.getStatus()).isEqualTo(PostStatus.PUBLISHED);
-        assertThat(persisted.status()).isEqualTo(PostStatus.PUBLISHED);
-        assertThat(persisted.postPublishedAt()).isEqualTo(persisted.reviewCreatedAt());
+        assertThat(response.getStatus()).isEqualTo(PostStatus.APPROVED);
+        assertThat(persisted.status()).isEqualTo(PostStatus.APPROVED);
+        assertThat(persisted.postPublishedAt()).isNull();
         assertThat(persisted.decision()).isEqualTo(ReviewDecision.APPROVED);
         assertThat(reviewCount(postId)).isEqualTo(1L);
         assertThat(after.notifications()).isEqualTo(baselineCounts.notifications());
@@ -198,7 +193,7 @@ class PostReviewNotificationPostgresIntegrationTest {
         doThrow(failure).when(notificationService).notify(
                 eq(author.id()),
                 eq("POST_REVIEW_APPROVED"),
-                eq("Bài viết của bạn đã được duyệt và xuất bản."),
+                eq("Bài viết của bạn đã được duyệt và đang chờ xuất bản."),
                 eq(new NotificationRelated(reviewer.id(), "POST", postId, targetUrl)),
                 any(Instant.class)
         );
@@ -212,7 +207,7 @@ class PostReviewNotificationPostgresIntegrationTest {
         verify(notificationService).notify(
                 eq(author.id()),
                 eq("POST_REVIEW_APPROVED"),
-                eq("Bài viết của bạn đã được duyệt và xuất bản."),
+                eq("Bài viết của bạn đã được duyệt và đang chờ xuất bản."),
                 eq(new NotificationRelated(reviewer.id(), "POST", postId, targetUrl)),
                 any(Instant.class)
         );
@@ -431,9 +426,9 @@ class PostReviewNotificationPostgresIntegrationTest {
                 new AuthoredReviewCase(
                         "approved",
                         ReviewDecision.APPROVED,
-                        PostStatus.PUBLISHED,
+                        PostStatus.APPROVED,
                         "  approval reason stays in history  ",
-                        "Bài viết của bạn đã được duyệt và xuất bản."
+                        "Bài viết của bạn đã được duyệt và đang chờ xuất bản."
                 ),
                 new AuthoredReviewCase(
                         "revision-required",

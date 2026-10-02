@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { AlertTriangle, ArrowRight, CalendarDays, Globe, Lock, Newspaper, Plus, Users } from 'lucide-react'
 import { useAuth } from '../../auth/authContext'
+import { Pagination } from '../../../shared/components/Pagination'
 import { listMyPosts } from '../api'
 import type { PostStatus, PostSummary, PostVisibility } from '../types'
 
@@ -21,12 +22,23 @@ const STATUS: Record<PostStatus, { label: string; tone: 'ok' | 'warn' | 'danger'
 }
 
 const SKELETON_KEYS = ['sk-1', 'sk-2', 'sk-3']
+const POSTS_PER_PAGE = 3
 
 export function MyPostsPage() {
   const { token } = useAuth()
   const [posts, setPosts] = useState<PostSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [page, setPage] = useState(1)
+  const totalPages = Math.max(1, Math.ceil(posts.length / POSTS_PER_PAGE))
+  const visiblePosts = useMemo(
+    () => posts.slice((page - 1) * POSTS_PER_PAGE, page * POSTS_PER_PAGE),
+    [page, posts],
+  )
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages)
+  }, [page, totalPages])
 
   useEffect(() => {
     if (!token) {
@@ -109,7 +121,7 @@ export function MyPostsPage() {
 
         {!loading && !error && posts.length > 0 ? (
           <div className="post-feed">
-            {posts.map((post) => {
+            {visiblePosts.map((post) => {
               const audience = VISIBILITY[post.visibility]
               const AudienceIcon = audience.Icon
               const status = STATUS[post.status]
@@ -129,7 +141,7 @@ export function MyPostsPage() {
                   </div>
 
                   <h2 className="post-card-title">
-                    <Link to={href}>{post.title}</Link>
+                    <Link to={href}>{post.title.trim() || 'Bản nháp chưa có tiêu đề'}</Link>
                   </h2>
 
                   {post.excerpt ? <p className="post-card-excerpt">{post.excerpt}</p> : null}
@@ -154,6 +166,7 @@ export function MyPostsPage() {
             })}
           </div>
         ) : null}
+        {!loading && !error ? <Pagination page={page} totalPages={totalPages} onChange={setPage} /> : null}
       </div>
     </section>
   )

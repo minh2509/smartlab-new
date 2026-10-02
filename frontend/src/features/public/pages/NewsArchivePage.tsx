@@ -1,7 +1,6 @@
-import { ExternalLink, RotateCcw, Search } from 'lucide-react'
+import { ChevronRight, RotateCcw, Search } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import type { ReactNode } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { EmptyState } from '../../../shared/components/EmptyState'
 import { Feedback } from '../../../shared/components/Feedback'
 import { Pagination } from '../../../shared/components/Pagination'
@@ -9,7 +8,6 @@ import { PopupSelect } from '../../../shared/ui/PopupSelect'
 import { PublicPageHead } from '../components/PublicPageHead'
 import { listNewsArchive, listNewsSources, listNewsYears } from '../newsApi'
 import type { LabNewsArticle, PublicNewsSort } from '../newsTypes'
-import '../landing.css'
 import './NewsArchivePage.css'
 
 const PAGE_SIZE = 12
@@ -41,52 +39,23 @@ export function NewsArchivePage() {
   useEffect(() => {
     const controller = new AbortController()
     setOptionsError(false)
-    void Promise.all([
-      listNewsSources(controller.signal),
-      listNewsYears(controller.signal),
-    ])
+    void Promise.all([listNewsSources(controller.signal), listNewsYears(controller.signal)])
       .then(([sourceList, yearList]) => {
-        if (!controller.signal.aborted) {
-          setSources(uniqueSources(sourceList))
-          setYears(yearList)
-        }
+        if (!controller.signal.aborted) { setSources(uniqueSources(sourceList)); setYears(yearList) }
       })
-      .catch(() => {
-        if (!controller.signal.aborted) setOptionsError(true)
-      })
+      .catch(() => { if (!controller.signal.aborted) setOptionsError(true) })
     return () => controller.abort()
   }, [])
 
   useEffect(() => {
     const controller = new AbortController()
-    setLoading(true)
-    setError(null)
-    void listNewsArchive({
-      q: query.trim() || undefined,
-      source: source || undefined,
-      year: year ?? undefined,
-      sort,
-      page: page - 1,
-      size: PAGE_SIZE,
-      signal: controller.signal,
-    })
+    setLoading(true); setError(null)
+    void listNewsArchive({ q: query.trim() || undefined, source: source || undefined, year: year ?? undefined, sort, page: page - 1, size: PAGE_SIZE, signal: controller.signal })
       .then((response) => {
-        if (controller.signal.aborted) return
-        setItems(response.items)
-        setTotalPages(response.totalPages)
-        setTotalElements(response.totalElements)
+        if (!controller.signal.aborted) { setItems(response.items); setTotalPages(response.totalPages); setTotalElements(response.totalElements) }
       })
-      .catch(() => {
-        if (!controller.signal.aborted) {
-          setItems([])
-          setTotalElements(0)
-          setTotalPages(0)
-          setError('Không thể tải danh sách tin tức. Vui lòng thử lại.')
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false)
-      })
+      .catch(() => { if (!controller.signal.aborted) { setItems([]); setTotalElements(0); setTotalPages(0); setError('Không thể tải tin tức.') } })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
   }, [page, query, reloadKey, sort, source, year])
 
@@ -96,10 +65,6 @@ export function NewsArchivePage() {
     else next.set(key, value)
     next.delete('page')
     setSearchParams(next)
-  }
-
-  function resetFilters() {
-    setSearchParams(new URLSearchParams())
   }
 
   function updatePage(newPage: number) {
@@ -113,146 +78,89 @@ export function NewsArchivePage() {
 
   const sourceOptions = useMemo(() => {
     const base = sources.map((s) => ({ value: s, label: s }))
-    if (source && !sources.some((s) => s.toLocaleLowerCase('vi') === source.toLocaleLowerCase('vi'))) {
-      base.unshift({ value: source, label: source })
-    }
-    return [{ value: 'ALL', label: optionsError ? 'Không tải được nguồn' : 'Tất cả nguồn' }, ...base]
+    if (source && !sources.some((s) => s.toLocaleLowerCase('vi') === source.toLocaleLowerCase('vi'))) base.unshift({ value: source, label: source })
+    return [{ value: 'ALL', label: optionsError ? 'Không tải được' : 'Tất cả nguồn' }, ...base]
   }, [optionsError, source, sources])
 
-  const yearOptions = useMemo(
-    () => [
-      { value: 'ALL', label: optionsError ? 'Không tải được năm' : 'Tất cả năm' },
-      ...years.map((y) => ({ value: String(y), label: String(y) })),
-    ],
-    [optionsError, years],
-  )
+  const yearOptions = useMemo(() => [
+    { value: 'ALL', label: optionsError ? 'Không tải được' : 'Tất cả năm' },
+    ...years.map((y) => ({ value: String(y), label: String(y) }))
+  ], [optionsError, years])
 
-  const sortOptions = useMemo(
-    () => [
-      { value: 'LATEST', label: SORT_LABELS.LATEST },
-      { value: 'OLDEST', label: SORT_LABELS.OLDEST },
-    ],
-    [],
-  )
+  const sortOptions = useMemo(() => [
+    { value: 'LATEST', label: SORT_LABELS.LATEST },
+    { value: 'OLDEST', label: SORT_LABELS.OLDEST }
+  ], [])
 
   return (
     <>
-      <PublicPageHead
-        title="Tin tức"
-        description="Các thông tin truyền thông công khai liên quan đến Smart Lab."
-      />
-      <section className="section news-archive-section">
-        <div className="wrap">
+      <PublicPageHead title="Tin tức" description="Tin tức truyền thông về Smart Lab." />
+      <section className="news-archive-section">
+        <div className="news-archive-header">
           <div className="news-archive-intro">
             <div>
-              <div className="kicker">TIN TỨC &amp; TRUYỀN THÔNG</div>
-              <h2>Tin tức</h2>
-              <p>Các thông tin truyền thông công khai liên quan đến Smart Lab.</p>
+              <div className="kicker">TIN TỨC</div>
+              <h2>Tin tức &amp; truyền thông</h2>
+              <p>Thông tin truyền thông về Smart Lab từ các nguồn bên ngoài.</p>
             </div>
-            <span className="public-archive-page-size">12 tin tức / trang</span>
+            <span className="public-archive-page-size">{PAGE_SIZE} tin tức / trang</span>
           </div>
 
-          <div className="news-archive-toolbar" role="search">
-            <label className="news-archive-search">
-              <span className="sr-only">Tìm kiếm tin tức</span>
-              <Search aria-hidden="true" />
-              <input
-                className="input"
-                type="search"
-                value={query}
-                onChange={(event) => updateFilter('q', event.target.value)}
-                placeholder="Tìm theo tiêu đề tin tức hoặc nguồn..."
-              />
-            </label>
-
-            <PopupSelect
-              value={source ? source : 'ALL'}
-              options={sourceOptions}
-              onChange={(value) => updateFilter('source', value)}
-              ariaLabel="Lọc theo nguồn tin tức"
-              className="news-archive-filter"
-              disabled={optionsError}
-            />
-
-            <PopupSelect
-              value={year ? String(year) : 'ALL'}
-              options={yearOptions}
-              onChange={(value) => updateFilter('year', value)}
-              ariaLabel="Lọc theo năm xuất bản"
-              className="news-archive-filter"
-              disabled={optionsError}
-            />
-
-            <PopupSelect
-              value={sort}
-              options={sortOptions}
-              onChange={(value) => updateFilter('sort', value)}
-              ariaLabel="Sắp xếp tin tức"
-              className="news-archive-filter"
-            />
-
-            {hasFilters ? (
-              <button className="news-archive-reset" type="button" onClick={resetFilters}>
-                <RotateCcw size={15} aria-hidden="true" />
-                Đặt lại
-              </button>
-            ) : null}
+          <div className="news-archive-toolbar">
+            <div className="news-archive-search">
+              <Search size={16} />
+              <input className="input" type="search" value={query} onChange={(e) => updateFilter('q', e.target.value)} placeholder="Tìm tin tức..." />
+            </div>
+            <PopupSelect value={source || 'ALL'} options={sourceOptions} onChange={(v) => updateFilter('source', v)} ariaLabel="Lọc theo nguồn" className="news-archive-filter" disabled={optionsError} />
+            <PopupSelect value={year ? String(year) : 'ALL'} options={yearOptions} onChange={(v) => updateFilter('year', v)} ariaLabel="Lọc theo năm" className="news-archive-filter" disabled={optionsError} />
+            <PopupSelect value={sort} options={sortOptions} onChange={(v) => updateFilter('sort', v)} ariaLabel="Sắp xếp" className="news-archive-filter" />
+            {hasFilters && <button className="news-archive-reset" type="button" onClick={() => setSearchParams(new URLSearchParams())}><RotateCcw size={14} /> Đặt lại</button>}
           </div>
-
-          {error ? (
-            <div className="news-archive-request-state" role="alert">
-              <Feedback error={error} />
-              <button className="btn" type="button" onClick={() => setReloadKey((value) => value + 1)}>
-                Thử tải lại
-              </button>
-            </div>
-          ) : null}
-
-          {loading && items.length === 0 ? (
-            <div className="public-empty empty tight news-archive-request-state" aria-busy="true">
-              Đang tải tin tức...
-            </div>
-          ) : null}
-
-          {!loading && !error && items.length === 0 ? (
-            <EmptyState
-              title={hasFilters ? 'Không tìm thấy tin tức phù hợp' : 'Chưa có tin tức công khai'}
-              description={
-                hasFilters
-                  ? 'Thử thay đổi từ khóa hoặc bộ lọc.'
-                  : 'Các thông tin truyền thông của Smart Lab sẽ xuất hiện tại đây.'
-              }
-            />
-          ) : null}
-
-          {items.length > 0 ? (
-            <>
-              <div className="news-archive-results-bar">
-                <p className="news-archive-summary" aria-live="polite">
-                  {formatRange(page, PAGE_SIZE, totalElements)} · {totalElements} tin tức
-                </p>
-                {loading ? (
-                  <span className="news-archive-refreshing" aria-live="polite">
-                    Đang cập nhật...
-                  </span>
-                ) : null}
-              </div>
-              <div className="landing-media-grid" aria-busy={loading}>
-                {items.map((item) => (
-                  <NewsCard key={item.id} item={item} />
-                ))}
-              </div>
-              <Pagination page={page} totalPages={totalPages} onChange={updatePage} />
-            </>
-          ) : null}
         </div>
+
+        {error && <div className="news-archive-error" role="alert"><Feedback error={error} /><button className="btn" type="button" onClick={() => setReloadKey((k) => k + 1)}>Thử lại</button></div>}
+
+        {loading && items.length === 0 && <div className="news-archive-empty" aria-busy="true">Đang tải tin tức...</div>}
+
+        {!loading && !error && items.length === 0 && <EmptyState title={hasFilters ? 'Không tìm thấy' : 'Chưa có tin tức công khai'} />}
+
+        {items.length > 0 && (
+          <>
+            <div className="news-archive-results">
+              <p className="news-archive-summary">
+                {formatRange(page, PAGE_SIZE, totalElements)} · {totalElements} tin tức
+                {loading && <span className="news-archive-refreshing">Đang cập nhật...</span>}
+              </p>
+              <div className="news-archive-grid">
+                {items.map((item) => <NewsCard key={item.id} item={item} />)}
+              </div>
+            </div>
+            <div className="news-archive-pagination">
+              <Pagination page={page} totalPages={totalPages} onChange={updatePage} />
+            </div>
+          </>
+        )}
       </section>
     </>
   )
 }
 
+function NewsCard({ item }: { item: LabNewsArticle }) {
+  return (
+    <Link to={`/tin-tuc/${item.id}`} className="news-archive-card">
+      <div className="news-archive-card-meta">
+        <span className="news-archive-card-source">{item.sourceName}</span>
+        {item.publishedAt && <span className="news-archive-card-date">· {formatDate(item.publishedAt)}</span>}
+      </div>
+      <h3>{item.title}</h3>
+      {item.excerpt && <p className="news-archive-card-excerpt">{shorten(item.excerpt, 120)}</p>}
+      <span className="news-archive-card-action">Xem chi tiết <ChevronRight size={14} /></span>
+    </Link>
+  )
+}
+
 function parsePage(value: string | null) {
-  if (value === null || !/^\d+$/.test(value)) return 1
+  if (!value || !/^\d+$/.test(value)) return 1
   const page = Number(value)
   return Number.isSafeInteger(page) && page > 0 ? page : 1
 }
@@ -268,59 +176,12 @@ function parseSort(value: string | null): PublicNewsSort {
 }
 
 function uniqueSources(values: string[]) {
-  return values
-    .map((value) => value.trim())
-    .filter(Boolean)
-    .filter(
-      (value, index, all) =>
-        all.findIndex((candidate) => candidate.toLocaleLowerCase('vi') === value.toLocaleLowerCase('vi')) === index,
-    )
-    .sort((a, b) => a.localeCompare(b, 'vi'))
+  return values.map((v) => v.trim()).filter(Boolean).filter((v, i, a) => a.findIndex((c) => c.toLocaleLowerCase('vi') === v.toLocaleLowerCase('vi')) === i).sort((a, b) => a.localeCompare(b, 'vi'))
 }
 
 function formatRange(page: number, size: number, total: number) {
   if (total === 0) return '0 / 0'
   return `${(page - 1) * size + 1}–${Math.min(page * size, total)} / ${total}`
-}
-
-function NewsCard({ item }: { item: LabNewsArticle }) {
-  const content: ReactNode = (
-    <div className="landing-media-card-body">
-      <div className="landing-media-card-meta">
-        <span className="landing-media-card-source">{item.sourceName}</span>
-        {item.publishedAt ? <span className="landing-media-card-date">• {formatDate(item.publishedAt)}</span> : null}
-      </div>
-      <h2 className="landing-media-card-title">{item.title}</h2>
-      {item.excerpt ? <p className="landing-media-card-excerpt">{shorten(item.excerpt, 150)}</p> : null}
-      <div className="landing-media-card-foot">
-        <span className="landing-media-card-action">
-          Xem nguồn <ExternalLink size={14} aria-hidden="true" />
-        </span>
-      </div>
-    </div>
-  )
-  const safeUrl = safeExternalUrl(item.sourceUrl)
-  if (!safeUrl) return <article className="landing-media-card is-news">{content}</article>
-  return (
-    <a
-      className="landing-media-card is-news"
-      href={safeUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-      aria-label={`Xem ${item.title} trên ${item.sourceName}`}
-    >
-      {content}
-    </a>
-  )
-}
-
-function safeExternalUrl(value: string) {
-  try {
-    const url = new URL(value)
-    return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : null
-  } catch {
-    return null
-  }
 }
 
 function formatDate(value: string | null | undefined) {
@@ -331,6 +192,5 @@ function formatDate(value: string | null | undefined) {
 
 function shorten(value: string | null | undefined, max: number) {
   if (!value) return ''
-  if (value.length <= max) return value
-  return value.slice(0, max).trim() + '...'
+  return value.length <= max ? value : value.slice(0, max).trim() + '...'
 }

@@ -18,6 +18,9 @@ public interface LabAchievementFileRepository extends JpaRepository<LabAchieveme
     @Query("select af from LabAchievementFileEntity af join fetch af.file where af.id = :attachmentId and af.achievement.id = :achievementId and af.deletedAt is null and af.file.deletedAt is null and af.file.accessScope = 'PUBLIC'")
     Optional<LabAchievementFileEntity> findPublicActiveByIdAndAchievementId(@Param("attachmentId") Long attachmentId, @Param("achievementId") Long achievementId);
 
+    @Query("select af from LabAchievementFileEntity af join fetch af.file where af.achievement.id = :achievementId and af.deletedAt is null and af.file.deletedAt is null and af.file.accessScope = 'PUBLIC' order by af.sortOrder asc, af.id asc")
+    List<LabAchievementFileEntity> findPublicActiveByAchievementId(@Param("achievementId") Long achievementId);
+
     @Query("select coalesce(max(af.sortOrder), -1) from LabAchievementFileEntity af where af.achievement.id = :achievementId and af.deletedAt is null")
     Integer findMaxActiveSortOrder(@Param("achievementId") Long achievementId);
 

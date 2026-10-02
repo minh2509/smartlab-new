@@ -47,18 +47,18 @@ class CreatePostRequestValidationTest {
     }
 
     @Test
-    void rejectsNullTitle() {
-        assertInvalid(request(null, null, null, null, null));
+    void acceptsNullTitleForDraft() {
+        assertValid(request(null, null, null, null, null));
     }
 
     @Test
-    void rejectsEmptyTitle() {
-        assertInvalid(request("", null, null, null, null));
+    void acceptsEmptyTitleForDraft() {
+        assertValid(request("", null, null, null, null));
     }
 
     @Test
-    void rejectsWhitespaceOnlyTitle() {
-        assertInvalid(request(" \t ", null, null, null, null));
+    void acceptsWhitespaceOnlyTitleForDraft() {
+        assertValid(request(" \t ", null, null, null, null));
     }
 
     @Test

@@ -95,7 +95,7 @@ const emptyCreateForm: CreateProjectForm = {
 }
 
 const PROJECT_TABS: ProjectTab[] = ['overview', 'leaders', 'members', 'research-fields', 'documents']
-const PROJECT_PAGE_SIZE = 10
+const PROJECT_PAGE_SIZE = 5
 
 export function ProjectManagementPage() {
   const { token, profile } = useAuth()
@@ -125,7 +125,7 @@ export function ProjectManagementPage() {
   const createDialogRef = useRef<HTMLDialogElement>(null)
   const createTriggerRef = useRef<HTMLButtonElement>(null)
   const projectDialogRef = useRef<HTMLDialogElement>(null)
-  const projectDialogTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const projectDialogTriggerRef = useRef<HTMLElement | null>(null)
 
   const isAdmin = Boolean(profile?.roles.includes('ADMIN'))
   const hasProjectManage = Boolean(profile?.permissions.includes('PROJECT_MANAGE'))
@@ -171,12 +171,15 @@ export function ProjectManagementPage() {
   )
   const hasProjectFilters = Boolean(
     projectQuery.trim()
-      || projectTypeFilter !== 'ALL'
-      || projectStatusFilter !== 'ALL'
-      || projectSort !== 'NEWEST',
+    || projectTypeFilter !== 'ALL'
+    || projectStatusFilter !== 'ALL'
+    || projectSort !== 'NEWEST',
   )
   const canEditProject = (project: Project) => Boolean(
     profile && (isAdmin || project.leaders.some((leader) => leader.userId === profile.userId)),
+  )
+  const canDeleteProject = (_project?: Project) => Boolean(
+    token && canAdminManageProject,
   )
   const membershipByProjectId = useMemo(
     () => new Map(
@@ -194,6 +197,12 @@ export function ProjectManagementPage() {
   )
   const canEditSelected = Boolean(
     selectedProject && canEditProject(selectedProject),
+  )
+  const canDeleteSelected = Boolean(
+    selectedProject && canDeleteProject(selectedProject),
+  )
+  const canManageLeaders = Boolean(
+    token && canAdminManageProject,
   )
   const createDirty = useMemo(
     () => !sameCoreForm(createForm, emptyCreateForm),
@@ -251,6 +260,16 @@ export function ProjectManagementPage() {
     dialog.showModal()
     window.requestAnimationFrame(() => document.getElementById(`project-tab-${activeTab}`)?.focus())
   }, [activeTab, selectedProject])
+
+  useEffect(() => {
+    const isModalOpen = Boolean(selectedProject || isCreating)
+    if (!isModalOpen) return
+    const originalOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = originalOverflow
+    }
+  }, [isCreating, selectedProject])
 
   useEffect(() => {
     if (loading || selectedId !== null || requestedProjectId === null) return
@@ -315,9 +334,9 @@ export function ProjectManagementPage() {
     clearFeedback()
   }
 
-  function openProjectDialog(project: Project, trigger: HTMLButtonElement) {
+  function openProjectDialog(project: Project, trigger?: HTMLElement | null) {
     if (isBusy) return
-    projectDialogTriggerRef.current = trigger
+    projectDialogTriggerRef.current = trigger ?? null
     setSelectedId(project.id)
     setEditForm(toCoreForm(project))
     setActiveTab('overview')
@@ -458,21 +477,31 @@ export function ProjectManagementPage() {
     }
   }
 
-  async function handleDelete() {
-    if (!token || !selectedProject || !canAdminManageProject || isBusy) return
-    const draftWarning = selectedProjectDirty ? ' Các thay đổi chưa lưu cũng sẽ bị bỏ.' : ''
-    if (!await confirmDialog({ title: 'Xóa dự án?', description: `Dự án sẽ không còn xuất hiện trong danh sách đang hoạt động. Dữ liệu lịch sử vẫn được giữ lại.${draftWarning}`, confirmLabel: 'Xóa dự án', destructive: true })) return
+  async function handleDelete(targetProject?: Project) {
+    const projectToDelete = targetProject ?? selectedProject
+    if (!token || !projectToDelete || !canDeleteProject(projectToDelete) || isBusy) return
+    const isSelected = selectedProject?.id === projectToDelete.id
+    const draftWarning = isSelected && selectedProjectDirty ? ' Các thay đổi chưa lưu cũng sẽ bị bỏ.' : ''
+    if (!await confirmDialog({
+      title: `Xóa dự án ${projectToDelete.code}?`,
+      description: `Dự án "${projectToDelete.name}" (${projectToDelete.code}) sẽ không còn xuất hiện trong danh sách đang hoạt động. Dữ liệu lịch sử vẫn được giữ lại.${draftWarning}`,
+      confirmLabel: 'Xóa dự án',
+      destructive: true,
+    })) return
 
     setBusyAction('delete')
     clearFeedback()
     try {
-      const deletedCode = selectedProject.code
-      await deleteProject(token, selectedProject.id)
+      const deletedCode = projectToDelete.code
+      await deleteProject(token, projectToDelete.id)
       await loadProjects()
-      finishClosingProjectDialog()
+      if (isSelected) {
+        finishClosingProjectDialog()
+      }
       toast.success('Đã xóa mềm dự án', deletedCode)
     } catch (reason: unknown) {
       setError(errorMessage(reason, 'Không thể xóa dự án.'))
+      toast.error('Không thể xóa dự án', errorMessage(reason, 'Đã xảy ra lỗi khi xóa dự án.'))
     } finally {
       setBusyAction(null)
     }
@@ -509,7 +538,7 @@ export function ProjectManagementPage() {
               className="btn primary"
               type="button"
               aria-expanded={isCreating}
-                  onClick={() => void startCreating()}
+              onClick={() => void startCreating()}
               disabled={isCreating || isBusy}
             >
               <Plus /> Tạo dự án
@@ -566,40 +595,114 @@ export function ProjectManagementPage() {
                     : 'Không có dự án phù hợp'}
                   {filteredProjects.length !== projects.length ? ` · ${projects.length} dự án tổng cộng` : ''}
                 </span>
+
+                {filteredProjects.length > PROJECT_PAGE_SIZE ? (
+                  <nav className="project-pagination-top" aria-label="Phân trang danh sách dự án (trên)">
+                    <button
+                      className="btn ghost table-btn"
+                      type="button"
+                      disabled={projectPage === 0}
+                      onClick={() => setProjectPage((current) => Math.max(0, current - 1))}
+                    >
+                      <ChevronLeft aria-hidden="true" /> Trước
+                    </button>
+                    <span className="project-page-indicator">
+                      Trang {projectPage + 1} / {projectPageCount}
+                    </span>
+                    <button
+                      className="btn ghost table-btn"
+                      type="button"
+                      disabled={projectPage + 1 >= projectPageCount}
+                      onClick={() => setProjectPage((current) => Math.min(projectPageCount - 1, current + 1))}
+                    >
+                      Sau <ChevronRight aria-hidden="true" />
+                    </button>
+                  </nav>
+                ) : null}
               </div>
 
               {pagedProjects.length ? (
-                <div className="field-admin-list project-management-list">
+                <div className="project-management-list">
                   {pagedProjects.map((project) => {
                     const membership = membershipByProjectId.get(project.id)
+                    const isResearch = project.projectType === 'RESEARCH'
                     return (
-                    <article className="member-select-row project-management-row" key={project.id}>
-                      <span className="member-avatar">{project.code.slice(0, 2).toUpperCase()}</span>
-                      <span className="project-management-row-main">
-                        <strong>{project.name}</strong>
-                        <small>{project.code} · {PROJECT_TYPE_LABELS[project.projectType]}</small>
-                      </span>
-                      <span className="project-management-row-actions">
-                        <span className={`badge ${PROJECT_STATUS_BADGES[project.status]}`}>
-                          {PROJECT_STATUS_LABELS[project.status]}
+                      <article
+                        className="project-management-row clickable"
+                        key={project.id}
+                        tabIndex={0}
+                        role="button"
+                        aria-label={`Chi tiết dự án ${project.name}`}
+                        onClick={(event) => {
+                          if ((event.target as HTMLElement).closest('button')) return
+                          openProjectDialog(project, event.currentTarget)
+                        }}
+                        onKeyDown={(event) => {
+                          if ((event.target as HTMLElement).closest('button')) return
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault()
+                            openProjectDialog(project, event.currentTarget)
+                          }
+                        }}
+                      >
+                        <span className="project-row-icon" aria-hidden="true">
+                          {isResearch ? <FlaskConical size={18} /> : <FolderKanban size={18} />}
                         </span>
-                        {membership ? (
-                          <span className={`badge ${membership.projectRole === 'LEADER' ? 'info' : 'success'}`}>
-                            {membership.projectRole === 'LEADER' ? 'Leader' : 'Thành viên'}
+                        <div className="project-management-row-main">
+                          <strong className="project-management-row-title">{project.name}</strong>
+                          <div className="project-management-row-meta">
+                            <span className="project-code-tag">{project.code}</span>
+                            <span className="project-meta-sep">·</span>
+                            <span>{PROJECT_TYPE_LABELS[project.projectType]}</span>
+                            {project.primaryLeader ? (
+                              <>
+                                <span className="project-meta-sep">·</span>
+                                <span className="project-meta-leader">Leader: <strong>{project.primaryLeader.name}</strong></span>
+                              </>
+                            ) : null}
+                            {project.isRecruiting ? (
+                              <>
+                                <span className="project-meta-sep">·</span>
+                                <span className="project-meta-recruiting">Đang tuyển thành viên</span>
+                              </>
+                            ) : null}
+                          </div>
+                        </div>
+                        <div className="project-management-row-badges">
+                          <span className={`badge ${project.status === 'PROPOSED' ? 'project-status-badge proposed' : PROJECT_STATUS_BADGES[project.status]}`}>
+                            {PROJECT_STATUS_LABELS[project.status]}
                           </span>
-                        ) : null}
-                        <button
-                          className="btn ghost table-btn"
-                          type="button"
-                          disabled={isBusy}
-                          aria-label={`Chi tiết dự án ${project.name}`}
-                          onClick={(event) => openProjectDialog(project, event.currentTarget)}
-                        >
-                          <Eye aria-hidden="true" />
-                          Chi tiết
-                        </button>
-                      </span>
-                    </article>
+                          {membership ? (
+                            <span className={`badge project-role-badge ${membership.projectRole === 'LEADER' ? 'leader' : 'member'}`}>
+                              {membership.projectRole === 'LEADER' ? 'Leader' : 'Thành viên'}
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="project-management-row-actions">
+                          <button
+                            className="btn ghost table-btn"
+                            type="button"
+                            disabled={isBusy}
+                            aria-label={`Chi tiết dự án ${project.name}`}
+                            onClick={(event) => openProjectDialog(project, event.currentTarget)}
+                          >
+                            <Eye aria-hidden="true" />
+                            Chi tiết
+                          </button>
+                          {canDeleteProject(project) ? (
+                            <button
+                              className="btn ghost table-btn danger-text"
+                              type="button"
+                              disabled={isBusy}
+                              aria-label={`Xóa dự án ${project.name}`}
+                              onClick={() => void handleDelete(project)}
+                            >
+                              <Trash2 aria-hidden="true" />
+                              Xóa
+                            </button>
+                          ) : null}
+                        </div>
+                      </article>
                     )
                   })}
                 </div>
@@ -668,6 +771,7 @@ export function ProjectManagementPage() {
             if (event.target === event.currentTarget) void cancelCreating()
           }}
         >
+          <OverlayPortalHost />
           <form className="project-create-dialog-form" onSubmit={handleCreate} noValidate>
             <header className="project-create-dialog-head">
               <span className="project-create-dialog-icon" aria-hidden="true">
@@ -880,78 +984,96 @@ export function ProjectManagementPage() {
                 tabIndex={0}
                 hidden={activeTab !== 'overview'}
               >
-              <div className="panel-head">
-                <div>
-                  <h2>Tổng quan dự án</h2>
-                  <p>Thông tin cốt lõi và trạng thái hiện tại.</p>
-                </div>
-                {canEditSelected && !isEditingCore ? (
-                  <button className="btn ghost table-btn" type="button" disabled={isBusy} onClick={() => setIsEditingCore(true)}>
-                    <Pencil aria-hidden="true" /> Chỉnh sửa
-                  </button>
-                ) : null}
-              </div>
-
-              {isEditingCore && canEditSelected && editForm ? (
-                <form className="project-overview-editor" onSubmit={handleUpdate} noValidate>
-                  <ProjectCoreFields form={editForm} onChange={setEditForm} />
-                  <div className="project-overview-action-footer">
-                    <span className="muted small" aria-live="polite">
-                      {editDirty ? 'Có thay đổi chưa lưu.' : 'Chưa có thay đổi.'}
-                    </span>
-                    <div className="form-actions">
-                      <button className="btn ghost" type="button" disabled={isBusy} onClick={() => void cancelCoreEditing()}>Hủy</button>
-                      <button className="btn primary" type="submit" disabled={isBusy || !editDirty}><Save aria-hidden="true" />{busyAction === 'update' ? 'Đang lưu...' : 'Lưu thay đổi'}</button>
-                    </div>
-                  </div>
-                </form>
-              ) : (
-                <div className="project-overview-read">
-                  <section className="project-overview-read-section project-overview-wide">
-                    <h3>Thông tin cơ bản</h3>
-                    <div className="project-overview-item">
-                      <span>Mô tả</span>
-                      <strong>{selectedProject.description || 'Chưa có mô tả.'}</strong>
-                    </div>
-                    <div className="project-overview-item">
-                      <span>Mục tiêu</span>
-                      <strong>{selectedProject.goal || 'Chưa cập nhật.'}</strong>
-                    </div>
-                  </section>
-                  <section className="project-overview-read-section project-overview-wide">
-                    <h3>Thông tin dự án</h3>
-                    <div className="project-overview-metadata-grid">
-                      <div className="project-overview-item"><span>Loại dự án</span><strong>{PROJECT_TYPE_LABELS[selectedProject.projectType]}</strong></div>
-                      <div className="project-overview-item"><span>Trạng thái</span><strong>{PROJECT_STATUS_LABELS[selectedProject.status]}</strong></div>
-                      <div className="project-overview-item"><span>Leader chính</span><strong>{selectedProject.primaryLeader?.name ?? 'Chưa chọn'}</strong></div>
-                      <div className="project-overview-item"><span>Mã dự án</span><strong>{selectedProject.code}</strong></div>
-                      <div className="project-overview-item"><span>Nhóm leader</span><strong>{selectedProject.leaders.length} người</strong></div>
-                      <div className="project-overview-item"><span>Hiển thị</span><strong>{selectedProject.isFeatured ? 'Nổi bật' : 'Thông thường'} · {selectedProject.isPublic ? 'Công khai' : 'Nội bộ'}</strong></div>
-                    </div>
-                  </section>
-                  <section className="project-overview-read-section project-overview-wide">
-                    <h3>Tiến độ thời gian</h3>
-                    <div className="project-overview-metadata-grid project-overview-timeline-read">
-                      <div className="project-overview-item"><span>Ngày bắt đầu</span><strong>{selectedProject.startDate || 'Chưa cập nhật'}</strong></div>
-                      <div className="project-overview-item"><span>Kết thúc dự kiến</span><strong>{selectedProject.expectedEndDate || 'Chưa cập nhật'}</strong></div>
-                      <div className="project-overview-item"><span>Kết thúc thực tế</span><strong>{selectedProject.actualEndDate || 'Chưa cập nhật'}</strong></div>
-                    </div>
-                  </section>
-                </div>
-              )}
-
-              {!isEditingCore && canAdminManageProject ? (
-                <div className="project-danger-zone">
+                <div className="panel-head">
                   <div>
-                    <strong>Xóa mềm dự án</strong>
-                    <p>Dự án sẽ không còn xuất hiện trên các màn hình đang hoạt động; dữ liệu vẫn được giữ lại.</p>
+                    <h2>Tổng quan dự án</h2>
+                    <p>Thông tin cốt lõi và trạng thái hiện tại.</p>
                   </div>
-                  <button className="btn danger-text" type="button" disabled={isBusy} onClick={() => void handleDelete()}>
-                    <Trash2 aria-hidden="true" />
-                    {busyAction === 'delete' ? 'Đang xóa...' : `Xóa mềm ${selectedProject.code}`}
-                  </button>
+                  {canEditSelected && !isEditingCore ? (
+                    <button className="btn ghost table-btn" type="button" disabled={isBusy} onClick={() => setIsEditingCore(true)}>
+                      <Pencil aria-hidden="true" /> Chỉnh sửa
+                    </button>
+                  ) : null}
                 </div>
-              ) : null}
+
+                {isEditingCore && canEditSelected && editForm ? (
+                  <form className="project-overview-editor" onSubmit={handleUpdate} noValidate>
+                    <ProjectCoreFields form={editForm} onChange={setEditForm} />
+                    <div className="project-overview-action-footer">
+                      <span className="muted small" aria-live="polite">
+                        {editDirty ? 'Có thay đổi chưa lưu.' : 'Chưa có thay đổi.'}
+                      </span>
+                      <div className="form-actions">
+                        <button className="btn ghost" type="button" disabled={isBusy} onClick={() => void cancelCoreEditing()}>Hủy</button>
+                        <button className="btn primary" type="submit" disabled={isBusy || !editDirty}><Save aria-hidden="true" />{busyAction === 'update' ? 'Đang lưu...' : 'Lưu thay đổi'}</button>
+                      </div>
+                    </div>
+                  </form>
+                ) : (
+                  <div className="project-overview-read">
+                    <section className="project-overview-read-section project-overview-wide">
+                      <h3>Thông tin cơ bản</h3>
+                      <div className="project-overview-metadata-grid project-basic-read-grid">
+                        <div className="project-overview-item">
+                          <span>Code</span>
+                          <strong>{selectedProject.code}</strong>
+                        </div>
+                        <div className="project-overview-item">
+                          <span>Tên dự án</span>
+                          <strong>{selectedProject.name}</strong>
+                        </div>
+                      </div>
+                      <div className="project-overview-item">
+                        <span>Mô tả</span>
+                        <strong>{selectedProject.description || 'Chưa có mô tả.'}</strong>
+                      </div>
+                      <div className="project-overview-item">
+                        <span>Mục tiêu</span>
+                        <strong>{selectedProject.goal || 'Chưa cập nhật.'}</strong>
+                      </div>
+                    </section>
+                    <section className="project-overview-read-section project-overview-wide">
+                      <h3>Thông tin dự án</h3>
+                      <div className="project-overview-metadata-grid">
+                        <div className="project-overview-item"><span>Loại dự án</span><strong>{PROJECT_TYPE_LABELS[selectedProject.projectType]}</strong></div>
+                        <div className="project-overview-item"><span>Trạng thái</span><strong>{PROJECT_STATUS_LABELS[selectedProject.status]}</strong></div>
+                        <div className="project-overview-item"><span>Leader chính</span><strong>{selectedProject.primaryLeader?.name ?? 'Chưa chỉ định'}</strong></div>
+                        <div className="project-overview-item"><span>Nhóm leader</span><strong>{selectedProject.leaders.length} người</strong></div>
+                        <div className="project-overview-item">
+                          <span>Chế độ hiển thị & tuyển dụng</span>
+                          <strong>
+                            {[
+                              selectedProject.isPublic ? 'Công khai' : 'Nội bộ',
+                              selectedProject.isFeatured ? 'Nổi bật' : null,
+                              selectedProject.isRecruiting ? 'Đang tuyển thành viên' : 'Đóng tuyển thành viên',
+                            ].filter(Boolean).join(' · ')}
+                          </strong>
+                        </div>
+                      </div>
+                    </section>
+                    <section className="project-overview-read-section project-overview-wide">
+                      <h3>Tiến độ thời gian</h3>
+                      <div className="project-overview-metadata-grid project-overview-timeline-read">
+                        <div className="project-overview-item"><span>Ngày bắt đầu</span><strong>{selectedProject.startDate || 'Chưa cập nhật'}</strong></div>
+                        <div className="project-overview-item"><span>Kết thúc dự kiến</span><strong>{selectedProject.expectedEndDate || 'Chưa cập nhật'}</strong></div>
+                        <div className="project-overview-item"><span>Kết thúc thực tế</span><strong>{selectedProject.actualEndDate || 'Chưa cập nhật'}</strong></div>
+                      </div>
+                    </section>
+                  </div>
+                )}
+
+                {!isEditingCore && canDeleteSelected ? (
+                  <div className="project-danger-zone">
+                    <div>
+                      <strong>Xóa mềm dự án</strong>
+                      <p>Dự án sẽ không còn xuất hiện trên các màn hình đang hoạt động; dữ liệu vẫn được giữ lại.</p>
+                    </div>
+                    <button className="btn danger-text" type="button" disabled={isBusy} onClick={() => void handleDelete()}>
+                      <Trash2 aria-hidden="true" />
+                      {busyAction === 'delete' ? 'Đang xóa...' : `Xóa mềm ${selectedProject.code}`}
+                    </button>
+                  </div>
+                ) : null}
               </section>
 
               <div
@@ -961,40 +1083,40 @@ export function ProjectManagementPage() {
                 tabIndex={0}
                 hidden={activeTab !== 'leaders'}
               >
-              {canAdminManageProject && token ? (
-                <ProjectLeadershipEditor
-                  key={selectedProject.id}
-                  project={selectedProject}
-                  token={token}
-                  disabled={isBusy}
-                  onClearFeedback={clearFeedback}
-                  onError={(message) => { setError(message); toast.error('Không thể cập nhật nhóm leader', message) }}
-                  onSavingChange={(saving) => setBusyAction(saving ? 'leadership' : null)}
-                  onDirtyChange={setLeadershipDirty}
-                  onSaved={(updated) => {
-                    mergeProject(updated)
-                    toast.success('Đã cập nhật nhóm leader', 'Thay đổi leader đã được lưu.')
-                  }}
-                />
-              ) : (
-                <section className="panel page-section">
-                  <div className="panel-head">
-                    <div>
-                      <h2>Nhóm leader</h2>
-                      <p>Bạn có thể xem nhóm hiện tại nhưng không có quyền thay đổi.</p>
+                {canManageLeaders ? (
+                  <ProjectLeadershipEditor
+                    key={selectedProject.id}
+                    project={selectedProject}
+                    token={token!}
+                    disabled={isBusy}
+                    onClearFeedback={clearFeedback}
+                    onError={(message) => { setError(message); toast.error('Không thể cập nhật nhóm leader', message) }}
+                    onSavingChange={(saving) => setBusyAction(saving ? 'leadership' : null)}
+                    onDirtyChange={setLeadershipDirty}
+                    onSaved={(updated) => {
+                      mergeProject(updated)
+                      toast.success('Đã cập nhật nhóm leader', 'Thay đổi leader đã được lưu.')
+                    }}
+                  />
+                ) : (
+                  <section className="panel page-section">
+                    <div className="panel-head">
+                      <div>
+                        <h2>Nhóm leader</h2>
+                        <p>Bạn có thể xem nhóm hiện tại nhưng không có quyền thay đổi.</p>
+                      </div>
+                      <UsersRound size={20} aria-hidden="true" />
                     </div>
-                    <UsersRound size={20} aria-hidden="true" />
-                  </div>
-                  <div className="inline-badges">
-                    {selectedProject.leaders.map((leader) => (
-                      <span className="badge info" key={leader.userId}>
-                        {leader.name}{leader.userId === selectedProject.primaryLeader?.userId ? ' · Chính' : ''}
-                      </span>
-                    ))}
-                    {!selectedProject.leaders.length ? <span className="muted small">Dự án chưa có leader.</span> : null}
-                  </div>
-                </section>
-              )}
+                    <div className="inline-badges">
+                      {selectedProject.leaders.map((leader) => (
+                        <span className="badge info" key={leader.userId}>
+                          {leader.name}{leader.userId === selectedProject.primaryLeader?.userId ? ' · Chính' : ''}
+                        </span>
+                      ))}
+                      {!selectedProject.leaders.length ? <span className="muted small">Dự án chưa có leader.</span> : null}
+                    </div>
+                  </section>
+                )}
               </div>
 
               <div
@@ -1066,34 +1188,41 @@ function MembershipHistoryPanel({ memberships }: { memberships: ProjectMembershi
       </div>
 
       {memberships.length ? (
-        <div className="field-admin-list project-membership-history-list">
+        <div className="project-membership-history-list">
           {memberships.map((membership) => (
             <article
-              className="member-select-row project-management-row project-membership-history-row"
+              className="project-management-row project-membership-history-row"
               key={`${membership.projectId}-${membership.joinedAt}`}
             >
-              <span className="member-avatar">{membership.projectCode.slice(0, 2).toUpperCase()}</span>
-              <span className="project-management-row-main">
-                <strong>{membership.projectName}</strong>
-                <small>{membership.projectCode} · {PROJECT_STATUS_LABELS[membership.projectStatus]}</small>
-                <small>
-                  Tham gia {formatDateTime(membership.joinedAt)}
-                  {membership.removedAt ? ` · Rời dự án ${formatDateTime(membership.removedAt)}` : ''}
-                </small>
+              <span className="project-row-icon project-row-icon-muted" aria-hidden="true">
+                <History size={18} />
               </span>
-              <span className="project-management-row-actions">
-                <span className={`badge ${membership.projectRole === 'LEADER' ? 'info' : 'success'}`}>
+              <div className="project-management-row-main">
+                <strong className="project-management-row-title">{membership.projectName}</strong>
+                <div className="project-management-row-meta">
+                  <span className="project-code-tag">{membership.projectCode}</span>
+                  <span className="project-meta-sep">·</span>
+                  <span className="project-status-text">{PROJECT_STATUS_LABELS[membership.projectStatus]}</span>
+                  <span className="project-meta-sep">·</span>
+                  <span className="project-history-dates">
+                    Tham gia: {formatDateTime(membership.joinedAt)}
+                    {membership.removedAt ? ` · Rời dự án: ${formatDateTime(membership.removedAt)}` : ''}
+                  </span>
+                </div>
+              </div>
+              <div className="project-management-row-badges">
+                <span className={`badge project-role-badge ${membership.projectRole === 'LEADER' ? 'leader' : 'member'}`}>
                   {membership.projectRole === 'LEADER' ? 'Leader' : 'Thành viên'}
                 </span>
                 <span className="badge danger">Đã rời dự án</span>
-              </span>
+              </div>
             </article>
           ))}
         </div>
       ) : (
         <EmptyState
           title="Chưa có lịch sử đã rời dự án"
-          description="Khi membership của bạn chuyển sang REMOVED, thông tin tham gia sẽ xuất hiện tại đây."
+          description="Khi bạn kết thúc tham gia một dự án, thông tin lịch sử sẽ xuất hiện tại đây."
         />
       )}
     </section>
@@ -1111,48 +1240,57 @@ function ProjectCoreFields<T extends ProjectCoreForm>({
     onChange({ ...form, ...next })
   }
 
+  const expectedEndError = form.startDate && form.expectedEndDate && form.expectedEndDate < form.startDate
+    ? 'Ngày kết thúc dự kiến không được trước ngày bắt đầu.'
+    : null
+  const actualEndError = form.startDate && form.actualEndDate && form.actualEndDate < form.startDate
+    ? 'Ngày kết thúc thực tế không được trước ngày bắt đầu.'
+    : null
+
   return (
     <div className="project-core-fields">
       <section className="project-overview-section project-basic-information"><h3>Thông tin cơ bản</h3><div className="project-basic-grid"><label className="field">
         <span>Code</span>
         <input className="input" required maxLength={60} value={form.code} onChange={(event) => patch({ code: event.target.value })} placeholder="SL-AI-2026" />
       </label><label className="field">
-        <span>Tên dự án</span>
-        <input className="input" required maxLength={200} value={form.name} onChange={(event) => patch({ name: event.target.value })} />
-      </label><label className="field project-core-field-wide">
-        <span>Mô tả</span>
-        <textarea className="textarea" rows={4} value={form.description} onChange={(event) => patch({ description: event.target.value })} />
-      </label><label className="field project-core-field-wide">
-        <span>Mục tiêu</span>
-        <textarea className="textarea" rows={3} value={form.goal} onChange={(event) => patch({ goal: event.target.value })} />
-      </label></div></section>
+          <span>Tên dự án</span>
+          <input className="input" required maxLength={200} value={form.name} onChange={(event) => patch({ name: event.target.value })} />
+        </label><label className="field project-core-field-wide">
+          <span>Mô tả</span>
+          <textarea className="textarea" rows={2} value={form.description} onChange={(event) => patch({ description: event.target.value })} />
+        </label><label className="field project-core-field-wide">
+          <span>Mục tiêu</span>
+          <textarea className="textarea" rows={2} value={form.goal} onChange={(event) => patch({ goal: event.target.value })} />
+        </label></div></section>
       <section className="project-overview-section"><h3>Phân loại</h3><div className="project-basic-grid"><label className="field">
         <span>Loại dự án</span>
         <PopupSelect value={form.projectType} onChange={(value) => patch({ projectType: value as ProjectType })} ariaLabel="Loại dự án" options={PROJECT_TYPES.map((value) => ({ value, label: PROJECT_TYPE_LABELS[value] }))} />
       </label><label className="field">
-        <span>Trạng thái</span>
-        <PopupSelect value={form.status} onChange={(value) => patch({ status: value as ProjectStatus })} ariaLabel="Trạng thái dự án" options={PROJECT_STATUSES.map((value) => ({ value, label: PROJECT_STATUS_LABELS[value] }))} />
-      </label></div></section>
+          <span>Trạng thái</span>
+          <PopupSelect value={form.status} onChange={(value) => patch({ status: value as ProjectStatus })} ariaLabel="Trạng thái dự án" options={PROJECT_STATUSES.map((value) => ({ value, label: PROJECT_STATUS_LABELS[value] }))} />
+        </label></div></section>
       <section className="project-overview-section"><h3>Tiến độ thời gian</h3><div className="project-timeline-grid"><label className="field">
         <span>Ngày bắt đầu</span>
         <input className="input" type="date" value={form.startDate} onChange={(event) => patch({ startDate: event.target.value })} />
       </label><label className="field">
-        <span>Ngày kết thúc dự kiến</span>
-        <input className="input" type="date" value={form.expectedEndDate} onChange={(event) => patch({ expectedEndDate: event.target.value })} />
-      </label><label className="field">
-        <span>Ngày kết thúc thực tế</span>
-        <input className="input" type="date" value={form.actualEndDate} onChange={(event) => patch({ actualEndDate: event.target.value })} />
-      </label></div></section>
+          <span>Ngày kết thúc dự kiến</span>
+          <input className={`input ${expectedEndError ? 'has-error' : ''}`} type="date" value={form.expectedEndDate} onChange={(event) => patch({ expectedEndDate: event.target.value })} />
+          {expectedEndError ? <small className="danger-text project-field-inline-error">{expectedEndError}</small> : null}
+        </label><label className="field">
+          <span>Ngày kết thúc thực tế</span>
+          <input className={`input ${actualEndError ? 'has-error' : ''}`} type="date" value={form.actualEndDate} onChange={(event) => patch({ actualEndDate: event.target.value })} />
+          {actualEndError ? <small className="danger-text project-field-inline-error">{actualEndError}</small> : null}
+        </label></div></section>
       <section className="project-overview-section"><h3>Hiển thị</h3><div className="project-visibility-settings"><label className="project-visibility-row">
         <input type="checkbox" checked={form.isPublic} onChange={(event) => patch({ isPublic: event.target.checked })} />
         <span><strong>Công khai</strong><small>Khách không đăng nhập có thể xem dự án.</small></span>
       </label><label className="project-visibility-row">
-        <input type="checkbox" checked={form.isFeatured} onChange={(event) => patch({ isFeatured: event.target.checked })} />
-        <span><strong>Nổi bật</strong><small>Ưu tiên dự án trên giao diện công khai.</small></span>
-      </label><label className="project-visibility-row">
-        <input type="checkbox" checked={form.isRecruiting} onChange={(event) => patch({ isRecruiting: event.target.checked })} />
-        <span><strong>Tuyển thành viên</strong><small>Cho phép thành viên gửi yêu cầu tham gia dự án.</small></span>
-      </label></div></section>
+          <input type="checkbox" checked={form.isFeatured} onChange={(event) => patch({ isFeatured: event.target.checked })} />
+          <span><strong>Nổi bật</strong><small>Ưu tiên dự án trên giao diện công khai.</small></span>
+        </label><label className="project-visibility-row">
+          <input type="checkbox" checked={form.isRecruiting} onChange={(event) => patch({ isRecruiting: event.target.checked })} />
+          <span><strong>Tuyển thành viên</strong><small>Cho phép thành viên gửi yêu cầu tham gia dự án.</small></span>
+        </label></div></section>
     </div>
   )
 }

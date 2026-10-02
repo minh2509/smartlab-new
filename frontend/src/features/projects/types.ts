@@ -34,6 +34,8 @@ export type PublicProjectSummary = {
   goal: string | null
   projectType: ProjectType
   publicStatus: PublicProjectStatus
+  startDate?: string | null
+  coverUrl?: string | null
   researchFields: ProjectResearchField[]
   leaders: PublicProjectLeader[]
 }

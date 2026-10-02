@@ -1,4 +1,4 @@
-import { Award, BookOpenText, CalendarDays, CheckSquare, Files, FlaskConical, FolderKanban, Images, LogOut, Newspaper, ShieldCheck, Trophy, UserCircle, UsersRound } from 'lucide-react'
+import { Award, BookOpenText, CalendarDays, CheckSquare, Files, FlaskConical, FolderKanban, Images, LogOut, Newspaper, ShieldCheck, Tags, Trophy, UserCircle, UsersRound } from 'lucide-react'
 import { Link, NavLink, Navigate, Outlet } from 'react-router-dom'
 import { useAuth } from '../../features/auth/authContext'
 import { Logo } from '../../shared/components/Logo'
@@ -19,6 +19,9 @@ export function AdminLayout() {
 
   const workspace = resolveWorkspacePresentation(profile.roles)
   const can = (policy: readonly string[]) => hasAllPermissions(profile.permissions, policy)
+  const isAdmin = profile.roles.includes('ADMIN')
+  const canManagePublicContent = isAdmin && can(accessPolicies.content)
+  const canManagePostCategories = isAdmin && can(accessPolicies.postCategories)
 
   return (
     <div className="admin-shell">
@@ -74,24 +77,28 @@ export function AdminLayout() {
                 <UserCircle />
                 Hồ sơ thành viên
               </NavLink>}
-              {profile.roles.includes('ADMIN') && can(accessPolicies.content) && (
+              {(canManagePublicContent || canManagePostCategories) && (
                 <>
                   <span className="admin-nav-label">Nội dung</span>
-                  <NavLink to="/admin/achievements">
+                  {canManagePublicContent && <NavLink to="/admin/achievements">
                     <Trophy />
                     Thành tựu
-                  </NavLink>
-                  <NavLink to="/admin/articles">
+                  </NavLink>}
+                  {canManagePublicContent && <NavLink to="/admin/articles">
                     <BookOpenText />
                     Bài viết
-                  </NavLink>
-                  <NavLink to="/admin/news">
+                  </NavLink>}
+                  {canManagePostCategories && <NavLink to="/admin/post-categories">
+                    <Tags />
+                    Danh mục bài viết
+                  </NavLink>}
+                  {canManagePublicContent && <NavLink to="/admin/news">
                     <Newspaper />
                     Tin tức
-                  </NavLink>
+                  </NavLink>}
                 </>
               )}
-              {profile.roles.includes('ADMIN') && can(accessPolicies.gallery) && <NavLink to="/admin/gallery"><Images aria-hidden="true" />Thư viện ảnh</NavLink>}
+              {isAdmin && can(accessPolicies.gallery) && <NavLink to="/admin/gallery"><Images aria-hidden="true" />Thư viện ảnh</NavLink>}
             </nav>
 
             <button className="admin-logout-btn admin-logout-bottom" type="button" onClick={() => void logout()}>

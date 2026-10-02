@@ -1,5 +1,6 @@
 package com.smartlab.controller;
 
+import java.time.LocalDate;
 import com.smartlab.dto.request.ChangeProjectLeaderRequest;
 import com.smartlab.dto.request.ChangeProjectLeadersRequest;
 import com.smartlab.dto.request.CreateProjectRequest;
@@ -93,7 +94,7 @@ class ProjectControllerTest {
     @Test
     void listsPublicProjectsWithServerSideFiltersAndPagination() throws Exception {
         when(projectService.listPublic(
-                1, 12, "robot", 3L, "ai", ProjectType.RESEARCH, PublicProjectStatus.RECRUITING
+                1, 12, "robot", 3L, "ai", ProjectType.RESEARCH, PublicProjectStatus.RECRUITING, null
         )).thenReturn(new PublicPageResponse<>(List.of(publicSummaryResponse()), 1, 12, 13, 2));
 
         mockMvc.perform(get("/projects/public")
@@ -119,7 +120,7 @@ class ProjectControllerTest {
                 .andExpect(jsonPath("$.items[0].createdAt").doesNotExist())
                 .andExpect(jsonPath("$.items[0].updatedAt").doesNotExist());
 
-        verify(projectService).listPublic(1, 12, "robot", 3L, "ai", ProjectType.RESEARCH, PublicProjectStatus.RECRUITING);
+        verify(projectService).listPublic(1, 12, "robot", 3L, "ai", ProjectType.RESEARCH, PublicProjectStatus.RECRUITING, null);
     }
 
     @Test
@@ -470,6 +471,8 @@ class ProjectControllerTest {
                 "Public goal",
                 ProjectType.RESEARCH,
                 PublicProjectStatus.RECRUITING,
+                LocalDate.of(2026, 1, 1),
+                null,
                 List.of(),
                 List.of(leader)
         );

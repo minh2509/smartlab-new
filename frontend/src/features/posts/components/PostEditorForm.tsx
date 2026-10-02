@@ -10,10 +10,13 @@ import type {
   CreatePostRequest,
   PostDetail,
   PostContentAttachmentReference,
+  PostContentDocument,
   PostVisibility,
   UpdatePostRequest,
 } from '../types'
-import { parsePostContent, serializePostContent } from '../postContent'
+import { inlineImageFileIds, parsePostContent, serializePostContent } from '../postContent'
+import { PostPreviewDialog } from './PostPreviewDialog'
+import { RichTextEditor } from './RichTextEditor'
 
 type EditorProps = {
   token: string
@@ -29,8 +32,10 @@ export function PostEditorForm({ token, initialPost, submitting, serverError, on
   const [visibility, setVisibility] = useState<PostVisibility>(initialPost?.visibility ?? 'LAB')
   const [categoryId, setCategoryId] = useState(initialPost?.category?.id ? String(initialPost.category.id) : '')
   const [projectId, setProjectId] = useState(initialPost?.projectId ? String(initialPost.projectId) : '')
-  const initialContentBody = getContentBody(initialPost?.contentJson)
-  const [contentText, setContentText] = useState(initialContentBody ?? '')
+  const initialContent = parsePostContent(initialPost?.contentJson)
+  const [contentDocument, setContentDocument] = useState<PostContentDocument>(
+    initialContent ?? { type: 'doc', content: [] },
+  )
   const [contentEdited, setContentEdited] = useState(false)
   const [attachments, setAttachments] = useState<PostContentAttachmentReference[]>(
     () => parsePostContent(initialPost?.contentJson)?.files ?? [],
@@ -43,6 +48,7 @@ export function PostEditorForm({ token, initialPost, submitting, serverError, on
   const [referencesLoading, setReferencesLoading] = useState(true)
   const [referenceError, setReferenceError] = useState<string | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
+  const [previewOpen, setPreviewOpen] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -77,15 +83,17 @@ export function PostEditorForm({ token, initialPost, submitting, serverError, on
     () => Boolean(categoryId) && !categories.some((category) => String(category.id) === categoryId),
     [categoryId, categories],
   )
+  const previewCategoryLabel = categories.find((category) => String(category.id) === categoryId)?.name
+    ?? (selectedCategoryMissing ? initialPost?.category?.name : undefined)
+  const inlineImageIds = inlineImageFileIds(contentDocument)
+  const listedAttachments = attachments
+    .map((reference, index) => ({ reference, index }))
+    .filter(({ reference }) => reference.type !== 'image' || !inlineImageIds.has(reference.fileId))
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (submitting || uploading) return
 
-    if (!title.trim()) {
-      setFormError('Tiêu đề không được để trống.')
-      return
-    }
     if (title.length > 250) {
       setFormError('Tiêu đề tối đa 250 ký tự.')
       return
@@ -106,7 +114,7 @@ export function PostEditorForm({ token, initialPost, submitting, serverError, on
           visibility,
           categoryId,
           projectId,
-          contentText,
+          contentDocument,
           contentEdited,
           attachments,
           attachmentsEdited,
@@ -117,7 +125,7 @@ export function PostEditorForm({ token, initialPost, submitting, serverError, on
           visibility,
           categoryId,
           projectId,
-          contentText,
+          contentDocument,
           contentEdited,
           attachments,
         })
@@ -150,6 +158,29 @@ export function PostEditorForm({ token, initialPost, submitting, serverError, on
     }
   }
 
+  async function uploadInlineImage(file: File) {
+    if (uploading || submitting) throw new Error('Đang có thao tác tải tệp khác.')
+    setUploading(true)
+    setFormError(null)
+    try {
+      const uploaded = await uploadFile(token, file, 'PRIVATE', '')
+      if (!uploaded.mimeType.startsWith('image/')) throw new Error('Tệp đã chọn không phải là ảnh hợp lệ.')
+      const reference: Extract<PostContentAttachmentReference, { type: 'image' }> = {
+        type: 'image',
+        fileId: uploaded.id,
+        alt: uploaded.originalName,
+      }
+      setAttachments((current) => [...current, reference])
+      setAttachmentsEdited(true)
+      return reference
+    } catch (value) {
+      setFormError(value instanceof Error ? value.message : 'Không thể tải ảnh.')
+      throw value
+    } finally {
+      setUploading(false)
+    }
+  }
+
   function updateAttachment(index: number, value: string) {
     setAttachments((current) => current.map((reference, currentIndex) => {
       if (currentIndex !== index) return reference
@@ -169,7 +200,7 @@ export function PostEditorForm({ token, initialPost, submitting, serverError, on
     <form className="post-editor-form" onSubmit={(event) => void handleSubmit(event)}>
       <div className="post-editor-main">
         <div className="field">
-          <label htmlFor="post-title">Tiêu đề <span className="req">*</span></label>
+          <label htmlFor="post-title">Tiêu đề</label>
           <input
             id="post-title"
             className="input"
@@ -177,7 +208,6 @@ export function PostEditorForm({ token, initialPost, submitting, serverError, on
             onChange={(event) => setTitle(event.target.value)}
             maxLength={250}
             disabled={busy}
-            required
           />
           <span className="hint">{title.length}/250 ký tự</span>
         </div>
@@ -196,25 +226,30 @@ export function PostEditorForm({ token, initialPost, submitting, serverError, on
           <span className="hint">{excerpt.length}/500 ký tự</span>
         </div>
 
-        <div className="field">
+        <div className="field post-content-editor-field">
           <label htmlFor="post-content">Nội dung bài viết</label>
-          <textarea
-            id="post-content"
-            className="textarea post-content-editor"
-            value={contentText}
-            onChange={(event) => {
-              if (event.target.value !== contentText) setContentEdited(true)
-              setContentText(event.target.value)
-            }}
+          <RichTextEditor
+            token={token}
+            value={contentDocument}
             disabled={busy}
-            aria-describedby="post-content-help"
-            placeholder="Viết nội dung bài viết..."
-            rows={12}
+            onChange={(nextDocument) => {
+              const previousInlineImageIds = inlineImageFileIds(contentDocument)
+              const nextInlineImageIds = inlineImageFileIds(nextDocument)
+              if ([...previousInlineImageIds].some((fileId) => !nextInlineImageIds.has(fileId))) {
+                setAttachments((current) => current.filter((reference) => (
+                  reference.type !== 'image'
+                  || !previousInlineImageIds.has(reference.fileId)
+                  || nextInlineImageIds.has(reference.fileId)
+                )))
+                setAttachmentsEdited(true)
+              }
+              setContentDocument(nextDocument)
+              setContentEdited(true)
+            }}
+            onImageUpload={uploadInlineImage}
+            onPreviewRequest={() => setPreviewOpen(true)}
           />
-          <span className="hint" id="post-content-help">
-            Bạn có thể xuống dòng để trình bày nội dung rõ ràng hơn.
-          </span>
-          {initialPost && initialContentBody === null ? (
+          {initialPost && initialContent === null ? (
             <p className="post-content-legacy-note">
               Nội dung hiện có chưa thể chỉnh sửa bằng trình soạn thảo này. Chỉ nhập nội dung mới khi bạn muốn thay thế nội dung hiện tại.
             </p>
@@ -224,8 +259,8 @@ export function PostEditorForm({ token, initialPost, submitting, serverError, on
         <section className="post-editor-attachments" aria-labelledby="post-attachments-title">
           <div className="post-editor-attachments-head">
             <div>
-              <h2 id="post-attachments-title">Ảnh / tệp đính kèm</h2>
-              <p>Tệp được lưu riêng tư; quyền xem được xác định bởi bài viết sau khi lưu.</p>
+              <h2 id="post-attachments-title">Tệp đính kèm</h2>
+              <p>Ảnh chèn từ thanh công cụ nằm ngay trong nội dung; khu vực này dành cho tệp đính kèm riêng.</p>
             </div>
             <input
               ref={attachmentInputRef}
@@ -239,8 +274,8 @@ export function PostEditorForm({ token, initialPost, submitting, serverError, on
               <Upload aria-hidden="true" /> {uploading ? 'Đang tải tệp...' : 'Thêm tệp'}
             </button>
           </div>
-          {attachments.length ? <div className="post-editor-attachment-list">
-            {attachments.map((reference, index) => <div className="post-editor-attachment" key={`${reference.type}-${reference.fileId}`}>
+          {listedAttachments.length ? <div className="post-editor-attachment-list">
+            {listedAttachments.map(({ reference, index }) => <div className="post-editor-attachment" key={`${reference.type}-${reference.fileId}`}>
               <Paperclip aria-hidden="true" />
               <span className="post-editor-attachment-type">{reference.type === 'image' ? 'Ảnh' : 'Tệp'} · #{reference.fileId}</span>
               <input
@@ -255,7 +290,7 @@ export function PostEditorForm({ token, initialPost, submitting, serverError, on
                 <Trash2 aria-hidden="true" />
               </button>
             </div>)}
-          </div> : <p className="post-editor-attachment-empty">Chưa có ảnh hoặc tệp đính kèm.</p>}
+          </div> : <p className="post-editor-attachment-empty">Chưa có tệp đính kèm riêng.</p>}
         </section>
       </div>
 
@@ -332,9 +367,19 @@ export function PostEditorForm({ token, initialPost, submitting, serverError, on
 
         <button className="btn primary post-editor-submit" type="submit" disabled={busy || referencesLoading}>
           <Save aria-hidden="true" />
-          {uploading ? 'Đang tải tệp...' : submitting ? 'Đang lưu...' : initialPost ? 'Lưu thay đổi' : 'Tạo bài viết'}
+          {uploading ? 'Đang tải tệp...' : submitting ? 'Đang lưu...' : initialPost ? 'Lưu thay đổi' : 'Lưu nháp'}
         </button>
       </aside>
+      {previewOpen ? <PostPreviewDialog
+        token={token}
+        title={title}
+        excerpt={excerpt}
+        visibility={visibility}
+        categoryLabel={previewCategoryLabel}
+        contentDocument={contentDocument}
+        attachments={attachments}
+        onClose={() => setPreviewOpen(false)}
+      /> : null}
     </form>
   )
 }
@@ -345,7 +390,7 @@ type EditorValues = {
   visibility: PostVisibility
   categoryId: string
   projectId: string
-  contentText: string
+  contentDocument: PostContentDocument
   contentEdited: boolean
   attachments: PostContentAttachmentReference[]
   attachmentsEdited?: boolean
@@ -354,7 +399,7 @@ type EditorValues = {
 function buildCreateRequest(values: EditorValues): CreatePostRequest {
   const request: CreatePostRequest = {
     title: values.title,
-    contentJson: serializePostContent(values.contentText, values.attachments),
+    contentJson: serializePostContent(values.contentDocument, values.attachments),
     visibility: values.visibility,
   }
   if (values.excerpt) request.excerpt = values.excerpt
@@ -375,13 +420,8 @@ function buildUpdateRequest(initial: PostDetail, values: EditorValues): UpdatePo
   const nextProjectId = values.visibility === 'PROJECT' ? Number(values.projectId) : null
   if (nextProjectId !== initial.projectId) request.projectId = nextProjectId
 
-  const initialContentBody = getContentBody(initial.contentJson)
-  if (initialContentBody !== null ? values.contentText !== initialContentBody || values.attachmentsEdited : values.contentEdited || values.attachmentsEdited) {
-    request.contentJson = serializePostContent(values.contentText, values.attachments)
+  if (values.contentEdited || values.attachmentsEdited) {
+    request.contentJson = serializePostContent(values.contentDocument, values.attachments)
   }
   return request
-}
-
-function getContentBody(contentJson: Record<string, unknown> | undefined): string | null {
-  return typeof contentJson?.body === 'string' ? contentJson.body : null
 }

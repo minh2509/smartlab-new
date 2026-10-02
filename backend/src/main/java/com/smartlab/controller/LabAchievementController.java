@@ -6,6 +6,7 @@ import com.smartlab.dto.response.AchievementYearCountResponse;
 import com.smartlab.dto.response.AdminLabAchievementResponse;
 import com.smartlab.dto.response.LabAchievementResponse;
 import com.smartlab.dto.response.LabAchievementFileResponse;
+import com.smartlab.dto.response.PublicLabAchievementDetailResponse;
 import com.smartlab.dto.response.PublicPageResponse;
 import com.smartlab.enums.AchievementType;
 import com.smartlab.service.LabAchievementService;
@@ -39,6 +40,16 @@ import org.springframework.security.core.Authentication;
 @RequiredArgsConstructor
 public class LabAchievementController {
     private final LabAchievementService achievementService;
+
+    @GetMapping("/achievements/{id}")
+    public PublicLabAchievementDetailResponse getPublicDetail(@PathVariable Long id) {
+        return achievementService.getPublicDetail(id);
+    }
+
+    @GetMapping("/achievements/{id}/files")
+    public List<LabAchievementFileResponse> listPublicFiles(@PathVariable Long id) {
+        return achievementService.listPublicFiles(id);
+    }
 
     @GetMapping("/achievements")
     public PublicPageResponse<LabAchievementResponse> list(

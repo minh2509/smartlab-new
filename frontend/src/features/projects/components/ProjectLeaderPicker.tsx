@@ -8,6 +8,7 @@ type ProjectLeaderPickerProps = {
   token: string
   leaders: ProjectLeaderCandidate[]
   primaryLeaderUserId: string | null
+  canRemoveLeaders?: boolean
   disabled?: boolean
   onLeadersChange: (leaders: ProjectLeaderCandidate[]) => void
   onPrimaryLeaderChange: (userId: string | null) => void
@@ -21,6 +22,7 @@ export function ProjectLeaderPicker({
   token,
   leaders,
   primaryLeaderUserId,
+  canRemoveLeaders = true,
   disabled = false,
   onLeadersChange,
   onPrimaryLeaderChange,
@@ -92,7 +94,7 @@ export function ProjectLeaderPicker({
   return (
     <div className="form-stack project-leader-picker">
       <div className="field project-leader-search">
-        <label htmlFor={`${idPrefix}-search`}>Tìm thành viên</label>
+        <label htmlFor={`${idPrefix}-search`}>Thêm leader cho dự án</label>
         <div className="searchbar">
           <Search aria-hidden="true" />
           <input
@@ -106,12 +108,12 @@ export function ProjectLeaderPicker({
             onKeyDown={(event) => {
               if (event.key === 'Enter') event.preventDefault()
             }}
-            placeholder="Nhập tên hoặc email..."
+            placeholder="Nhập tên hoặc email leader để thêm..."
             aria-describedby={`${idPrefix}-search-help`}
           />
         </div>
         <small className="muted" id={`${idPrefix}-search-help`}>
-          Nhập ít nhất {MIN_SEARCH_LENGTH} ký tự; hệ thống sẽ tự xử lý mã thành viên.
+          Nhập ít nhất {MIN_SEARCH_LENGTH} ký tự tên hoặc email của leader.
         </small>
       </div>
 
@@ -122,13 +124,13 @@ export function ProjectLeaderPicker({
       ) : null}
 
       <div aria-live="polite" aria-atomic="true">
-        {searching ? <p className="muted small" role="status">Đang tìm thành viên...</p> : null}
+        {searching ? <p className="muted small" role="status">Đang tìm leader...</p> : null}
         {searchError ? <p className="danger-text small" role="alert">{searchError}</p> : null}
         {!searching && !searchError && normalizedQuery.length >= MIN_SEARCH_LENGTH && candidates.length === 0 ? (
-          <p className="muted small">Không tìm thấy thành viên phù hợp.</p>
+          <p className="muted small">Không tìm thấy tài khoản phù hợp để thêm làm leader.</p>
         ) : null}
         {!searching && !searchError && candidates.length > 0 && visibleCandidates.length === 0 ? (
-          <p className="muted small">Tất cả thành viên tìm thấy đã có trong nhóm leader.</p>
+          <p className="muted small">Tất cả tài khoản tìm thấy đã nằm trong nhóm leader.</p>
         ) : null}
       </div>
 
@@ -173,6 +175,13 @@ export function ProjectLeaderPicker({
 
           {leaders.map((leader) => {
             const isPrimary = primaryLeaderUserId === leader.userId
+            const cannotRemove = !canRemoveLeaders || isPrimary
+            const removeTooltip = isPrimary
+              ? 'Leader chính không thể bị gỡ khỏi dự án'
+              : !canRemoveLeaders
+                ? 'Chỉ Admin mới có quyền gỡ leader'
+                : `Gỡ ${leader.name}`
+
             return (
               <div className="project-leader-row" key={leader.userId}>
                 <label className="project-leader-choice">
@@ -189,16 +198,18 @@ export function ProjectLeaderPicker({
                   </span>
                   {isPrimary ? <strong className="project-leader-primary-label">Leader chính</strong> : null}
                 </label>
-                <button
-                  className="btn ghost table-btn danger-text project-leader-remove"
-                  type="button"
-                  disabled={disabled}
-                  onClick={() => removeLeader(leader.userId)}
-                  title={`Gỡ ${leader.name}`}
-                  aria-label={`Gỡ ${leader.name} khỏi nhóm leader`}
-                >
-                  <Trash2 aria-hidden="true" /> <span>Gỡ</span>
-                </button>
+                {canRemoveLeaders && !isPrimary ? (
+                  <button
+                    className="btn ghost table-btn danger-text project-leader-remove"
+                    type="button"
+                    disabled={disabled || cannotRemove}
+                    onClick={() => removeLeader(leader.userId)}
+                    title={removeTooltip}
+                    aria-label={`Gỡ ${leader.name} khỏi nhóm leader`}
+                  >
+                    <Trash2 aria-hidden="true" /> <span>Gỡ</span>
+                  </button>
+                ) : null}
               </div>
             )
           })}

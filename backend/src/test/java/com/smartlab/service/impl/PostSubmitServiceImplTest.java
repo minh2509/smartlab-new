@@ -29,6 +29,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -92,7 +93,7 @@ class PostSubmitServiceImplTest {
         verify(postRepository, never()).save(any(PostEntity.class));
         verify(postRepository, never()).findOwnedActiveByIdAndStatus(any(), any(), any());
         verify(postRepository, never()).findActiveById(any());
-        verifyNoInteractions(contentCategoryRepository, postSlugGenerator, postCreateAttemptService, notificationService);
+        verifyNoInteractions(postSlugGenerator, postCreateAttemptService, notificationService);
     }
 
     @Test
@@ -135,6 +136,25 @@ class PostSubmitServiceImplTest {
                         post.getUpdatedAt()
                 );
         assertThat(snapshot(post)).isEqualTo(before.withStatusAndUpdatedAt(PostStatus.PENDING_REVIEW, post.getUpdatedAt()));
+    }
+
+    @Test
+    void incompleteDraftStaysEditableButCannotBeSubmitted() {
+        PostEntity post = draft();
+        post.applyDraftUpdate(
+                "",
+                null,
+                Map.of("type", "doc", "content", List.of()),
+                PostVisibility.LAB,
+                null,
+                Instant.now()
+        );
+        activeOwner();
+        when(postRepository.findActiveByIdForUpdate(POST_ID)).thenReturn(Optional.of(post));
+
+        assertStatus(HttpStatus.BAD_REQUEST, () -> postService.submitForReview(OWNER_EMAIL, POST_ID));
+
+        assertThat(post.getStatus()).isEqualTo(PostStatus.DRAFT);
     }
 
     @Test
@@ -241,7 +261,7 @@ class PostSubmitServiceImplTest {
                 "Original excerpt",
                 new LinkedHashMap<>(Map.of("type", "doc", "body", "Original body")),
                 PostVisibility.LAB,
-                null,
+                1L,
                 Instant.parse("2026-08-01T10:00:00Z")
         );
         try {

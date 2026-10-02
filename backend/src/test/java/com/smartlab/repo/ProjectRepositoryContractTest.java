@@ -47,6 +47,7 @@ class ProjectRepositoryContractTest {
                 java.util.List.class,
                 Long.class,
                 String.class,
+                Integer.class,
                 org.springframework.data.domain.Pageable.class
         );
         String query = method.getAnnotation(Query.class).value();
@@ -62,6 +63,7 @@ class ProjectRepositoryContractTest {
                 ":recruitableStatuses",
                 ":researchFieldId is null",
                 ":researchFieldCode = ''",
+                ":year is null",
                 "order by p.createdAt desc, p.id desc"
         );
         assertThat(query).doesNotContain(":query is null", ":researchFieldCode is null");

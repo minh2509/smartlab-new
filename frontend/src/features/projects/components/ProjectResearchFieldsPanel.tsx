@@ -179,15 +179,17 @@ export function ProjectResearchFieldsPanel({ project, onDirtyChange }: ProjectRe
           ) : null}
 
           {canManage ? (
-            <div className="form-actions" style={{ marginTop: 16 }}>
-              <button className="btn primary" type="button" disabled={!dirty || saving} onClick={() => void handleSave()}>
-                <Save /> {saving ? 'Đang lưu...' : 'Lưu lĩnh vực'}
-              </button>
-              <button className="btn ghost" type="button" disabled={!dirty || saving} onClick={resetDraft}>
-                <RotateCcw /> Hoàn tác
-              </button>
-              <span className="muted small">Có thể bỏ chọn tất cả để xóa toàn bộ liên kết.</span>
-            </div>
+            dirty ? (
+              <div className="form-actions" style={{ marginTop: 16 }}>
+                <button className="btn primary" type="button" disabled={saving} onClick={() => void handleSave()}>
+                  <Save /> {saving ? 'Đang lưu...' : 'Lưu lĩnh vực'}
+                </button>
+                <button className="btn ghost" type="button" disabled={saving} onClick={resetDraft}>
+                  <RotateCcw /> Hoàn tác
+                </button>
+                <span className="muted small">Có thể bỏ chọn tất cả để xóa toàn bộ liên kết.</span>
+              </div>
+            ) : null
           ) : (
             <p className="muted small" style={{ marginTop: 16 }}>
               Chỉ Admin hoặc leader đang hoạt động của dự án có thể thay đổi lĩnh vực.

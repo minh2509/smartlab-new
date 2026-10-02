@@ -7,6 +7,10 @@ export function listLatestNews(limit = 3): Promise<LabNewsArticle[]> {
   return apiClient<LabNewsArticle[]>(`/news${toQuery({ limit })}`)
 }
 
+export function getNews(id: number): Promise<LabNewsArticle> {
+  return apiClient<LabNewsArticle>(`/news/${id}`)
+}
+
 export type NewsArchiveOptions = {
   q?: string
   source?: string

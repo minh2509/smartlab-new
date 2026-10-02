@@ -8,5 +8,11 @@ import java.util.List;
 public interface ContentCategoryService {
     List<ContentCategoryResponse> getActiveCategories();
 
+    List<ContentCategoryResponse> getAllCategories();
+
     ContentCategoryResponse createCategory(CreateContentCategoryRequest request);
+
+    ContentCategoryResponse setCategoryActive(Long id, boolean active);
+
+    void deleteCategory(Long id);
 }

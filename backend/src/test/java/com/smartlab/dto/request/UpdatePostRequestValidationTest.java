@@ -34,11 +34,11 @@ class UpdatePostRequestValidationTest {
     }
 
     @Test
-    void rejectsExplicitNullTitle() throws JacksonException {
+    void acceptsExplicitNullTitleToClearDraftTitle() throws JacksonException {
         UpdatePostRequest request = read("{\"title\":null}");
 
         assertThat(request.hasTitle()).isTrue();
-        assertInvalid(request);
+        assertValid(request);
     }
 
     @Test
@@ -51,8 +51,8 @@ class UpdatePostRequestValidationTest {
     }
 
     @Test
-    void rejectsBlankTitle() throws JacksonException {
-        assertInvalid(read("{\"title\":\" \\t \"}"));
+    void acceptsBlankTitleForDraft() throws JacksonException {
+        assertValid(read("{\"title\":\" \\t \"}"));
     }
 
     @Test

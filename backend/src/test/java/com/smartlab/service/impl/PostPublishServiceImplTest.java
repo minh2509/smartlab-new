@@ -94,7 +94,6 @@ class PostPublishServiceImplTest {
         verify(postRepository, never()).findOwnedActiveByIdAndStatus(any(), any(), any());
         verifyNoInteractions(
                 postReviewRepository,
-                contentCategoryRepository,
                 postSlugGenerator,
                 postCreateAttemptService,
                 notificationService
@@ -226,9 +225,9 @@ class PostPublishServiceImplTest {
                 "Original title",
                 "immutable-slug",
                 "Original excerpt",
-                Map.of("type", "doc"),
+                Map.of("type", "doc", "body", "Original body"),
                 PostVisibility.LAB,
-                null,
+                1L,
                 CREATED_AT
         );
         setId(post);
@@ -255,6 +254,7 @@ class PostPublishServiceImplTest {
             setStatus(post, PostStatus.APPROVED);
         } else {
             post.applyReviewDecision(com.smartlab.enums.ReviewDecision.APPROVED, CREATED_AT.plusSeconds(2));
+            post.publish(CREATED_AT.plusSeconds(3));
         }
         return post;
     }

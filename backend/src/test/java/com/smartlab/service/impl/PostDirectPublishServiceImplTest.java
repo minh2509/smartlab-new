@@ -106,7 +106,6 @@ class PostDirectPublishServiceImplTest {
         verify(postRepository, never()).findOwnedActiveByIdAndStatus(any(), any(), any());
         verifyNoInteractions(
                 postReviewRepository,
-                contentCategoryRepository,
                 postSlugGenerator,
                 postCreateAttemptService
         );
@@ -332,7 +331,7 @@ class PostDirectPublishServiceImplTest {
                 "Original excerpt",
                 new LinkedHashMap<>(Map.of("type", "doc", "body", "Original body")),
                 PostVisibility.LAB,
-                null,
+                1L,
                 Instant.parse("2026-08-01T10:00:00Z")
         );
         try {
@@ -383,6 +382,7 @@ class PostDirectPublishServiceImplTest {
             setStatus(post, PostStatus.APPROVED);
         } else {
             post.applyReviewDecision(ReviewDecision.APPROVED, createdAt.plusSeconds(2));
+            post.publish(createdAt.plusSeconds(3));
         }
         return post;
     }

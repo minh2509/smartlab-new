@@ -23,11 +23,19 @@ export function PopupSelect({ value, options, onChange, ariaLabel, disabled = fa
   const [activeIndex, setActiveIndex] = useState(() => Math.max(0, options.findIndex((option) => option.value === value)))
   const [position, setPosition] = useState({ top: 0, left: 0, width: 0, maxHeight: 280 })
   const selected = options.find((option) => option.value === value) ?? options[0]
-  const portalTarget = useOverlayPortalTarget()
+  const portalTargetFromStore = useOverlayPortalTarget()
+
+  const getTarget = useCallback(() => {
+    if (portalTargetFromStore) return portalTargetFromStore
+    const dialog = triggerRef.current?.closest('dialog')
+    return dialog ?? document.body
+  }, [portalTargetFromStore])
 
   const updatePosition = useCallback(() => {
-    const rect = triggerRef.current?.getBoundingClientRect()
-    if (!rect) return
+    const trigger = triggerRef.current
+    if (!trigger) return
+    const rect = trigger.getBoundingClientRect()
+
     const margin = 12
     const desiredHeight = Math.min(280, Math.max(120, options.length * 48 + 16))
     const below = window.innerHeight - rect.bottom - margin
@@ -35,8 +43,15 @@ export function PopupSelect({ value, options, onChange, ariaLabel, disabled = fa
     const opensUpward = below < Math.min(desiredHeight, 180) && above > below
     const maxHeight = Math.max(96, Math.min(desiredHeight, opensUpward ? above : below))
     const width = Math.min(Math.max(rect.width, 280), window.innerWidth - margin * 2)
-    const left = Math.min(Math.max(margin, rect.left), window.innerWidth - width - margin)
-    setPosition({ top: opensUpward ? Math.max(margin, rect.top - maxHeight - 6) : rect.bottom + 6, left, width, maxHeight })
+    const leftViewport = Math.min(Math.max(margin, rect.left), window.innerWidth - width - margin)
+    const topViewport = opensUpward ? Math.max(margin, rect.top - maxHeight - 6) : rect.bottom + 6
+
+    setPosition({
+      top: topViewport,
+      left: leftViewport,
+      width,
+      maxHeight,
+    })
   }, [options.length])
 
   useEffect(() => {
@@ -105,7 +120,7 @@ export function PopupSelect({ value, options, onChange, ariaLabel, disabled = fa
         {options.map((option, index) => <button key={option.value} className={`popup-select-option ${index === activeIndex ? 'is-active' : ''}`} type="button" role="option" aria-selected={option.value === value} onMouseMove={() => setActiveIndex(index)} onClick={() => choose(index)} title={option.label}>
           <span><strong>{option.label}</strong>{option.description ? <small>{option.description}</small> : null}</span>{option.value === value ? <Check size={15} aria-hidden="true" /> : null}
         </button>)}
-      </div>, portalTarget ?? document.body,
+      </div>, getTarget(),
     )}
   </>
 }

@@ -21,6 +21,8 @@ database:
 13. `sql/013_bulk_account_invitations.sql`
 14. `sql/014_email_template_copy_refresh.sql`
 15. `sql/015_gallery_permission_repair.sql`
+16. `sql/016_content_category_description_seed.sql`
+17. `sql/017_seed_100_projects.sql`
 
 These are manual, operator-executed SQL migrations. The repository does not
 contain Flyway, Liquibase, or another automatic numbered migration runner.
@@ -32,7 +34,7 @@ passwords in shell history, command output, tickets, or documentation.
 
 ## Fresh bootstrap and current-lineage upgrades
 
-On an empty database, apply `001` through `015` in numeric order. `001` creates
+On an empty database, apply `001` through `017` in numeric order. `001` creates
 the current backend schema, roles, permissions, and foundational seed data;
 `002` adds the social-feed reaction and comment tables. Both scripts are
 designed to be re-run safely for the current `001`/`002` lineage.
@@ -62,6 +64,9 @@ The later migrations extend that foundation:
 - `015` idempotently provisions the `GALLERY_MANAGE` permission and grants it
   to `ADMIN`. It repairs installations where the Gallery schema exists but the
   `GALLERY_MANAGE` permission/mapping is absent.
+- `016` adds the content-category description required by the backend entity
+  and repairs missing descriptions on the canonical category seed.
+- `017` adds the project cover URL and provisions the local sample projects.
 
 ### Migration 010 prerequisite and lineage decision
 
@@ -177,7 +182,7 @@ objects in `public` are not included.
 ## Verification workflow
 
 Use a new disposable PostgreSQL database for a migration rehearsal. Apply the
-approved `001` through `014` fresh-install sequence, then inspect the resulting
+approved `001` through `017` fresh-install sequence, then inspect the resulting
 schema, enum checks, role seed, permission count, role-permission count, grants,
 and affected endpoint health. Re-run only migrations whose source explicitly
 documents idempotent behavior. Do not point a rehearsal at an existing

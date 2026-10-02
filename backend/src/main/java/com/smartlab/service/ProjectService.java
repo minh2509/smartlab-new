@@ -27,8 +27,11 @@ public interface ProjectService {
             Long researchFieldId,
             String researchFieldCode,
             ProjectType projectType,
-            PublicProjectStatus status
+            PublicProjectStatus status,
+            Integer year
     );
+
+    List<Integer> listPublicYears();
 
     ProjectResponse get(Long projectId, String currentEmail);
 

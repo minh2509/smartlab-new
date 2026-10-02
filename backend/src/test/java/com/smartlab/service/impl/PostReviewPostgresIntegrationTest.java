@@ -157,13 +157,8 @@ class PostReviewPostgresIntegrationTest {
         assertThat(persisted.decision()).isEqualTo(reviewCase.decision());
         assertThat(persisted.reason()).isEqualTo(reviewCase.reason());
         assertThat(persisted.postUpdatedAt()).isEqualTo(persisted.reviewCreatedAt());
-        if (reviewCase.decision() == ReviewDecision.APPROVED) {
-            assertThat(persisted.postPublishedAt()).isEqualTo(persisted.reviewCreatedAt());
-            assertThat(response.getPublishedAt()).isEqualTo(persisted.reviewCreatedAt());
-        } else {
-            assertThat(persisted.postPublishedAt()).isNull();
-            assertThat(response.getPublishedAt()).isNull();
-        }
+        assertThat(persisted.postPublishedAt()).isNull();
+        assertThat(response.getPublishedAt()).isNull();
     }
 
     @Test
@@ -308,7 +303,7 @@ class PostReviewPostgresIntegrationTest {
                 new SuccessfulReviewCase(
                         "approved",
                         ReviewDecision.APPROVED,
-                        PostStatus.PUBLISHED,
+                        PostStatus.APPROVED,
                         "  approved evidence  "
                 ),
                 new SuccessfulReviewCase(

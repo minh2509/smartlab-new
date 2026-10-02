@@ -71,7 +71,7 @@
   /* Hình học */
   --r-xs: 4px;  --r-sm: 8px;  --r: 12px;  --r-lg: 16px;  --r-xl: 24px;
   --maxw: 1200px;
-  --nav-h: 70px;
+  --nav-h: 75px;
 
   /* Chữ */
   --font: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -259,18 +259,29 @@ a.card:hover, .card.hover:hover {
 }
 .nav-in { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; height: var(--nav-h); display: flex; align-items: center; gap: 18px; }
 
+.public-nav {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+}
+
 .logo { display: flex; align-items: center; gap: 11px; flex: none; }
 .logo:hover { text-decoration: none; }
-.logo-mark { width: 40px; height: 40px; flex: none; }
+.logo-mark { width: 48px; height: 48px; flex: none; }
 .logo-txt { display: flex; flex-direction: column; line-height: 1.1; }
-.logo-txt b { font-size: 17.5px; font-weight: 800; letter-spacing: -.02em; color: var(--brand-1); }
+.logo-txt b { font-size: 20px; font-weight: 800; letter-spacing: -.02em; color: var(--brand-1); }
 .logo-txt small { font-size: 10px; font-weight: 600; letter-spacing: .1em; color: var(--text-3); margin-top: 2px; }
+.logo img {
+  width: 230px;
+  height: auto;
+}
 
 .menu { display: flex; align-items: center; gap: 4px; margin-left: auto; }
 .menu > li { list-style: none; position: relative; }
 .menu > li > a {
   display: flex; align-items: center; gap: 5px; padding: 8px 14px; border-radius: var(--r-sm);
-  font-size: 14px; font-weight: 600; color: var(--text-2); white-space: nowrap;
+  font-size: 15.7px; font-weight: 600; color: var(--text-2); white-space: nowrap;
+  padding: 10px 16px;
   transition: color .15s ease, background-color .15s ease;
 }
 .menu > li > a:hover { background: var(--surface-2); color: var(--brand-1); text-decoration: none; }
@@ -344,6 +355,18 @@ a.card:hover, .card.hover:hover {
 .pagehead > .wrap { position: relative; z-index: 1; }
 .pagehead h1 { color: #fff; font-size: clamp(28px, 3.8vw, 42px); font-weight: 800; letter-spacing: -.03em; line-height: 1.18; }
 .pagehead p { color: rgba(255, 255, 255, 0.78); margin-top: 14px; max-width: 64ch; font-size: 16px; line-height: 1.62; }
+
+/* Giữ cụm (...) nguyên vẹn khi xuống dòng, không bị ngắt đôi */
+.title-cluster {
+  display: inline-block;
+  white-space: nowrap;
+  max-width: 100%;
+}
+@media (max-width: 480px) {
+  .title-cluster {
+    white-space: normal;
+  }
+}
 
 .crumb { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; margin-bottom: 18px; color: rgba(255, 255, 255, 0.68); }
 .crumb a { color: rgba(255, 255, 255, 0.82); text-decoration: none; transition: color 0.15s ease; font-weight: 550; }

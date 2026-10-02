@@ -1,29 +1,10 @@
 package com.smartlab.controller;
 
-import com.smartlab.config.OpenApiConfig;
-import com.smartlab.entity.UserEntity;
-import com.smartlab.dto.request.AuthRequest;
-import com.smartlab.dto.request.RefreshTokenRequest;
-import com.smartlab.dto.response.AuthResponse;
-import com.smartlab.dto.request.ResetPasswordRequest;
-import com.smartlab.dto.request.VerifyResetOtpRequest;
-import com.smartlab.dto.response.ErrorResponse;
-import com.smartlab.repo.UserRepository;
-import com.smartlab.service.PasswordResetService;
-import com.smartlab.service.AppUserDetailService;
-import com.smartlab.service.UserSessionService;
-import com.smartlab.util.JwtUtil;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.Schema;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
-import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.HashMap;
+import java.util.Map;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -42,10 +23,31 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.time.Duration;
-import java.time.Instant;
-import java.util.HashMap;
-import java.util.Map;
+import com.smartlab.config.OpenApiConfig;
+import com.smartlab.dto.request.AuthRequest;
+import com.smartlab.dto.request.RefreshTokenRequest;
+import com.smartlab.dto.request.ResetPasswordRequest;
+import com.smartlab.dto.request.VerifyResetOtpRequest;
+import com.smartlab.dto.response.AuthResponse;
+import com.smartlab.dto.response.ErrorResponse;
+import com.smartlab.entity.UserEntity;
+import com.smartlab.repo.UserRepository;
+import com.smartlab.service.AppUserDetailService;
+import com.smartlab.service.PasswordResetService;
+import com.smartlab.service.UserSessionService;
+import com.smartlab.util.JwtUtil;
+
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 
 @RestController
 @RequiredArgsConstructor
@@ -99,6 +101,7 @@ public class AuthController {
         } catch (DisabledException e) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error("User or assigned role is disabled"));
         } catch (Exception e) {
+            e.printStackTrace();
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error("Authentication Failed"));
         }
     }

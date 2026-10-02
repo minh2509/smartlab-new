@@ -96,7 +96,7 @@ class PostWorkflowControllerTest {
     @Test
     void workflowPostMappingsReturnOkAndSerializeCanonicalServiceResponses() throws Exception {
         when(postService.submitForReview(EMAIL, POST_ID)).thenReturn(response(PostStatus.PENDING_REVIEW));
-        when(postService.reviewPost(any(), any(), any())).thenReturn(response(PostStatus.PUBLISHED));
+        when(postService.reviewPost(any(), any(), any())).thenReturn(response(PostStatus.APPROVED));
         when(postService.publishPost(EMAIL, POST_ID)).thenReturn(response(PostStatus.PUBLISHED));
 
         mockMvc.perform(post("/posts/{id}/submit", POST_ID).principal(authentication()))
@@ -107,7 +107,7 @@ class PostWorkflowControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"decision\":\"APPROVED\",\"reason\":\"ready\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("PUBLISHED"));
+                .andExpect(jsonPath("$.status").value("APPROVED"));
         mockMvc.perform(post("/posts/{id}/publish", POST_ID).principal(authentication()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("PUBLISHED"));

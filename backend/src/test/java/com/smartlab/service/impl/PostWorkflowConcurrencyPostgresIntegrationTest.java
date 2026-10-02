@@ -127,7 +127,7 @@ class PostWorkflowConcurrencyPostgresIntegrationTest {
                 reviewerA,
                 ReviewDecision.APPROVED,
                 "  concurrency approval  ",
-                PostStatus.PUBLISHED
+                PostStatus.APPROVED
         );
         ReviewAttempt rejected = new ReviewAttempt(
                 reviewerB,

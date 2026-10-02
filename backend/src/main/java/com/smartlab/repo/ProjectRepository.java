@@ -59,6 +59,7 @@ public interface ProjectRepository extends JpaRepository<ProjectEntity, Long> {
               and p.status in :statuses
               and (:recruitingOnly = false or (coalesce(p.isRecruiting, false) = true and p.status in :recruitableStatuses))
               and (:excludeEffectiveRecruiting = false or not (coalesce(p.isRecruiting, false) = true and p.status in :recruitableStatuses))
+              and (:year is null or year(coalesce(p.startDate, p.createdAt)) = :year)
               and (
                 :researchFieldId is null
                 or exists (
@@ -88,8 +89,18 @@ public interface ProjectRepository extends JpaRepository<ProjectEntity, Long> {
             @Param("recruitableStatuses") List<ProjectStatus> recruitableStatuses,
             @Param("researchFieldId") Long researchFieldId,
             @Param("researchFieldCode") String researchFieldCode,
+            @Param("year") Integer year,
             Pageable pageable
     );
+
+    @Query("""
+            select distinct year(coalesce(p.startDate, p.createdAt))
+            from ProjectEntity p
+            where p.deletedAt is null
+              and p.isPublic = true
+            order by year(coalesce(p.startDate, p.createdAt)) desc
+            """)
+    List<Integer> findPublicYears();
 
     boolean existsByCodeIgnoreCase(String code);
 
