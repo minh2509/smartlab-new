@@ -1,7 +1,6 @@
-import { ArrowLeft, Calendar, ChevronRight, AlertCircle, RotateCcw, ExternalLink } from 'lucide-react'
+import { ArrowLeft, Calendar, ChevronRight, AlertCircle, ExternalLink } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { PublicPageHead } from '../components/PublicPageHead'
 import { getNews } from '../newsApi'
 import type { LabNewsArticle } from '../newsTypes'
 import '../landing.css'

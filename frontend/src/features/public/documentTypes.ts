@@ -4,6 +4,15 @@ export type PublicDocumentFileType = (typeof PUBLIC_DOCUMENT_FILE_TYPES)[number]
 export const PUBLIC_DOCUMENT_SORTS = ['LATEST', 'OLDEST', 'TITLE_ASC', 'TITLE_DESC'] as const
 export type PublicDocumentSort = (typeof PUBLIC_DOCUMENT_SORTS)[number]
 
+export type PublicDocumentCategory = {
+  id: number
+  code: string
+  name: string
+  description: string | null
+  displayOrder: number
+  documentCount: number
+}
+
 export type PublicDocumentSummary = {
   id: number
   title: string
@@ -11,6 +20,9 @@ export type PublicDocumentSummary = {
   projectId: number
   projectCode: string
   projectName: string
+  categoryId?: number | null
+  categoryCode?: string | null
+  categoryName?: string | null
   currentFileId: number
   originalFileName: string
   mimeType: string

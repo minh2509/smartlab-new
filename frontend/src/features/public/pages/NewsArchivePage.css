@@ -1,6 +1,6 @@
 /* News Archive Page */
 .news-archive-section {
-  padding: 56px 0 72px;
+  padding: 36px 0 72px;
 }
 
 .news-archive-header {
@@ -106,10 +106,26 @@
   padding: 0 24px;
 }
 
+.news-archive-results-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
 .news-archive-summary {
-  margin-bottom: 16px;
+  margin: 0;
   color: var(--text-2);
   font-size: 14px;
+  font-weight: 600;
+}
+
+.news-archive-results-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .news-archive-refreshing {

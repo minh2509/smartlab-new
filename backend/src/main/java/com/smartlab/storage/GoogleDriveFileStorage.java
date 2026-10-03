@@ -111,21 +111,31 @@ public class GoogleDriveFileStorage implements FileStorage {
 
     @Override
     public void trash(String storageKey) {
+        setTrashed(storageKey, true);
+    }
+
+    @Override
+    public void restore(String storageKey) {
+        setTrashed(storageKey, false);
+    }
+
+    private void setTrashed(String storageKey, boolean trashed) {
+        String operation = trashed ? "trash" : "restore";
         try {
             HttpRequest request = HttpRequest.newBuilder(URI.create(
                             DRIVE_FILES_URL + "/" + storageKey + "?supportsAllDrives=true"))
                     .timeout(Duration.ofSeconds(30))
                     .header("Authorization", "Bearer " + accessToken())
                     .header("Content-Type", "application/json")
-                    .method("PATCH", HttpRequest.BodyPublishers.ofString("{\"trashed\":true}"))
+                    .method("PATCH", HttpRequest.BodyPublishers.ofString("{\"trashed\":" + trashed + "}"))
                     .build();
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            ensureSuccess(response, "trash file");
+            ensureSuccess(response, operation + " file");
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
-            throw new StorageException("Unable to trash file on Google Drive", exception);
+            throw new StorageException("Unable to " + operation + " file on Google Drive", exception);
         } catch (IOException exception) {
-            throw new StorageException("Unable to trash file on Google Drive", exception);
+            throw new StorageException("Unable to " + operation + " file on Google Drive", exception);
         }
     }
 

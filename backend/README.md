@@ -23,6 +23,7 @@ database:
 15. `sql/015_gallery_permission_repair.sql`
 16. `sql/016_content_category_description_seed.sql`
 17. `sql/017_seed_100_projects.sql`
+18. `sql/018_document_categories.sql`
 
 These are manual, operator-executed SQL migrations. The repository does not
 contain Flyway, Liquibase, or another automatic numbered migration runner.
@@ -67,6 +68,10 @@ The later migrations extend that foundation:
 - `016` adds the content-category description required by the backend entity
   and repairs missing descriptions on the canonical category seed.
 - `017` adds the project cover URL and provisions the local sample projects.
+- `018` adds the immutable document archive date (backfilled from `created_at`),
+  document categories and assignment indexes, and the `DOCUMENT_MANAGE`
+  permission. Re-running it preserves customized category and permission
+  fields and does not rewrite archive dates after the initial backfill.
 
 ### Migration 010 prerequisite and lineage decision
 

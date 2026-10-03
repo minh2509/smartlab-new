@@ -1,6 +1,6 @@
 /* Achievement Archive Page */
 .achievement-archive-section {
-  padding: 56px 0 72px;
+  padding: 36px 0 72px;
 }
 
 .achievement-archive-header {
@@ -43,6 +43,10 @@
   padding-bottom: 20px;
   border-bottom: 1px solid var(--line);
   flex-wrap: wrap;
+}
+
+.achievement-archive-toolbar .achievement-archive-page-size {
+  margin-left: auto;
 }
 
 .achievement-archive-toolbar label {

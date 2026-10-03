@@ -4,6 +4,7 @@ import com.smartlab.config.CustomAuthenticationEntryPoint;
 import com.smartlab.config.SecurityConfig;
 import com.smartlab.dto.request.CreateDocumentRequest;
 import com.smartlab.dto.request.CreateDocumentVersionRequest;
+import com.smartlab.dto.request.UpdateDocumentRequest;
 import com.smartlab.filter.JwtRequestFilter;
 import com.smartlab.service.AppUserDetailService;
 import com.smartlab.service.DocumentService;
@@ -32,6 +33,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest({DocumentController.class, PublicDocumentController.class})
@@ -50,11 +52,13 @@ class DocumentControllerSecurityTest {
     void anonymousCanReadPublicDocumentsButCannotReachInternalDocumentEndpoints() throws Exception {
         MockMultipartFile file = textFile();
 
-        when(publicDocumentService.list(any(), any(), any(), any(), any(), eq(0), eq(12)))
+        when(publicDocumentService.list(any(), any(), any(), any(), any(), any(), eq(0), eq(12)))
                 .thenReturn(new com.smartlab.dto.response.PublicPageResponse<>(List.of(), 0, 12, 0, 0));
         when(publicDocumentService.years()).thenReturn(List.of(2026));
         mockMvc.perform(get("/documents/public")).andExpect(status().isOk());
         mockMvc.perform(get("/documents/public/years")).andExpect(status().isOk());
+        mockMvc.perform(get("/documents/public/years/extra")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/documents/public/internal/path")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/projects/7/documents")).andExpect(status().isUnauthorized());
         mockMvc.perform(multipart("/projects/7/documents").file(file).param("title", "Proposal"))
                 .andExpect(status().isUnauthorized());
@@ -63,6 +67,10 @@ class DocumentControllerSecurityTest {
                 .andExpect(status().isUnauthorized());
         mockMvc.perform(get("/documents/31/download")).andExpect(status().isUnauthorized());
         mockMvc.perform(delete("/documents/31")).andExpect(status().isUnauthorized());
+        mockMvc.perform(patch("/documents/31")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"Updated\"}"))
+                .andExpect(status().isUnauthorized());
 
         verifyNoInteractions(documentService);
     }
@@ -99,6 +107,11 @@ class DocumentControllerSecurityTest {
                 .andExpect(status().isOk());
         mockMvc.perform(delete("/documents/31").with(user(EMAIL)))
                 .andExpect(status().isNoContent());
+        mockMvc.perform(patch("/documents/31")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"Updated\"}")
+                        .with(user(EMAIL)))
+                .andExpect(status().isOk());
 
         verify(documentService).list(eq(7L), any(Authentication.class));
         verify(documentService).create(eq(7L), any(CreateDocumentRequest.class), any(Authentication.class));
@@ -110,6 +123,7 @@ class DocumentControllerSecurityTest {
         );
         verify(documentService).downloadCurrent(eq(31L), any(Authentication.class));
         verify(documentService).delete(eq(31L), any(Authentication.class));
+        verify(documentService).update(eq(31L), any(UpdateDocumentRequest.class), any(Authentication.class));
     }
 
     private static MockMultipartFile textFile() {

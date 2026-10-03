@@ -1,12 +1,13 @@
 import { apiClient, toQuery } from '../../lib/apiClient'
 import type { PageResponse } from './publicPageTypes'
-import type { PublicDocumentFileType, PublicDocumentSort, PublicDocumentSummary } from './documentTypes'
+import type { PublicDocumentCategory, PublicDocumentFileType, PublicDocumentSort, PublicDocumentSummary } from './documentTypes'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1.0'
 
 export type PublicDocumentFilters = {
   query?: string
   projectId?: number
+  category?: string
   fileType?: PublicDocumentFileType
   year?: number
   sort?: PublicDocumentSort
@@ -16,6 +17,7 @@ export function listPublicDocuments(page = 0, size = 12, filters: PublicDocument
   return apiClient<PageResponse<PublicDocumentSummary>>(`/documents/public${toQuery({
     q: filters.query?.trim() || undefined,
     projectId: filters.projectId,
+    category: filters.category?.trim() || undefined,
     fileType: filters.fileType && filters.fileType !== 'ALL' ? filters.fileType : undefined,
     year: filters.year,
     sort: filters.sort && filters.sort !== 'LATEST' ? filters.sort : undefined,
@@ -26,6 +28,12 @@ export function listPublicDocuments(page = 0, size = 12, filters: PublicDocument
 
 export function listPublicDocumentYears(signal?: AbortSignal) {
   return apiClient<number[]>('/documents/public/years', { signal })
+}
+
+export function listPublicDocumentCategories(year?: number, signal?: AbortSignal) {
+  return apiClient<PublicDocumentCategory[]>(`/documents/public/categories${toQuery({
+    year,
+  })}`, { signal })
 }
 
 export function publicDocumentFileUrl(fileId: number) {

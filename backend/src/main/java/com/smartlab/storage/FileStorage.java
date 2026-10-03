@@ -7,6 +7,8 @@ public interface FileStorage {
 
     void trash(String storageKey);
 
+    void restore(String storageKey);
+
     record StoredFile(String storageKey, String publicUrl) {
     }
 

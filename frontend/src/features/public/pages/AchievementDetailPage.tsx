@@ -1,7 +1,6 @@
-import { ArrowLeft, Calendar, ChevronRight, AlertCircle, RotateCcw, ExternalLink } from 'lucide-react'
+import { ArrowLeft, Calendar, ChevronRight, AlertCircle, ExternalLink } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { PublicPageHead } from '../components/PublicPageHead'
 import { getAchievement } from '../achievementApi'
 import { ACHIEVEMENT_TYPE_LABELS } from '../achievementTypes'
 import type { AchievementDetail } from '../achievementTypes'

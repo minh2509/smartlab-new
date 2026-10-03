@@ -1,5 +1,6 @@
 package com.smartlab.service;
 
+import com.smartlab.dto.response.PublicDocumentCategoryResponse;
 import com.smartlab.dto.response.PublicDocumentSummaryResponse;
 import com.smartlab.dto.response.PublicPageResponse;
 import com.smartlab.enums.PublicDocumentFileType;
@@ -11,6 +12,7 @@ public interface PublicDocumentService {
     PublicPageResponse<PublicDocumentSummaryResponse> list(
             String query,
             Long projectId,
+            String category,
             PublicDocumentFileType fileType,
             Integer year,
             PublicDocumentSort sort,
@@ -19,4 +21,6 @@ public interface PublicDocumentService {
     );
 
     List<Integer> years();
+
+    List<PublicDocumentCategoryResponse> categories(Integer year);
 }

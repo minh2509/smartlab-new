@@ -1,204 +1,995 @@
-.public-documents-section { padding: 56px 0 72px; }
-.public-documents-intro { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 28px; }
-.public-documents-intro h2 { margin-top: 8px; color: var(--text-1); font-size: clamp(28px, 3.2vw, 40px); letter-spacing: -.03em; line-height: 1.15; font-weight: 800; }
-.public-documents-intro p { max-width: 64ch; margin: 10px 0 0; color: var(--text-2); line-height: 1.65; font-size: 16px; }
+/* ==========================================================================
+   Public Documents Archive Page - Synchronized with /du-an Design Language
+   Matches ProjectListPage layout, components, and responsive grid
+   ========================================================================== */
 
-.public-documents-toolbar {
-  display: grid;
-  grid-template-columns: minmax(220px, 1fr) minmax(160px, 240px) minmax(130px, 160px) minmax(110px, 130px) minmax(130px, 160px) auto;
-  gap: 12px;
-  align-items: center;
-  margin-bottom: 28px;
-  padding: 0 0 20px 0;
-  border: none;
-  border-bottom: 1px solid var(--line);
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
+.public-docs-page {
+  padding: 32px 0 64px;
+  background-color: var(--bg-public, #FAF9F6);
+  min-height: calc(100vh - 72px);
 }
-.public-documents-search {
-  position: relative;
+
+.public-docs-page .project-archive-container {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+/* --------------------------------------------------------------------------
+   Top Page Header (Clean, Light Hero)
+   -------------------------------------------------------------------------- */
+.public-docs-page .project-archive-header {
   display: flex;
-  min-width: 0;
-  align-items: center;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 28px;
+  padding-bottom: 6px;
 }
 
-.public-documents-search svg {
-  position: absolute;
-  left: 13px;
-  width: 17px;
-  height: 17px;
-  color: var(--text-3);
-  pointer-events: none;
-}
-
-.public-documents-search .input {
-  width: 100%;
-  min-height: 42px;
-  padding-left: 40px;
-  border-radius: var(--r-sm);
-  border: 1px solid var(--line-input, #D5CEBF);
-  background: var(--surface);
-  color: var(--text-1);
-  font-size: 14px;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
-}
-
-.public-documents-search .input:focus {
-  background: var(--surface-input-focus, #FFFFFF);
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(242, 113, 28, 0.16);
-}
-
-.public-documents-filter {
+.public-docs-page .project-archive-header-left {
+  flex: 1;
   min-width: 0;
 }
 
-.public-documents-reset {
+.public-docs-page .project-archive-title {
+  margin: 0;
+  font-size: clamp(24px, 2.6vw, 32px);
+  font-weight: 850;
+  color: #0F172A;
+  letter-spacing: -0.025em;
+  line-height: 1.25;
+}
+
+.public-docs-page .project-archive-subtitle {
+  margin: 8px 0 0;
+  font-size: 15px;
+  line-height: 1.6;
+  color: #64748B;
+  max-width: 760px;
+}
+
+.public-docs-page .project-archive-header-right {
+  flex-shrink: 0;
+}
+
+.public-docs-page .project-archive-status-badge {
   display: inline-flex;
-  min-height: 42px;
   align-items: center;
-  justify-content: center;
-  gap: 7px;
-  padding: 8px 14px;
-  border: 1px solid var(--line-2, #D5CEBF);
-  border-radius: var(--r-sm);
-  background: var(--surface-btn, #FAF7F0);
-  color: var(--text-2);
-  font: inherit;
-  font-size: 13.5px;
+  gap: 8px;
+  padding: 6px 14px;
+  background: #F0FDF4;
+  border: 1px solid #BBF7D0;
+  border-radius: 9999px;
+  color: #166534;
+  font-size: 13px;
   font-weight: 650;
-  white-space: nowrap;
-  cursor: pointer;
-  box-shadow: var(--sh-1);
-  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
 }
 
-.public-documents-reset:hover {
-  border-color: var(--brand-1);
-  background: var(--surface-2);
-  color: var(--brand-1);
+.public-docs-page .project-archive-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #22C55E;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.25);
+  animation: pulse-dot 2s infinite ease-in-out;
 }
 
-.public-documents-reset:active {
-  transform: translateY(1px);
+@keyframes pulse-dot {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0.75;
+  }
 }
 
-.public-documents-reset:focus-visible {
-  outline: 2.5px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.public-documents-request-state {
+/* --------------------------------------------------------------------------
+   2-Column Layout (Left Sidebar + Right Main Workspace)
+   -------------------------------------------------------------------------- */
+.public-docs-page .project-archive-layout {
   display: grid;
-  gap: 14px;
-  justify-items: start;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
 }
 
-.public-documents-summary {
-  margin: 0 0 14px;
-  color: var(--text-2);
-  font-size: 14px;
-  font-weight: 600;
+/* --------------------------------------------------------------------------
+   Left Sidebar: Filter Card
+   -------------------------------------------------------------------------- */
+.public-docs-page .project-archive-sidebar {
+  width: 100%;
 }
 
-.public-documents-results-bar {
+.public-docs-page .project-sidebar-card {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.public-docs-page .project-sidebar-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #F1F5F9;
 }
 
-.public-documents-refreshing {
-  color: var(--text-3);
+.public-docs-page .project-sidebar-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 800;
+  color: #334155;
+  letter-spacing: 0.04em;
+}
+
+.public-docs-page .project-sidebar-icon {
+  color: #EA580C;
+}
+
+.public-docs-page .project-sidebar-reset-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  border: none;
+  color: #64748B;
   font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  transition: color 0.15s ease, background 0.15s ease;
 }
 
-.public-documents-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
-.public-document-card { display: flex; min-width: 0; height: 100%; flex-direction: column; padding: 22px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface-card, #FDFBF7); color: var(--text-1); box-shadow: var(--sh-1); }
-.public-document-card-topline { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--text-3); font-size: 12px; }
-.public-document-icon { display: grid; flex: none; width: 38px; height: 38px; place-items: center; border-radius: var(--r-sm); background: var(--surface-2); color: var(--brand-1); }
-.public-document-project { min-width: 0; overflow: hidden; padding: 4px 8px; border-radius: var(--r-xs); background: var(--surface-2); color: var(--text-2); font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
-.public-document-card time { margin-left: auto; white-space: nowrap; }
-.public-document-card h3 { margin: 20px 0 8px; font-size: 20px; line-height: 1.3; overflow-wrap: anywhere; }
-.public-document-description { display: -webkit-box; margin: 0 0 16px; color: var(--text-2); line-height: 1.55; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
-.public-document-file { display: flex; align-items: center; gap: 6px; min-width: 0; margin: auto 0 12px; color: var(--text-2); font-size: 13px; }
-.public-document-file span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.public-document-meta { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-bottom: 18px; color: var(--text-3); font-size: 13px; }
-.public-document-download { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; border: 1px solid var(--line); border-radius: var(--r-sm); color: var(--brand-1); font-size: 14px; font-weight: 750; text-decoration: none; }
-.public-document-download:hover { border-color: var(--brand-1); background: var(--surface-2); }
-.public-document-download:focus-visible { outline: 2.5px solid var(--accent); outline-offset: 2px; }
+.public-docs-page .project-sidebar-reset-btn:hover {
+  color: #EA580C;
+  background: #FFF7ED;
+}
 
-@media (max-width: 1200px) {
-  .public-documents-toolbar {
-    grid-template-columns: minmax(260px, 1fr) repeat(2, minmax(140px, 1fr));
+.public-docs-page .project-sidebar-group {
+  margin-top: 20px;
+}
+
+.public-docs-page .project-sidebar-label,
+.public-docs-page .project-sidebar-group-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 750;
+  color: #475569;
+  letter-spacing: 0.04em;
+  margin-bottom: 10px;
+}
+
+.public-docs-page .project-sidebar-group-icon {
+  color: #EA580C;
+}
+
+/* Search input */
+.public-docs-page .project-sidebar-search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.public-docs-page .project-sidebar-search-icon {
+  position: absolute;
+  left: 12px;
+  color: #94A3B8;
+  pointer-events: none;
+}
+
+.public-docs-page .project-sidebar-search-input {
+  width: 100%;
+  height: 38px;
+  padding-left: 36px;
+  padding-right: 12px;
+  border-radius: 8px;
+  border: 1px solid #CBD5E1;
+  background: #FFFFFF;
+  color: #0F172A;
+  font-size: 13.5px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.public-docs-page .project-sidebar-search-input:focus {
+  outline: none;
+  border-color: #EA580C;
+  box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.12);
+}
+
+.public-docs-page .project-sidebar-search-input::placeholder {
+  color: #94A3B8;
+  font-size: 13px;
+}
+
+/* Year Filter: Compact Row & Expanded Grid */
+.public-docs-page .project-year-all-btn {
+  width: 100%;
+  height: 38px;
+  border-radius: 8px;
+  border: 1px solid #E2E8F0;
+  background: #F8FAFC;
+  color: #334155;
+  font-size: 13.5px;
+  font-weight: 650;
+  cursor: pointer;
+  margin-bottom: 10px;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.public-docs-page .project-year-all-btn:hover:not(.is-active) {
+  border-color: #CBD5E1;
+  background: #F1F5F9;
+  color: #0F172A;
+}
+
+.public-docs-page .project-year-all-btn.is-active {
+  background: #EA580C;
+  border-color: #EA580C;
+  color: #FFFFFF;
+  font-weight: 750;
+  box-shadow: 0 2px 6px rgba(234, 88, 12, 0.25);
+}
+
+.public-docs-page .project-years-compact-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.public-docs-page .project-years-expanded-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.public-docs-page .project-years-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.public-docs-page .project-years-grid.is-scrollable {
+  max-height: 124px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.public-docs-page .project-years-grid.is-scrollable::-webkit-scrollbar {
+  width: 4px;
+}
+
+.public-docs-page .project-years-grid.is-scrollable::-webkit-scrollbar-track {
+  background: #F1F5F9;
+  border-radius: 4px;
+}
+
+.public-docs-page .project-years-grid.is-scrollable::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 4px;
+}
+
+.public-docs-page .project-years-grid.is-scrollable::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+.public-docs-page .project-year-btn {
+  height: 34px;
+  border-radius: 7px;
+  border: 1px solid #E2E8F0;
+  background: #FFFFFF;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.public-docs-page .project-year-btn:hover:not(.is-active) {
+  border-color: #EA580C;
+  color: #EA580C;
+  background: #FFF7ED;
+}
+
+.public-docs-page .project-year-btn.is-active {
+  background: #EA580C;
+  border-color: #EA580C;
+  color: #FFFFFF;
+  font-weight: 750;
+  box-shadow: 0 2px 5px rgba(234, 88, 12, 0.25);
+}
+
+.public-docs-page .project-year-toggle-btn {
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: #64748B;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 6px 0;
+  transition: color 0.15s ease;
+}
+
+.public-docs-page .project-year-toggle-btn:hover {
+  color: #EA580C;
+}
+
+/* Accordion for Category & Types */
+.public-docs-page .project-sidebar-accordion {
+  border-top: 1px solid #F1F5F9;
+  padding-top: 14px;
+}
+
+.public-docs-page .project-accordion-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: transparent;
+  border: none;
+  padding: 4px 0 10px;
+  cursor: pointer;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.public-docs-page .project-accordion-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.public-docs-page .project-accordion-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 6px;
+}
+
+.public-docs-page .project-sidebar-subgroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.public-docs-page .project-sidebar-sublabel {
+  font-size: 11px;
+  font-weight: 750;
+  color: #64748B;
+  letter-spacing: 0.04em;
+}
+
+.public-docs-page .project-sidebar-select {
+  width: 100%;
+  height: 38px;
+  border-radius: 8px;
+  border: 1px solid #CBD5E1;
+  background: #FFFFFF;
+  color: #1E293B;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 0 10px;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.public-docs-page .project-sidebar-select:focus {
+  outline: none;
+  border-color: #EA580C;
+  box-shadow: 0 0 0 2.5px rgba(234, 88, 12, 0.12);
+}
+
+/* Sidebar Footer Box */
+.public-docs-page .project-sidebar-footer-box {
+  margin-top: 22px;
+  padding: 12px 14px;
+  background: #FFF7ED;
+  border: 1px solid #FED7AA;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12.5px;
+  color: #475569;
+}
+
+.public-docs-page .project-sidebar-footer-year strong {
+  color: #0F172A;
+}
+
+.public-docs-page .project-sidebar-footer-count {
+  color: #EA580C;
+  font-weight: 750;
+}
+
+/* --------------------------------------------------------------------------
+   Right Main: Folder Tabs & Meta Info
+   -------------------------------------------------------------------------- */
+.public-docs-page .project-archive-main {
+  min-width: 0;
+}
+
+/* Folder Tabs Wrapper & Scroll Indicators */
+.public-docs-page .project-folder-tabs-wrapper {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  margin-bottom: 14px;
+}
+
+.public-docs-page .project-folder-tabs-wrapper::before,
+.public-docs-page .project-folder-tabs-wrapper::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 2px;
+  width: 36px;
+  pointer-events: none;
+  z-index: 2;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.public-docs-page .project-folder-tabs-wrapper::before {
+  left: 0;
+  background: linear-gradient(to right, var(--bg-public, #FAF9F6) 15%, rgba(250, 249, 246, 0) 100%);
+}
+
+.public-docs-page .project-folder-tabs-wrapper::after {
+  right: 0;
+  background: linear-gradient(to left, var(--bg-public, #FAF9F6) 15%, rgba(250, 249, 246, 0) 100%);
+}
+
+.public-docs-page .project-folder-tabs-wrapper.has-scroll-left::before {
+  opacity: 1;
+}
+
+.public-docs-page .project-folder-tabs-wrapper.has-scroll-right::after {
+  opacity: 1;
+}
+
+.public-docs-page .project-folder-tabs-scroll-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 4;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  border: 1px solid #CBD5E1;
+  color: #475569;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.15s ease;
+}
+
+.public-docs-page .project-folder-tabs-scroll-btn:hover {
+  background: #EA580C;
+  border-color: #EA580C;
+  color: #FFFFFF;
+  box-shadow: 0 4px 10px rgba(234, 88, 12, 0.25);
+}
+
+.public-docs-page .project-folder-tabs-scroll-btn.is-prev {
+  left: 2px;
+}
+
+.public-docs-page .project-folder-tabs-scroll-btn.is-next {
+  right: 2px;
+}
+
+/* Folder Tabs (Category Strip) */
+.public-docs-page .project-folder-tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  border-bottom: 2px solid #E2E8F0;
+  margin-bottom: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  padding-left: 2px;
+  padding-right: 8px;
+}
+
+.public-docs-page .project-folder-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.public-docs-page .project-folder-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 18px;
+  border-radius: 9px 9px 0 0;
+  border: 2px solid transparent;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #64748B;
+  font-size: 14px;
+  font-weight: 650;
+  cursor: pointer;
+  position: relative;
+  bottom: -2px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.public-docs-page .project-folder-tab:last-child {
+  margin-right: 28px;
+}
+
+.public-docs-page .project-folder-tab:hover:not(.is-active) {
+  color: #1E293B;
+  background: #F1F5F9;
+}
+
+.public-docs-page .project-folder-tab.is-active {
+  background: #FFFFFF;
+  border: 2px solid #E2E8F0;
+  border-bottom: 2px solid #FFFFFF;
+  color: #EA580C;
+  font-weight: 800;
+}
+
+.public-docs-page .project-folder-tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  font-size: 11.5px;
+  font-weight: 700;
+  background: #F1F5F9;
+  color: #475569;
+}
+
+.public-docs-page .project-folder-tab.is-active .project-folder-tab-count {
+  background: #FFEDD5;
+  color: #C2410C;
+}
+
+/* Meta Bar: Category, Year + Count */
+.public-docs-page .project-archive-meta-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 13px;
+  color: #64748B;
+  margin-bottom: 20px;
+  padding: 2px 2px;
+}
+
+.public-docs-page .project-meta-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.public-docs-page .project-meta-left strong {
+  color: #0F172A;
+}
+
+.public-docs-page .project-meta-sep {
+  color: #CBD5E1;
+}
+
+.public-docs-page .project-meta-right {
+  font-size: 12.5px;
+  color: #64748B;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   Document Cards Grid (2-Column, synchronized with ProjectCard)
+   -------------------------------------------------------------------------- */
+.public-docs-page .project-archive-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.public-docs-page .doc-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  color: inherit;
+  overflow: hidden;
+  box-shadow: none !important;
+  transition: border-color 0.2s ease;
+}
+
+.public-docs-page .doc-card:hover {
+  border-color: #EA580C;
+}
+
+.public-docs-page .doc-card-inner {
+  padding: 16px 18px 16px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  height: 100%;
+}
+
+/* Top Badges Row */
+.public-docs-page .doc-card-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.public-docs-page .doc-filetype-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 750;
+  padding: 2.5px 8px;
+  border-radius: 5px;
+  letter-spacing: 0.03em;
+}
+
+.public-docs-page .doc-filetype-badge.type-pdf {
+  background: #FEF2F2;
+  color: #DC2626;
+  border: 1px solid #FECACA;
+}
+
+.public-docs-page .doc-filetype-badge.type-doc {
+  background: #EFF6FF;
+  color: #2563EB;
+  border: 1px solid #BFDBFE;
+}
+
+.public-docs-page .doc-filetype-badge.type-sheet {
+  background: #ECFDF5;
+  color: #059669;
+  border: 1px solid #A7F3D0;
+}
+
+.public-docs-page .doc-filetype-badge.type-pres {
+  background: #FFFBEB;
+  color: #D97706;
+  border: 1px solid #FDE68A;
+}
+
+.public-docs-page .doc-filetype-badge.type-archive {
+  background: #FAF5FF;
+  color: #7C3AED;
+  border: 1px solid #E9D5FF;
+}
+
+.public-docs-page .doc-filetype-badge.type-img {
+  background: #FDF2F8;
+  color: #DB2777;
+  border: 1px solid #FBCFE8;
+}
+
+.public-docs-page .doc-filetype-badge.type-other {
+  background: #F8FAFC;
+  color: #475569;
+  border: 1px solid #E2E8F0;
+}
+
+.public-docs-page .doc-category-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 650;
+  padding: 2px 9px;
+  border-radius: 9999px;
+  background: #F8FAFC;
+  color: #475569;
+  border: 1px solid #E2E8F0;
+  white-space: nowrap;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Title */
+.public-docs-page .doc-card-title {
+  margin: 0 0 6px 0;
+  font-size: 15.5px;
+  font-weight: 800;
+  color: #0F172A;
+  line-height: 1.35;
+  letter-spacing: -0.015em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.public-docs-page .doc-title-link {
+  color: inherit;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.public-docs-page .doc-title-link:hover {
+  color: #EA580C;
+}
+
+/* Description */
+.public-docs-page .doc-card-desc {
+  margin: 0 0 10px 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #64748B;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Chips Row */
+.public-docs-page .doc-card-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 12px;
+}
+
+.public-docs-page .doc-project-chip {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.public-docs-page .doc-version-chip {
+  background: #F1F5F9;
+  color: #475569;
+  font-weight: 650;
+}
+
+/* Card Footer: File Info & Download CTA */
+.public-docs-page .doc-card-footer {
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid #F1F5F9;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.public-docs-page .doc-card-meta-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #64748B;
+}
+
+.public-docs-page .doc-card-size {
+  font-weight: 700;
+  color: #334155;
+}
+
+.public-docs-page .doc-card-meta-sep {
+  color: #CBD5E1;
+}
+
+.public-docs-page .doc-card-date {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #64748B;
+}
+
+.public-docs-page .doc-download-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  min-height: 32px;
+  border-radius: 6px;
+  border: 1px solid #E2E8F0;
+  background: #FFFFFF;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 650;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  z-index: 2;
+}
+
+.public-docs-page .doc-download-btn:hover {
+  border-color: #EA580C;
+  color: #EA580C;
+  background: #FFF7ED;
+}
+
+/* Hover Overlay at Card Bottom: Matching Project Card */
+.public-docs-page .doc-card-hover-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 42px;
+  background: linear-gradient(to top, rgba(15, 23, 42, 0.94) 0%, rgba(15, 23, 42, 0.78) 65%, transparent 100%);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  color: #FFFFFF;
+  text-decoration: none;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.22s ease, transform 0.22s ease;
+  pointer-events: none;
+  border-bottom-left-radius: inherit;
+  border-bottom-right-radius: inherit;
+}
+
+.public-docs-page .doc-card:hover .doc-card-hover-overlay {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.public-docs-page .doc-card-hover-overlay .project-card-hover-action {
+  color: #FFFFFF;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.public-docs-page .doc-card-hover-overlay .project-card-hover-hint {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+/* --------------------------------------------------------------------------
+   Pagination & Actions
+   -------------------------------------------------------------------------- */
+.public-docs-page .public-docs-pagination-container {
+  display: flex;
+  justify-content: center;
+  margin-top: 32px;
+}
+
+.public-docs-page .project-loading-box {
+  padding: 40px;
+  text-align: center;
+  color: #64748B;
+}
+
+.public-docs-page .project-archive-error {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+/* Floating Scroll to Top Button */
+.public-docs-page .project-scroll-top-btn {
+  position: fixed;
+  bottom: 32px;
+  right: 32px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  border: 1.5px solid #E2E8F0;
+  color: #334155;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12);
+  z-index: 99;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(12px) scale(0.9);
+  transition: opacity 0.25s ease, transform 0.25s ease, visibility 0.25s ease, background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.public-docs-page .project-scroll-top-btn.is-visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0) scale(1);
+}
+
+.public-docs-page .project-scroll-top-btn:hover {
+  background: #EA580C;
+  color: #FFFFFF;
+  border-color: #EA580C;
+  box-shadow: 0 6px 20px rgba(234, 88, 12, 0.35);
+  transform: translateY(-3px) scale(1.05);
+}
+
+/* --------------------------------------------------------------------------
+   Responsive Layout (Matching /du-an)
+   -------------------------------------------------------------------------- */
+@media (max-width: 1080px) {
+  .public-docs-page .project-archive-layout {
+    grid-template-columns: 260px minmax(0, 1fr);
+    gap: 20px;
   }
 
-  .public-documents-search {
-    grid-column: 1 / -1;
+  .public-docs-page .project-archive-grid {
+    gap: 16px;
   }
 }
 
-@media (max-width: 1100px) {
-  .public-documents-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 768px) {
-  .public-documents-intro {
-    align-items: flex-start;
+@media (max-width: 860px) {
+  .public-docs-page .project-archive-header {
     flex-direction: column;
+    align-items: flex-start;
     gap: 14px;
   }
 
-  .public-documents-intro .public-archive-page-size {
-    align-self: flex-start;
+  .public-docs-page .project-archive-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+
+  .public-docs-page .project-archive-sidebar {
+    order: -1;
   }
 }
 
 @media (max-width: 640px) {
-  .public-documents-section {
-    padding: 40px 0 54px;
+  .public-docs-page {
+    padding: 24px 0 48px;
   }
 
-  .public-documents-toolbar {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-    padding: 0 0 16px 0;
-  }
-
-  .public-documents-reset {
-    grid-column: 1 / -1;
-    justify-self: start;
-  }
-
-  .public-documents-search .input,
-  .public-documents-filter .popup-select-trigger,
-  .public-documents-reset,
-  .public-document-download {
-    min-height: 44px;
-  }
-
-  .public-documents-grid {
+  .public-docs-page .project-archive-grid {
     grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 420px) {
-  .public-documents-toolbar {
-    grid-template-columns: 1fr;
+    gap: 16px;
   }
 
-  .public-documents-search,
-  .public-documents-reset {
-    grid-column: auto;
+  .public-docs-page .doc-card-inner {
+    padding: 18px;
   }
-}
 
-@media (prefers-reduced-motion: reduce) {
-  .public-documents-reset {
-    transition: none !important;
-    transform: none !important;
+  .public-docs-page .project-archive-meta-bar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
   }
 }

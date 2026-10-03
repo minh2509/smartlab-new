@@ -8,6 +8,7 @@ export const accessPolicies = {
   rbac: ['ROLE_MANAGE', 'PERMISSION_MANAGE'],
   content: ['PROJECT_MANAGE'],
   postCategories: ['POST_MANAGE'],
+  documentCategories: ['DOCUMENT_MANAGE'],
   gallery: ['GALLERY_MANAGE'],
 } as const
 

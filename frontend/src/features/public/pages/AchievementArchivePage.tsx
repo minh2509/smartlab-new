@@ -1,5 +1,5 @@
 import { Pagination } from "../../../shared/components/Pagination";
-import { ArrowLeft, ChevronRight, ExternalLink, RotateCcw } from 'lucide-react'
+import { ChevronRight, ExternalLink, RotateCcw } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { EmptyState } from '../../../shared/components/EmptyState'
@@ -97,25 +97,17 @@ export function AchievementArchivePage() {
 
   return (
     <>
-      <PublicPageHead title="Thành tựu" description="Kết quả nghiên cứu, sản phẩm, giải thưởng của Smart Lab." />
+      <PublicPageHead title="Thành tựu và công bố" description="Các kết quả nghiên cứu, sản phẩm, giải thưởng và dấu mốc công khai của Smart Lab." />
       <section className="achievement-archive-section">
         <div className="achievement-archive-header">
-          <div className="achievement-archive-intro">
-            <div>
-              <div className="kicker">THÀNH TỰU</div>
-              <h2>Thành tựu &amp; công bố</h2>
-              <p>Kết quả nghiên cứu, sản phẩm, giải thưởng và dấu mốc của Smart Lab.</p>
-            </div>
-            <span className="achievement-archive-page-size">{PAGE_SIZE} mục / trang</span>
-          </div>
-
           <div className="achievement-archive-toolbar">
             <label htmlFor="achievement-year">Năm</label>
             <select id="achievement-year" value={selectedYear ?? ''} onChange={(e) => selectYear(e.target.value)} disabled={years.length === 0}>
               {years.length === 0 ? <option value="">Đang tải...</option> : null}
               {years.map((entry) => <option key={entry.year} value={entry.year}>{entry.year} · {entry.count} mục</option>)}
             </select>
-            {selectedYear !== null && <span className="achievement-archive-count">{formatRange(page, PAGE_SIZE, totalElements)} · {totalElements}</span>}
+            {selectedYear !== null ? <span className="achievement-archive-count">{formatRange(page, PAGE_SIZE, totalElements)} · {totalElements} mục</span> : null}
+            <span className="achievement-archive-page-size">{PAGE_SIZE} mục / trang</span>
           </div>
         </div>
 
@@ -137,7 +129,10 @@ export function AchievementArchivePage() {
         )}
 
         {!loading && !error && items.length === 0 && (
-          <EmptyState title={selectedYear ? `Chưa có dữ liệu năm ${selectedYear}` : 'Chưa có thành tựu công khai'} />
+          <EmptyState
+            title={selectedYear ? `Chưa có dữ liệu năm ${selectedYear}` : 'Chưa có thành tựu công khai'}
+            description={selectedYear ? 'Thử chọn năm khác để xem kết quả.' : 'Các thành tựu và công bố của Smart Lab sẽ xuất hiện tại đây.'}
+          />
         )}
 
         {items.length > 0 && (

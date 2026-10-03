@@ -84,6 +84,7 @@ public class SecurityConfig {
                                 "/articles/*",
                                 "/documents/public",
                                 "/documents/public/years",
+                                "/documents/public/categories",
                                 "/gallery/public",
                                 "/gallery/public/years"
                         ).permitAll()

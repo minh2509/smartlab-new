@@ -22,6 +22,7 @@ import { PostEditPage } from '../features/posts/pages/PostEditPage'
 import { PostReviewQueuePage } from '../features/posts/pages/PostReviewQueuePage'
 import { PostReviewDetailPage } from '../features/posts/pages/PostReviewDetailPage'
 import { PostCategoriesPage } from '../features/posts/pages/PostCategoriesPage'
+import { AdminDocumentCategoriesPage } from '../features/documents/pages/AdminDocumentCategoriesPage'
 import { ArticleArchivePage } from '../features/public/pages/ArticleArchivePage'
 import { ArticleDetailPage } from '../features/public/pages/ArticleDetailPage'
 import { NewsArchivePage } from '../features/public/pages/NewsArchivePage'
@@ -131,6 +132,7 @@ export function App() {
         <Route path="/admin/achievements" element={<RequirePermissions roles={['ADMIN']} allOf={accessPolicies.content}><AdminAchievementsPage /></RequirePermissions>} />
         <Route path="/admin/articles" element={<RequirePermissions roles={['ADMIN']} allOf={['posts.review', 'posts.publish']}><PostReviewQueuePage adminMode /></RequirePermissions>} />
         <Route path="/admin/post-categories" element={<RequirePermissions roles={['ADMIN']} allOf={accessPolicies.postCategories}><PostCategoriesPage /></RequirePermissions>} />
+        <Route path="/admin/document-categories" element={<RequirePermissions roles={['ADMIN']} allOf={accessPolicies.documentCategories}><AdminDocumentCategoriesPage /></RequirePermissions>} />
         <Route path="/admin/news" element={<RequirePermissions roles={['ADMIN']} allOf={accessPolicies.content}><AdminNewsPage /></RequirePermissions>} />
         <Route path="/admin/gallery" element={<RequirePermissions roles={['ADMIN']} allOf={accessPolicies.gallery}><AdminGalleryPage /></RequirePermissions>} />
         <Route path="/admin/accounts" element={<RequirePermissions allOf={accessPolicies.accounts}><AdminAccountsPage /></RequirePermissions>} />

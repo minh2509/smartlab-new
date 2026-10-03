@@ -45,3 +45,8 @@ export type CreateDocumentVersionPayload = {
   accessScope: DocumentAccessScope
   note: string
 }
+
+export type UpdateProjectDocumentPayload = {
+  title: string
+  description: string
+}

@@ -1,4 +1,4 @@
-import { Award, BookOpenText, CalendarDays, CheckSquare, Files, FlaskConical, FolderKanban, Images, LogOut, Newspaper, ShieldCheck, Tags, Trophy, UserCircle, UsersRound } from 'lucide-react'
+import { Award, BookOpenText, CalendarDays, CheckSquare, Files, FileText, FlaskConical, FolderKanban, Images, LogOut, Newspaper, ShieldCheck, Tags, Trophy, UserCircle, UsersRound } from 'lucide-react'
 import { Link, NavLink, Navigate, Outlet } from 'react-router-dom'
 import { useAuth } from '../../features/auth/authContext'
 import { Logo } from '../../shared/components/Logo'
@@ -22,6 +22,7 @@ export function AdminLayout() {
   const isAdmin = profile.roles.includes('ADMIN')
   const canManagePublicContent = isAdmin && can(accessPolicies.content)
   const canManagePostCategories = isAdmin && can(accessPolicies.postCategories)
+  const canManageDocumentCategories = isAdmin && (can(accessPolicies.documentCategories) || can(accessPolicies.content))
 
   return (
     <div className="admin-shell">
@@ -77,7 +78,7 @@ export function AdminLayout() {
                 <UserCircle />
                 Hồ sơ thành viên
               </NavLink>}
-              {(canManagePublicContent || canManagePostCategories) && (
+              {(canManagePublicContent || canManagePostCategories || canManageDocumentCategories) && (
                 <>
                   <span className="admin-nav-label">Nội dung</span>
                   {canManagePublicContent && <NavLink to="/admin/achievements">
@@ -91,6 +92,10 @@ export function AdminLayout() {
                   {canManagePostCategories && <NavLink to="/admin/post-categories">
                     <Tags />
                     Danh mục bài viết
+                  </NavLink>}
+                  {canManageDocumentCategories && <NavLink to="/admin/document-categories">
+                    <FileText />
+                    Nhóm tài liệu
                   </NavLink>}
                   {canManagePublicContent && <NavLink to="/admin/news">
                     <Newspaper />

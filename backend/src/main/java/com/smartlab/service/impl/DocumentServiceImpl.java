@@ -2,6 +2,7 @@ package com.smartlab.service.impl;
 
 import com.smartlab.dto.request.CreateDocumentRequest;
 import com.smartlab.dto.request.CreateDocumentVersionRequest;
+import com.smartlab.dto.request.UpdateDocumentRequest;
 import com.smartlab.dto.response.DocumentResponse;
 import com.smartlab.dto.response.DocumentUserResponse;
 import com.smartlab.dto.response.DocumentVersionResponse;
@@ -33,11 +34,12 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
-import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -46,6 +48,7 @@ public class DocumentServiceImpl implements DocumentService {
     private static final String DOCUMENT_VERSION = "DOCUMENT_VERSION";
     private static final String DOCUMENT_CREATED = "DOCUMENT_CREATED";
     private static final String DOCUMENT_VERSION_CREATED = "DOCUMENT_VERSION_CREATED";
+    private static final String DOCUMENT_METADATA_UPDATED = "DOCUMENT_METADATA_UPDATED";
     private static final String DOCUMENT_DELETED = "DOCUMENT_DELETED";
     private static final String PROJECT_DOCUMENT_CREATED = "PROJECT_DOCUMENT_CREATED";
     private static final String PROJECT_DOCUMENT_VERSION_CREATED = "PROJECT_DOCUMENT_VERSION_CREATED";
@@ -68,13 +71,12 @@ public class DocumentServiceImpl implements DocumentService {
     public List<DocumentResponse> list(Long projectId, Authentication authentication) {
         ProjectEntity project = requireProject(projectId);
         projectAccessService.requireRead(project, currentEmail(authentication));
-        return documentRepository.findActiveByProjectId(projectId).stream()
+        List<DocumentEntity> readableDocuments = documentRepository.findActiveByProjectId(projectId).stream()
                 .filter(document -> fileService.canRead(document.getCurrentFile().getId(), authentication))
-                .map(document -> toDocumentResponse(
-                        document,
-                        documentVersionRepository.findMaxVersionNo(document.getId()),
-                        authentication
-                ))
+                .toList();
+        Map<Long, Integer> versionNumbers = versionNumbers(readableDocuments.stream().map(DocumentEntity::getId).toList());
+        return readableDocuments.stream()
+                .map(document -> toDocumentResponse(document, versionNumbers.getOrDefault(document.getId(), 0), authentication))
                 .toList();
     }
 
@@ -129,6 +131,39 @@ public class DocumentServiceImpl implements DocumentService {
                 document.getId()
         );
         return toDocumentResponse(document, 1, authentication);
+    }
+
+    @Override
+    @Transactional
+    public DocumentResponse update(
+            Long documentId,
+            UpdateDocumentRequest request,
+            Authentication authentication
+    ) {
+        requireRequest(request);
+        DocumentEntity document = requireDocumentForUpdate(documentId);
+        projectAccessService.requireManage(document.getProject(), currentEmail(authentication));
+        String title = normalizeRequired(request.getTitle(), TITLE_MAX_LENGTH, "Document title");
+        String description = normalizeOptional(
+                request.getDescription(),
+                DESCRIPTION_MAX_LENGTH,
+                "Document description"
+        );
+        Map<String, Object> before = documentSnapshot(document);
+        document.updateMetadata(title, description);
+        DocumentEntity saved = documentRepository.saveAndFlush(document);
+        auditService.log(
+                DOCUMENT_METADATA_UPDATED,
+                DOCUMENT,
+                saved.getId().toString(),
+                before,
+                documentSnapshot(saved)
+        );
+        return toDocumentResponse(
+                saved,
+                documentVersionRepository.findMaxVersionNo(saved.getId()),
+                authentication
+        );
     }
 
     @Override
@@ -212,6 +247,22 @@ public class DocumentServiceImpl implements DocumentService {
         fileService.describe(document.getCurrentFile().getId(), authentication);
         projectAccessService.requireManage(document.getProject(), currentEmail(authentication));
         Map<String, Object> before = documentSnapshot(document);
+        List<DocumentVersionEntity> versions = documentVersionRepository.findReadableCandidatesByDocumentId(documentId);
+        Map<Long, StoredFileEntity> files = new LinkedHashMap<>();
+        files.put(document.getCurrentFile().getId(), document.getCurrentFile());
+        versions.forEach(version -> files.put(version.getFile().getId(), version.getFile()));
+        for (Map.Entry<Long, StoredFileEntity> entry : files.entrySet()) {
+            if (FileAccessScope.PUBLIC.name().equals(entry.getValue().getAccessScope())
+                    && fileService.hasExternalReferencesOutsideDocument(entry.getKey(), documentId)) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "A document file is referenced by another active resource"
+                );
+            }
+        }
+        files.values().stream()
+                .filter(file -> FileAccessScope.PUBLIC.name().equals(file.getAccessScope()))
+                .forEach(file -> file.setAccessScope(FileAccessScope.PRIVATE.name()));
         document.softDelete();
         DocumentEntity saved = documentRepository.saveAndFlush(document);
         auditService.log(DOCUMENT_DELETED, DOCUMENT, saved.getId().toString(), before, documentSnapshot(saved));
@@ -262,6 +313,17 @@ public class DocumentServiceImpl implements DocumentService {
                 .createdAt(document.getCreatedAt())
                 .updatedAt(document.getUpdatedAt())
                 .build();
+    }
+
+    private Map<Long, Integer> versionNumbers(List<Long> documentIds) {
+        if (documentIds.isEmpty()) return Map.of();
+        return java.util.Optional.ofNullable(documentVersionRepository.findMaxVersionNosByDocumentIds(documentIds))
+                .orElseGet(List::of)
+                .stream()
+                .collect(Collectors.toMap(
+                        DocumentVersionRepository.VersionNumberProjection::getDocumentId,
+                        projection -> projection.getMaxVersionNo() == null ? 0 : projection.getMaxVersionNo()
+                ));
     }
 
     private DocumentVersionResponse toVersionResponse(

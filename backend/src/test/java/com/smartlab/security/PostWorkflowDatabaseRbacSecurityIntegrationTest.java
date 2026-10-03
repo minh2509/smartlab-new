@@ -165,8 +165,8 @@ class PostWorkflowDatabaseRbacSecurityIntegrationTest {
     void databaseIdentityAndPersistedT12PolicyAreExact() {
         assertThat(currentDatabase()).isEqualTo(targetDatabase);
         assertPersistedT12Policy();
-        assertThat(baseline.permissions()).isEqualTo(22);
-        assertThat(baseline.rolePermissions()).isEqualTo(43);
+        assertThat(baseline.permissions()).isEqualTo(23);
+        assertThat(baseline.rolePermissions()).isEqualTo(44);
     }
 
     @Test
@@ -177,8 +177,12 @@ class PostWorkflowDatabaseRbacSecurityIntegrationTest {
         assertPermissionMatrix(actor("MEMBER"), true, false, false, false);
 
         assertThat(permissionService.getEffectivePermissionCodes(actor("ADMIN").user()))
-                .contains("POST_MANAGE")
+                .contains("POST_MANAGE", "DOCUMENT_MANAGE")
                 .doesNotContain("posts.submit");
+        assertThat(permissionService.getEffectivePermissionCodes(actor("LEADER").user()))
+                .doesNotContain("DOCUMENT_MANAGE");
+        assertThat(permissionService.getEffectivePermissionCodes(actor("MEMBER").user()))
+                .doesNotContain("DOCUMENT_MANAGE");
     }
 
     @Test
@@ -549,6 +553,31 @@ class PostWorkflowDatabaseRbacSecurityIntegrationTest {
                  and p.module = approved.module
                  and p.is_active
                 """, Long.class)).isEqualTo(4L);
+
+        assertThat(jdbc.queryForObject("""
+                select count(*)
+                from permissions
+                where code = 'DOCUMENT_MANAGE'
+                  and name = 'Quản lý tài liệu & chuyên mục'
+                  and module = 'DOCUMENTS'
+                  and is_active
+                """, Long.class)).isEqualTo(1L);
+
+        assertThat(jdbc.queryForObject("""
+                select count(*)
+                from role_permissions rp
+                join roles r on r.id = rp.role_id
+                join permissions p on p.id = rp.permission_id
+                where r.code = 'ADMIN' and p.code = 'DOCUMENT_MANAGE'
+                """, Long.class)).isEqualTo(1L);
+
+        assertThat(jdbc.queryForObject("""
+                select count(*)
+                from role_permissions rp
+                join roles r on r.id = rp.role_id
+                join permissions p on p.id = rp.permission_id
+                where r.code in ('LEADER', 'MEMBER') and p.code = 'DOCUMENT_MANAGE'
+                """, Long.class)).isZero();
 
         assertThat(jdbc.queryForObject("""
                 select count(*)

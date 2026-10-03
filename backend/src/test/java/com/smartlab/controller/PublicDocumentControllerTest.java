@@ -1,5 +1,6 @@
 package com.smartlab.controller;
 
+import com.smartlab.dto.response.PublicDocumentCategoryResponse;
 import com.smartlab.dto.response.PublicDocumentSummaryResponse;
 import com.smartlab.dto.response.PublicPageResponse;
 import com.smartlab.enums.PublicDocumentFileType;
@@ -26,12 +27,13 @@ class PublicDocumentControllerTest {
 
     @Test
     void forwardsPublicArchiveFiltersAndDoesNotExposeInternalMetadata() throws Exception {
-        when(service.list("robot", 7L, PublicDocumentFileType.PDF, 2026, PublicDocumentSort.TITLE_ASC, 2, 12))
+        when(service.list("robot", 7L, "research", PublicDocumentFileType.PDF, 2026, PublicDocumentSort.TITLE_ASC, 2, 12))
                 .thenReturn(new PublicPageResponse<>(List.of(document()), 2, 12, 1, 1));
 
         mockMvc.perform(get("/documents/public")
                         .param("q", "robot")
                         .param("projectId", "7")
+                        .param("category", "research")
                         .param("fileType", "PDF")
                         .param("year", "2026")
                         .param("sort", "TITLE_ASC")
@@ -39,26 +41,46 @@ class PublicDocumentControllerTest {
                         .param("size", "12"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items[0].title").value("Public guide"))
+                .andExpect(jsonPath("$.items[0].categoryCode").value("RESEARCH"))
                 .andExpect(jsonPath("$.items[0].createdBy").doesNotExist())
                 .andExpect(jsonPath("$.items[0].storageKey").doesNotExist());
 
-        verify(service).list("robot", 7L, PublicDocumentFileType.PDF, 2026, PublicDocumentSort.TITLE_ASC, 2, 12);
+        verify(service).list("robot", 7L, "research", PublicDocumentFileType.PDF, 2026, PublicDocumentSort.TITLE_ASC, 2, 12);
     }
 
     @Test
     void publicArchiveUsesSafeDefaultsAndYearsEndpointIsPublicContract() throws Exception {
-        when(service.list(null, null, PublicDocumentFileType.ALL, null, PublicDocumentSort.LATEST, 0, 12))
+        when(service.list(null, null, null, PublicDocumentFileType.ALL, null, PublicDocumentSort.LATEST, 0, 12))
                 .thenReturn(new PublicPageResponse<>(List.of(), 0, 12, 0, 0));
         when(service.years()).thenReturn(List.of(2026, 2025));
 
         mockMvc.perform(get("/documents/public")).andExpect(status().isOk());
         mockMvc.perform(get("/documents/public/years")).andExpect(status().isOk()).andExpect(jsonPath("$[0]").value(2026));
-        verify(service).list(null, null, PublicDocumentFileType.ALL, null, PublicDocumentSort.LATEST, 0, 12);
+        verify(service).list(null, null, null, PublicDocumentFileType.ALL, null, PublicDocumentSort.LATEST, 0, 12);
         verify(service).years();
     }
 
+    @Test
+    void categoriesEndpointReturnsPublicCategories() throws Exception {
+        when(service.categories(2026)).thenReturn(List.of(
+                new PublicDocumentCategoryResponse(1L, "RESEARCH", "Nghiên cứu", "Tài liệu", 1, 5L)
+        ));
+
+        mockMvc.perform(get("/documents/public/categories").param("year", "2026"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].code").value("RESEARCH"))
+                .andExpect(jsonPath("$[0].documentCount").value(5));
+
+        verify(service).categories(2026);
+    }
+
     private static PublicDocumentSummaryResponse document() {
-        return new PublicDocumentSummaryResponse(31L, "Public guide", "Description", 7L, "AI", "AI Project", 101L,
-                "guide.pdf", "application/pdf", 1024L, 3, Instant.parse("2026-08-22T00:00:00Z"));
+        return new PublicDocumentSummaryResponse(
+                31L, "Public guide", "Description",
+                7L, "AI", "AI Project",
+                1L, "RESEARCH", "Nghiên cứu",
+                101L, "guide.pdf", "application/pdf", 1024L,
+                3, Instant.parse("2026-08-22T00:00:00Z")
+        );
     }
 }
