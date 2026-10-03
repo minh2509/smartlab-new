@@ -40,5 +40,21 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessageEntity, 
             Pageable pageable
     );
 
+    @Query("""
+            select m
+            from ChatMessageEntity m
+            left join fetch m.sender
+            where m.conversation.id = :conversationId
+            order by m.messageSeq desc
+            """)
+    List<ChatMessageEntity> findLatest(
+            @Param("conversationId") Long conversationId,
+            Pageable pageable
+    );
+
+    boolean existsByConversation_IdAndMessageSeqLessThan(Long conversationId, long messageSeq);
+
+    boolean existsByConversation_IdAndMessageSeqGreaterThan(Long conversationId, long messageSeq);
+
     Optional<ChatMessageEntity> findBySender_IdAndClientMessageId(Long senderId, String clientMessageId);
 }
