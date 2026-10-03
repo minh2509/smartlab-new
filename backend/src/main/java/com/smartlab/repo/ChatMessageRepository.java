@@ -15,7 +15,7 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessageEntity, 
     @Query("""
             select m
             from ChatMessageEntity m
-            join fetch m.sender
+            left join fetch m.sender
             where m.conversation.id = :conversationId
               and m.messageSeq < :beforeSeq
             order by m.messageSeq desc
@@ -29,6 +29,7 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessageEntity, 
     @Query("""
             select m
             from ChatMessageEntity m
+            left join fetch m.sender
             where m.conversation.id = :conversationId
               and m.messageSeq > :afterSeq
             order by m.messageSeq asc
@@ -39,5 +40,5 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessageEntity, 
             Pageable pageable
     );
 
-    Optional<ChatMessageEntity> findBySenderIdAndClientMessageId(Long senderId, String clientMessageId);
+    Optional<ChatMessageEntity> findBySender_IdAndClientMessageId(Long senderId, String clientMessageId);
 }

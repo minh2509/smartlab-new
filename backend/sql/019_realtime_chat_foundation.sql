@@ -69,7 +69,8 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   CONSTRAINT chk_chat_messages_seq CHECK (message_seq > 0),
   CONSTRAINT chk_chat_messages_type CHECK (message_type IN ('TEXT', 'FILE', 'MIXED', 'SYSTEM')),
   CONSTRAINT chk_chat_messages_payload CHECK (
-    message_type = 'SYSTEM'
+    deleted_at IS NOT NULL
+    OR message_type = 'SYSTEM'
     OR content IS NOT NULL
     OR message_type IN ('FILE', 'MIXED')
   )

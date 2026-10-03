@@ -101,6 +101,5 @@ public class ChatMessageEntity {
 
     public void softDelete() {
         this.deletedAt = Instant.now();
-        this.content = null;
     }
 }
