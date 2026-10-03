@@ -62,17 +62,29 @@ class DocumentRepositoryContractTest {
         Method findAll = DocumentRepository.class.getMethod("findAll", Specification.class, Pageable.class);
         assertThat(findAll.getReturnType()).isEqualTo(Page.class);
         assertThat(findAll.getAnnotation(EntityGraph.class).attributePaths())
-                .containsExactlyInAnyOrder("currentFile", "project");
+                .containsExactlyInAnyOrder("currentFile", "project", "category");
 
         Method years = DocumentRepository.class.getMethod("findPublicYears");
         String yearsQuery = years.getAnnotation(Query.class).value();
         assertThat(yearsQuery).contains(
-                "extract(year from d.updatedAt)",
+                "extract(year from d.archiveDate)",
                 "d.deletedAt is null",
                 "f.deletedAt is null",
                 "f.accessScope = 'PUBLIC'",
                 "p.deletedAt is null",
                 "p.isPublic = true"
+        );
+    }
+
+    @Test
+    void batchAssignmentQueryLocksAndExcludesDeletedParents() throws NoSuchMethodException {
+        Method batch = DocumentRepository.class.getMethod("findAllActiveByIdInForUpdate", java.util.Collection.class);
+        assertThat(batch.getAnnotation(Lock.class).value()).isEqualTo(LockModeType.PESSIMISTIC_WRITE);
+        assertThat(batch.getAnnotation(Query.class).value()).contains(
+                "d.id in :ids",
+                "d.deletedAt is null",
+                "d.project.deletedAt is null",
+                "d.currentFile.deletedAt is null"
         );
     }
 }

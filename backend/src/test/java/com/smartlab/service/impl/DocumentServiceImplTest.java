@@ -55,6 +55,7 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.mock;
 
 @ExtendWith(MockitoExtension.class)
 class DocumentServiceImplTest {
@@ -259,7 +260,10 @@ class DocumentServiceImplTest {
         when(documentRepository.findActiveByProjectId(7L)).thenReturn(List.of(readable, hidden));
         when(fileService.canRead(101L, authentication)).thenReturn(true);
         when(fileService.canRead(102L, authentication)).thenReturn(false);
-        when(documentVersionRepository.findMaxVersionNo(31L)).thenReturn(4);
+        DocumentVersionRepository.VersionNumberProjection version = mock(DocumentVersionRepository.VersionNumberProjection.class);
+        when(version.getDocumentId()).thenReturn(31L);
+        when(version.getMaxVersionNo()).thenReturn(4);
+        when(documentVersionRepository.findMaxVersionNosByDocumentIds(any())).thenReturn(List.of(version));
         when(fileService.describe(101L, authentication)).thenReturn(fileResponse(101L, "PROJECT"));
 
         List<DocumentResponse> result = service.list(7L, authentication);

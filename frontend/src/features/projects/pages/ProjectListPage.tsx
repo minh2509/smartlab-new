@@ -24,6 +24,7 @@ import {
   PUBLIC_PROJECT_STATUSES,
 } from '../types'
 import type { PublicProjectSummary, ProjectType, PublicProjectStatus } from '../types'
+import { PublicPageHead } from '../../public/components/PublicPageHead'
 import './ProjectListPage.css'
 
 const INITIAL_PAGE_SIZE = 6
@@ -287,39 +288,44 @@ export function ProjectListPage() {
   const remainingCount = Math.max(0, totalElements - projects.length)
 
   return (
-    <div className="project-archive-page">
-      <div className="wrap project-archive-container">
-        {/* Top Page Header (Without "Đang mở đăng ký đề tài...") */}
-        <header className="project-archive-header">
-          <div className="project-archive-header-left">
-            <h1 className="project-archive-title">Kho Dự án Nghiên cứu &amp; Ứng dụng</h1>
-            <p className="project-archive-subtitle">
-              Tra cứu và đăng ký tham gia các dự án nghiên cứu khoa học, đề tài công nghệ thực chiến của phòng thí nghiệm Smart Lab.
-            </p>
-          </div>
-        </header>
+    <>
+      <PublicPageHead
+        title="Dự án"
+        description="Khám phá các dự án nghiên cứu và sản phẩm công khai của Smart Lab."
+      />
+      <div className="project-archive-page">
+        <div className="wrap project-archive-container">
+          {/* Top Page Header (Without "Đang mở đăng ký đề tài...") */}
+          <header className="project-archive-header">
+            <div className="project-archive-header-left">
+              <h1 className="project-archive-title">Kho Dự án Nghiên cứu &amp; Ứng dụng</h1>
+              <p className="project-archive-subtitle">
+                Tra cứu và đăng ký tham gia các dự án nghiên cứu khoa học, đề tài công nghệ thực chiến của phòng thí nghiệm Smart Lab.
+              </p>
+            </div>
+          </header>
 
-        {/* 2-Column Layout: Left Sidebar & Right Content */}
-        <div className="project-archive-layout">
-          {/* Left Sidebar: Filters */}
-          <aside className="project-archive-sidebar" aria-label="Bộ lọc dự án">
-            <div className="project-sidebar-card">
-              {/* Sidebar Header */}
-              <div className="project-sidebar-top">
-                <div className="project-sidebar-heading">
-                  <Filter size={16} className="project-sidebar-icon" aria-hidden="true" />
-                  <span>BỘ LỌC TÌM KIẾM</span>
+          {/* 2-Column Layout: Left Sidebar & Right Content */}
+          <div className="project-archive-layout">
+            {/* Left Sidebar: Filters */}
+            <aside className="project-archive-sidebar" aria-label="Bộ lọc dự án">
+              <div className="project-sidebar-card">
+                {/* Sidebar Header */}
+                <div className="project-sidebar-top">
+                  <div className="project-sidebar-heading">
+                    <Filter size={16} className="project-sidebar-icon" aria-hidden="true" />
+                    <span>BỘ LỌC TÌM KIẾM</span>
+                  </div>
+                  <button
+                    className="project-sidebar-reset-btn"
+                    type="button"
+                    onClick={resetFilters}
+                    title="Đặt lại toàn bộ bộ lọc"
+                  >
+                    <RotateCcw size={13} aria-hidden="true" />
+                    <span>Đặt lại</span>
+                  </button>
                 </div>
-                <button
-                  className="project-sidebar-reset-btn"
-                  type="button"
-                  onClick={resetFilters}
-                  title="Đặt lại toàn bộ bộ lọc"
-                >
-                  <RotateCcw size={13} aria-hidden="true" />
-                  <span>Đặt lại</span>
-                </button>
-              </div>
 
               {/* Keyword Search */}
               <div className="project-sidebar-group">
@@ -590,6 +596,7 @@ export function ProjectListPage() {
         <span className="sr-only">Cuộn lên đầu trang</span>
       </button>
     </div>
+    </>
   )
 }
 

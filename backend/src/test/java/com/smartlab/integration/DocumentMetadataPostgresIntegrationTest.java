@@ -111,6 +111,31 @@ class DocumentMetadataPostgresIntegrationTest {
     }
 
     @Test
+    void listReturnsEmptyForAnExistingProjectWithoutDocuments() {
+        UserFixture owner = insertUser("list-empty-owner");
+        assignMemberRole(owner.id());
+        long projectId = insertProject("list-empty", owner.id());
+        jdbc.update("insert into project_members (project_id, user_id, project_role, status) values (?, ?, 'MEMBER', 'ACTIVE')",
+                projectId, owner.id());
+
+        assertThat(documentService.list(projectId, auth(owner.email()))).isEmpty();
+    }
+
+    @Test
+    void listLoadsDocumentsAndBatchVersionNumbersFromPostgres() {
+        Fixture fixture = fixture("list-populated", true);
+        assignMemberRole(fixture.ownerId());
+
+        assertThat(documentService.list(fixture.projectId(), auth(fixture.email())))
+                .singleElement()
+                .satisfies(document -> {
+                    assertThat(document.getId()).isEqualTo(fixture.documentId());
+                    assertThat(document.getCurrentVersionNo()).isEqualTo(2);
+                    assertThat(document.getDescription()).isEqualTo("Original description");
+                });
+    }
+
+    @Test
     void unauthorizedManagerCannotMutatePersistedMetadata() {
         Fixture fixture = fixture("forbidden", true);
         UserFixture other = insertUser("ordinary-member");
@@ -164,6 +189,14 @@ class DocumentMetadataPostgresIntegrationTest {
                 values (?, ?, 1, ?), (?, ?, 2, ?)
                 """, documentId, retainedFileId, owner.id(), documentId, currentFileId, owner.id());
         return new Fixture(owner.id(), owner.email(), projectId, documentId, currentFileId, retainedFileId);
+    }
+
+    private void assignMemberRole(long userId) {
+        int rows = jdbc.update("""
+                insert into user_roles (user_id, role_id, assigned_by)
+                select ?, id, 'document-list-integration' from roles where code = 'MEMBER'
+                """, userId);
+        assertThat(rows).isEqualTo(1);
     }
 
     private UserFixture insertUser(String label) {

@@ -4,6 +4,7 @@ import type {
   CreateProjectDocumentPayload,
   DocumentVersion,
   ProjectDocument,
+  UpdateProjectDocumentPayload,
 } from './types'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1.0'
@@ -56,6 +57,21 @@ export function deleteDocument(token: string, documentId: number) {
   return apiClient<void>(`/documents/${documentId}`, {
     method: 'DELETE',
     token,
+  })
+}
+
+export function updateProjectDocument(
+  token: string,
+  documentId: number,
+  payload: UpdateProjectDocumentPayload,
+) {
+  return apiClient<ProjectDocument>(`/documents/${documentId}`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify({
+      title: payload.title.trim(),
+      description: payload.description.trim(),
+    }),
   })
 }
 

@@ -34,6 +34,10 @@ public class DocumentEntity {
     @JoinColumn(name = "project_id")
     private ProjectEntity project;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "category_id")
+    private DocumentCategoryEntity category;
+
     @Column(nullable = false, length = 255)
     private String title;
 
@@ -56,6 +60,9 @@ public class DocumentEntity {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @Column(name = "archive_date", nullable = false, updatable = false)
+    private Instant archiveDate;
+
     @Column(name = "deleted_at")
     private Instant deletedAt;
 
@@ -72,6 +79,7 @@ public class DocumentEntity {
                 .description(description)
                 .currentFile(currentFile)
                 .createdBy(createdBy)
+                .archiveDate(Instant.now())
                 .build();
     }
 
@@ -82,6 +90,10 @@ public class DocumentEntity {
     public void updateMetadata(String title, String description) {
         this.title = title;
         this.description = description;
+    }
+
+    public void assignCategory(DocumentCategoryEntity category) {
+        this.category = category;
     }
 
     public void softDelete() {

@@ -39,6 +39,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -70,13 +71,12 @@ public class DocumentServiceImpl implements DocumentService {
     public List<DocumentResponse> list(Long projectId, Authentication authentication) {
         ProjectEntity project = requireProject(projectId);
         projectAccessService.requireRead(project, currentEmail(authentication));
-        return documentRepository.findActiveByProjectId(projectId).stream()
+        List<DocumentEntity> readableDocuments = documentRepository.findActiveByProjectId(projectId).stream()
                 .filter(document -> fileService.canRead(document.getCurrentFile().getId(), authentication))
-                .map(document -> toDocumentResponse(
-                        document,
-                        documentVersionRepository.findMaxVersionNo(document.getId()),
-                        authentication
-                ))
+                .toList();
+        Map<Long, Integer> versionNumbers = versionNumbers(readableDocuments.stream().map(DocumentEntity::getId).toList());
+        return readableDocuments.stream()
+                .map(document -> toDocumentResponse(document, versionNumbers.getOrDefault(document.getId(), 0), authentication))
                 .toList();
     }
 
@@ -313,6 +313,17 @@ public class DocumentServiceImpl implements DocumentService {
                 .createdAt(document.getCreatedAt())
                 .updatedAt(document.getUpdatedAt())
                 .build();
+    }
+
+    private Map<Long, Integer> versionNumbers(List<Long> documentIds) {
+        if (documentIds.isEmpty()) return Map.of();
+        return java.util.Optional.ofNullable(documentVersionRepository.findMaxVersionNosByDocumentIds(documentIds))
+                .orElseGet(List::of)
+                .stream()
+                .collect(Collectors.toMap(
+                        DocumentVersionRepository.VersionNumberProjection::getDocumentId,
+                        projection -> projection.getMaxVersionNo() == null ? 0 : projection.getMaxVersionNo()
+                ));
     }
 
     private DocumentVersionResponse toVersionResponse(

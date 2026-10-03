@@ -1,11 +1,12 @@
-import { Download, ExternalLink, FileText, Image, MoreHorizontal, Pencil, Plus, RefreshCw, RotateCcw, Search, Trash2, Trophy, Unlink, Upload, X } from 'lucide-react'
+import { Download, ExternalLink, FileText, Image, Pencil, Plus, RefreshCw, RotateCcw, Search, Trash2, Trophy, Unlink, Upload, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { FormEvent, KeyboardEvent } from 'react'
+import type { FormEvent } from 'react'
 import { useAuth } from '../../auth/authContext'
 import { EmptyState } from '../../../shared/components/EmptyState'
 import { Feedback } from '../../../shared/components/Feedback'
 import { useToast } from '../../../shared/toast/useToast'
 import { PopupSelect } from '../../../shared/ui/PopupSelect'
+import { ActionMenu as SharedActionMenu } from '../../../shared/ui/ActionMenu'
 import { confirmDialog } from '../../../shared/ui/projectConfirmDialog'
 import { OverlayPortalHost } from '../../../shared/ui/OverlayPortalHost'
 import { Pagination } from '../../../shared/components/Pagination'
@@ -76,154 +77,65 @@ function validateAchievementAttachment(file: File) {
   return null
 }
 
-function useAccessibleMenu() {
-  const [open, setOpen] = useState(false)
-  const triggerRef = useRef<HTMLButtonElement>(null)
-  const itemRefs = useRef<Array<HTMLButtonElement | HTMLAnchorElement | null>>([])
-
-  const close = useCallback((restoreFocus = true) => {
-    setOpen(false)
-    if (restoreFocus) window.requestAnimationFrame(() => triggerRef.current?.focus())
-  }, [])
-
-  const handleMenuKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
-    const items = itemRefs.current.filter((item): item is HTMLButtonElement | HTMLAnchorElement => item !== null)
-    const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement | HTMLAnchorElement)
-    if (event.key === 'Escape') {
-      event.preventDefault()
-      close()
-      return
-    }
-    if (!items.length) return
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Home' || event.key === 'End') {
-      event.preventDefault()
-      const nextIndex = event.key === 'Home'
-        ? 0
-        : event.key === 'End'
-          ? items.length - 1
-          : (currentIndex + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length
-      items[nextIndex]?.focus()
-    } else if (event.key === 'Tab') {
-      close(false)
-    }
-  }, [close])
-
-  useEffect(() => {
-    if (open) window.requestAnimationFrame(() => itemRefs.current[0]?.focus())
-  }, [open])
-
-  useEffect(() => {
-    if (!open) return
-    function handleClickOutside(event: MouseEvent) {
-      const target = event.target as Node
-      if (!(target instanceof Node) || !triggerRef.current?.parentElement?.contains(target)) close(false)
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [close, open])
-
-  return { open, setOpen, close, triggerRef, itemRefs, handleMenuKeyDown }
-}
-
 function ActionMenu({ item, onEdit, onDelete }: { item: AdminLabAchievement, onEdit: () => void, onDelete: () => void }) {
-  const menu = useAccessibleMenu()
-  const menuRef = useRef<HTMLDivElement>(null)
-
-  function runAction(action: () => void) {
-    menu.close(false)
-    menu.triggerRef.current?.focus()
-    action()
-  }
-
   return (
-    <div className="achievement-action-menu" ref={menuRef}>
-      <button
-        ref={menu.triggerRef}
-        className="btn ghost table-btn"
-        type="button"
-        onClick={() => menu.setOpen((previous) => !previous)}
-        onKeyDown={(event) => { if (event.key === 'ArrowDown') { event.preventDefault(); menu.setOpen(true) } }}
-        aria-label="Thao tác"
-        aria-haspopup="menu"
-        aria-expanded={menu.open}
-        title="Thao tác"
-      >
-        <MoreHorizontal aria-hidden="true" size={20} strokeWidth={2.2} />
-      </button>
-      {menu.open && (
-        <div className="achievement-action-menu-dropdown" role="menu" aria-label={`Thao tác với ${item.title}`} onKeyDown={menu.handleMenuKeyDown}>
-          <button
-            ref={(element) => { menu.itemRefs.current[0] = element }}
-            className="achievement-action-menu-item"
-            onClick={() => runAction(onEdit)}
-            role="menuitem"
-            type="button"
-          >
-            <Pencil size={15} aria-hidden="true" /> Sửa
-          </button>
-          {item.evidenceUrl && (
-            <a
-              ref={(element) => { menu.itemRefs.current[1] = element }}
-              className="achievement-action-menu-item"
-              href={item.evidenceUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={() => menu.close()}
-              role="menuitem"
-            >
-              <ExternalLink size={15} aria-hidden="true" /> Mở minh chứng
-            </a>
-          )}
-          <button
-            ref={(element) => { menu.itemRefs.current[item.evidenceUrl ? 2 : 1] = element }}
-            className="achievement-action-menu-item danger"
-            onClick={() => runAction(onDelete)}
-            role="menuitem"
-            type="button"
-          >
-            <Trash2 size={15} aria-hidden="true" /> Gỡ thành tựu
-          </button>
-        </div>
-      )}
-    </div>
+    <SharedActionMenu
+      triggerAriaLabel={`Thao tác với ${item.title}`}
+      className="table-btn"
+      align="right"
+      items={[
+        {
+          key: 'edit',
+          label: 'Sửa',
+          icon: <Pencil size={15} aria-hidden="true" />,
+          onClick: onEdit,
+        },
+        ...(item.evidenceUrl
+          ? [
+              {
+                key: 'evidence',
+                label: 'Mở minh chứng',
+                icon: <ExternalLink size={15} aria-hidden="true" />,
+                href: item.evidenceUrl,
+                target: '_blank',
+                rel: 'noopener noreferrer',
+              },
+            ]
+          : []),
+        {
+          key: 'delete',
+          label: 'Gỡ thành tựu',
+          icon: <Trash2 size={15} aria-hidden="true" />,
+          danger: true,
+          onClick: onDelete,
+        },
+      ]}
+    />
   )
 }
 
 function AttachmentMenu({ onDownload, onDetach }: { onDownload: () => void, onDetach: () => void }) {
-  const menu = useAccessibleMenu()
-  const menuRef = useRef<HTMLDivElement>(null)
-
-  function runAction(action: () => void) {
-    menu.close(false)
-    menu.triggerRef.current?.focus()
-    action()
-  }
-
   return (
-    <div className="achievement-attachment-menu" ref={menuRef}>
-      <button
-        ref={menu.triggerRef}
-        className="achievement-attachment-trigger"
-        type="button"
-        onClick={(e) => { e.stopPropagation(); menu.setOpen((previous) => !previous) }}
-        onKeyDown={(event) => { if (event.key === 'ArrowDown') { event.preventDefault(); menu.setOpen(true) } }}
-        aria-label="Thao tác với tệp"
-        aria-haspopup="menu"
-        aria-expanded={menu.open}
-      >
-        <MoreHorizontal size={20} aria-hidden="true" />
-      </button>
-      {menu.open && (
-        <div className="achievement-attachment-dropdown" role="menu" aria-label="Thao tác với tệp" onKeyDown={menu.handleMenuKeyDown}>
-          <button ref={(element) => { menu.itemRefs.current[0] = element }} type="button" role="menuitem" className="achievement-attachment-menu-item" onClick={() => runAction(onDownload)}>
-            <Download size={16} aria-hidden="true" /> Tải xuống
-          </button>
-          <button ref={(element) => { menu.itemRefs.current[1] = element }} type="button" role="menuitem" className="achievement-attachment-menu-item danger" onClick={() => runAction(onDetach)}>
-            <Unlink size={16} aria-hidden="true" /> Gỡ khỏi thành tựu
-          </button>
-        </div>
-      )}
-    </div>
+    <SharedActionMenu
+      triggerAriaLabel="Thao tác với tệp"
+      className="table-btn"
+      align="right"
+      items={[
+        {
+          key: 'download',
+          label: 'Tải xuống',
+          icon: <Download size={16} aria-hidden="true" />,
+          onClick: onDownload,
+        },
+        {
+          key: 'detach',
+          label: 'Gỡ khỏi thành tựu',
+          icon: <Unlink size={16} aria-hidden="true" />,
+          danger: true,
+          onClick: onDetach,
+        },
+      ]}
+    />
   )
 }
 

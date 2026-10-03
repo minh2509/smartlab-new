@@ -4,3 +4,6 @@
 # Local backend runtime logs.
 /backend/*.log
 /frontend/*.log
+
+# Playwright visual/E2E generated artifacts
+frontend/e2e/.artifacts/

@@ -1,4 +1,16 @@
-import { ChevronLeft, ChevronRight, RotateCcw, Search, X } from 'lucide-react'
+import {
+  ArrowRight,
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  Layers,
+  RotateCcw,
+  Search,
+  SlidersHorizontal,
+  Tag,
+  X,
+} from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import { useSearchParams } from 'react-router-dom'
@@ -25,13 +37,22 @@ const PAGE_SIZE = 24
 const MIN_YEAR = 2000
 
 const CATEGORY_LABELS: Record<GalleryCategory, string> = {
-  ALL: 'Tất cả danh mục',
+  ALL: 'Tất cả',
   WORKSHOP: 'Workshop',
   PROJECT_DEMO: 'Demo dự án',
   EVENT: 'Sự kiện',
-  LAB_ACTIVITY: 'Hoạt động Lab',
+  LAB_ACTIVITY: 'Đời sống Lab',
   OTHER: 'Khác',
 }
+
+const CATEGORY_TABS: { key: GalleryCategory; label: string }[] = [
+  { key: 'ALL', label: 'Tất cả' },
+  { key: 'WORKSHOP', label: 'Workshop' },
+  { key: 'PROJECT_DEMO', label: 'Demo dự án' },
+  { key: 'EVENT', label: 'Sự kiện' },
+  { key: 'LAB_ACTIVITY', label: 'Đời sống Lab' },
+  { key: 'OTHER', label: 'Khác' },
+]
 
 const SORT_LABELS: Record<GallerySort, string> = {
   LATEST: 'Mới nhất',
@@ -57,10 +78,14 @@ export function PublicGalleryPage() {
   const [optionsError, setOptionsError] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+  const [filterDrawerOpen, setFilterDrawerOpen] = useState(false)
+
   const tileRefs = useRef<Array<HTMLButtonElement | null>>([])
   const dialogRef = useRef<HTMLDivElement>(null)
+  const drawerRef = useRef<HTMLDivElement>(null)
   const lastFocused = useRef<HTMLElement | null>(null)
 
+  // Fetch projects and available years
   useEffect(() => {
     const controller = new AbortController()
     setOptionsError(false)
@@ -80,6 +105,7 @@ export function PublicGalleryPage() {
     return () => controller.abort()
   }, [])
 
+  // Fetch gallery items
   useEffect(() => {
     const controller = new AbortController()
     setLoading(true)
@@ -120,6 +146,7 @@ export function PublicGalleryPage() {
     return () => controller.abort()
   }, [category, page, projectId, query, reloadKey, sort, year])
 
+  // Lightbox keyboard controls and scroll lock
   useEffect(() => {
     if (lightboxIndex === null) return
     const previousOverflow = document.body.style.overflow
@@ -141,6 +168,16 @@ export function PublicGalleryPage() {
     }
   }, [items.length, lightboxIndex])
 
+  // Filter drawer keyboard controls
+  useEffect(() => {
+    if (!filterDrawerOpen) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setFilterDrawerOpen(false)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [filterDrawerOpen])
+
   function openLightbox(index: number) {
     lastFocused.current = document.activeElement as HTMLElement
     setLightboxIndex(index)
@@ -159,6 +196,24 @@ export function PublicGalleryPage() {
     setSearchParams(next)
   }
 
+  function handleCategoryTabClick(catKey: GalleryCategory) {
+    const next = new URLSearchParams(searchParams)
+    if (catKey === 'ALL') {
+      next.delete('category')
+    } else {
+      next.set('category', catKey)
+    }
+    next.delete('page')
+    setSearchParams(next)
+  }
+
+  function removeFilterChip(key: 'q' | 'category' | 'project' | 'year' | 'sort') {
+    const next = new URLSearchParams(searchParams)
+    next.delete(key)
+    next.delete('page')
+    setSearchParams(next)
+  }
+
   function resetFilters() {
     setSearchParams(new URLSearchParams())
   }
@@ -170,18 +225,10 @@ export function PublicGalleryPage() {
     setSearchParams(next)
   }
 
-  const hasFilters = Boolean(query.trim()) || category !== 'ALL' || projectId !== null || year !== null || sort !== 'LATEST'
-
-  const categoryOptions = useMemo(
-    () => [
-      { value: 'ALL', label: 'Tất cả danh mục' },
-      ...GALLERY_CATEGORIES.filter((c) => c !== 'ALL').map((c) => ({
-        value: c,
-        label: CATEGORY_LABELS[c],
-      })),
-    ],
-    [],
-  )
+  const selectedProject = useMemo(() => {
+    if (!projectId) return null
+    return projects.find((p) => p.id === projectId)
+  }, [projectId, projects])
 
   const projectOptions = useMemo(
     () => [
@@ -207,135 +254,476 @@ export function PublicGalleryPage() {
     [],
   )
 
+  const hasFilters =
+    Boolean(query.trim()) ||
+    category !== 'ALL' ||
+    projectId !== null ||
+    year !== null ||
+    sort !== 'LATEST'
+
+  const secondaryFilterCount =
+    (query.trim() ? 1 : 0) +
+    (projectId !== null ? 1 : 0) +
+    (year !== null ? 1 : 0) +
+    (sort !== 'LATEST' ? 1 : 0)
+
+  // Identify Hero Spotlight item (on page 1 when no heavy filtering is active)
+  const isPageOneWithoutSearch = page === 1 && !query.trim()
+  const heroIndex = useMemo(() => {
+    if (!isPageOneWithoutSearch || items.length === 0) return -1
+    const featuredIdx = items.findIndex((item) => item.isFeatured)
+    return featuredIdx >= 0 ? featuredIdx : 0
+  }, [isPageOneWithoutSearch, items])
+
+  const heroItem = heroIndex >= 0 ? items[heroIndex] : null
+
   return (
     <>
       <PublicPageHead
         title="Thư viện ảnh"
-        description="Những hình ảnh được Smart Lab công khai từ hoạt động, workshop và các dự án."
+        description="Những hình ảnh được Smart Lab công khai từ hoạt động nghiên cứu, workshop và các dự án thực tế."
       />
 
-      <section className="section public-gallery-section">
+      <div className="gallery-chronicle-root">
         <div className="wrap">
-          <div className="public-gallery-intro">
-            <div>
-              <div className="kicker">THƯ VIỆN ẢNH</div>
-              <h2>Thư viện ảnh</h2>
-              <p>Những khoảnh khắc và sản phẩm hình ảnh được Smart Lab chia sẻ công khai.</p>
+          {/* Editorial Exhibition Header */}
+          <header className="gallery-curated-header">
+            <div className="gallery-header-narrative">
+              <span className="gallery-editorial-kicker">Ký ức &amp; Tư liệu</span>
+              <h1 className="gallery-editorial-heading">Thư viện Hình ảnh &amp; Đời sống Lab</h1>
+              <p className="gallery-editorial-subtext">
+                Khám phá những khoảnh khắc chế tạo, thử nghiệm công nghệ, các buổi hội thảo khoa học và nhịp sống học thuật tại phòng thí nghiệm Smart Lab.
+              </p>
             </div>
-            <span className="public-archive-page-size">24 ảnh / trang</span>
-          </div>
 
-          <div className="gallery-archive-toolbar" role="search">
-            <label className="gallery-archive-search">
-              <span className="sr-only">Tìm kiếm ảnh</span>
-              <Search aria-hidden="true" />
-              <input
-                className="input"
-                type="search"
-                value={query}
-                onChange={(event) => updateFilter('q', event.target.value)}
-                placeholder="Tìm ảnh theo tên hoặc nội dung..."
-              />
-            </label>
+            {/* Curated Navigation Bar: Level 1 Category Pills + Contextual Filter Drawer Button */}
+            <div className="gallery-curated-nav-row">
+              <nav className="gallery-curated-category-tabs" role="tablist" aria-label="Danh mục tư liệu">
+                {CATEGORY_TABS.map((tab) => {
+                  const isActive = category === tab.key
+                  return (
+                    <button
+                      key={tab.key}
+                      type="button"
+                      role="tab"
+                      aria-selected={isActive}
+                      className={`gallery-editorial-tab ${isActive ? 'is-active' : ''}`}
+                      onClick={() => handleCategoryTabClick(tab.key)}
+                    >
+                      {tab.label}
+                    </button>
+                  )
+                })}
+              </nav>
 
-            <PopupSelect
-              value={category}
-              options={categoryOptions}
-              onChange={(value) => updateFilter('category', value)}
-              ariaLabel="Lọc theo danh mục ảnh"
-              className="gallery-archive-filter"
-            />
+              <div className="gallery-curated-action-cluster">
+                <button
+                  type="button"
+                  className={`gallery-editorial-filter-btn ${secondaryFilterCount > 0 ? 'is-active' : ''}`}
+                  onClick={() => setFilterDrawerOpen(true)}
+                  aria-expanded={filterDrawerOpen}
+                  aria-controls="gallery-contextual-drawer"
+                  aria-label="Mở bộ lọc nâng cao"
+                >
+                  <SlidersHorizontal size={15} aria-hidden="true" />
+                  <span>Bộ lọc</span>
+                  {secondaryFilterCount > 0 ? (
+                    <span className="gallery-editorial-filter-count">{secondaryFilterCount}</span>
+                  ) : null}
+                </button>
+              </div>
+            </div>
 
-            <PopupSelect
-              value={projectId ? String(projectId) : 'ALL'}
-              options={projectOptions}
-              onChange={(value) => updateFilter('project', value)}
-              ariaLabel="Lọc theo dự án"
-              className="gallery-archive-filter"
-              disabled={optionsError}
-            />
-
-            <PopupSelect
-              value={year ? String(year) : 'ALL'}
-              options={yearOptions}
-              onChange={(value) => updateFilter('year', value)}
-              ariaLabel="Lọc theo năm"
-              className="gallery-archive-filter"
-              disabled={optionsError}
-            />
-
-            <PopupSelect
-              value={sort}
-              options={sortOptions}
-              onChange={(value) => updateFilter('sort', value)}
-              ariaLabel="Sắp xếp ảnh"
-              className="gallery-archive-filter"
-            />
-
+            {/* Active Filter Context Banner (Clean, Minimalist) */}
             {hasFilters ? (
-              <button className="gallery-archive-reset" type="button" onClick={resetFilters}>
-                <RotateCcw size={15} aria-hidden="true" />
-                Đặt lại
-              </button>
-            ) : null}
-          </div>
+              <div className="gallery-active-filter-strip" aria-label="Bộ lọc đang chọn">
+                <span className="gallery-active-filter-label">Đang lọc:</span>
+                <div className="gallery-active-filter-pills">
+                  {category !== 'ALL' ? (
+                    <span className="gallery-filter-pill">
+                      <span>{CATEGORY_LABELS[category]}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeFilterChip('category')}
+                        aria-label={`Bỏ lọc ${CATEGORY_LABELS[category]}`}
+                      >
+                        <X size={12} aria-hidden="true" />
+                      </button>
+                    </span>
+                  ) : null}
 
+                  {query.trim() ? (
+                    <span className="gallery-filter-pill">
+                      <span>"{query.trim()}"</span>
+                      <button
+                        type="button"
+                        onClick={() => removeFilterChip('q')}
+                        aria-label={`Bỏ lọc từ khóa ${query}`}
+                      >
+                        <X size={12} aria-hidden="true" />
+                      </button>
+                    </span>
+                  ) : null}
+
+                  {selectedProject ? (
+                    <span className="gallery-filter-pill">
+                      <span>{selectedProject.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeFilterChip('project')}
+                        aria-label={`Bỏ lọc dự án ${selectedProject.name}`}
+                      >
+                        <X size={12} aria-hidden="true" />
+                      </button>
+                    </span>
+                  ) : null}
+
+                  {year !== null ? (
+                    <span className="gallery-filter-pill">
+                      <span>Năm {year}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeFilterChip('year')}
+                        aria-label={`Bỏ lọc năm ${year}`}
+                      >
+                        <X size={12} aria-hidden="true" />
+                      </button>
+                    </span>
+                  ) : null}
+
+                  {sort !== 'LATEST' ? (
+                    <span className="gallery-filter-pill">
+                      <span>{SORT_LABELS[sort]}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeFilterChip('sort')}
+                        aria-label="Bỏ sắp xếp"
+                      >
+                        <X size={12} aria-hidden="true" />
+                      </button>
+                    </span>
+                  ) : null}
+
+                  <button
+                    type="button"
+                    className="gallery-filter-reset-action"
+                    onClick={resetFilters}
+                  >
+                    Xóa tất cả
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </header>
+
+          {/* Error Request State */}
           {error ? (
-            <div className="gallery-archive-request-state" role="alert">
+            <div className="gallery-error-panel" role="alert">
               <Feedback error={error} />
-              <button className="btn" type="button" onClick={() => setReloadKey((value) => value + 1)}>
+              <button
+                className="btn btn-primary"
+                type="button"
+                onClick={() => setReloadKey((value) => value + 1)}
+              >
                 Thử tải lại
               </button>
             </div>
           ) : null}
 
+          {/* Skeleton Loading State */}
           {loading && items.length === 0 ? (
-            <div className="public-empty empty tight gallery-archive-request-state" aria-busy="true">
-              Đang tải thư viện ảnh...
+            <div className="gallery-editorial-skeleton-flow" aria-busy="true">
+              <div className="skeleton-spotlight-frame shimmer" />
+              <div className="skeleton-mosaic-flow">
+                {Array.from({ length: 6 }, (_, i) => (
+                  <div key={i} className={`skeleton-mosaic-tile shimmer tile-${i % 4}`} />
+                ))}
+              </div>
             </div>
           ) : null}
 
+          {/* Empty State */}
           {!loading && !error && items.length === 0 ? (
-            <EmptyState
-              title={hasFilters ? 'Không tìm thấy ảnh phù hợp' : 'Chưa có ảnh công khai'}
-              description={
-                hasFilters
-                  ? 'Thử thay đổi từ khóa hoặc bộ lọc.'
-                  : 'Những hình ảnh công khai của Smart Lab sẽ xuất hiện tại đây.'
-              }
-            />
+            <div className="gallery-empty-state-card">
+              <EmptyState
+                title={hasFilters ? 'Không tìm thấy hình ảnh phù hợp' : 'Chưa có hình ảnh công khai'}
+                description={
+                  hasFilters
+                    ? 'Thử thay đổi từ khóa, danh mục hoặc đặt lại bộ lọc để khám phá các khoảnh khắc khác.'
+                    : 'Các hình ảnh ghi lại hoạt động nghiên cứu của Smart Lab sẽ sớm xuất hiện tại đây.'
+                }
+              />
+              {hasFilters ? (
+                <button
+                  type="button"
+                  className="gallery-empty-reset-btn"
+                  onClick={resetFilters}
+                >
+                  <RotateCcw size={15} aria-hidden="true" />
+                  <span>Đặt lại bộ lọc</span>
+                </button>
+              ) : null}
+            </div>
           ) : null}
 
+          {/* Main Visual Stream */}
           {items.length > 0 ? (
-            <>
-              <div className="gallery-archive-results-bar">
-                <p className="gallery-archive-summary" aria-live="polite">
-                  {formatRange(page, PAGE_SIZE, total)} · {total} ảnh
-                </p>
-                {loading ? (
-                  <span className="gallery-archive-refreshing" aria-live="polite">
-                    Đang cập nhật...
-                  </span>
-                ) : null}
+            <div className="gallery-content-stream" aria-busy={loading}>
+              {/* Results status indicator */}
+              <div className="gallery-stream-meta-line">
+                <span className="gallery-stream-count">
+                  {formatRange(page, PAGE_SIZE, total)} · <strong>{total}</strong> ảnh tư liệu
+                </span>
+                <span className="gallery-stream-page-tag">24 ảnh / trang</span>
               </div>
-              <div className="public-gallery-grid" aria-busy={loading}>
-                {items.map((item, index) => (
-                  <GalleryTile
-                    item={item}
-                    key={item.id}
-                    buttonRef={(node) => {
-                      tileRefs.current[index] = node
+
+              {/* 1. Hero Spotlight Showcase (Displayed when hero item exists) */}
+              {heroItem && (
+                <section className="gallery-hero-spotlight" aria-label="Khoảnh khắc tiêu biểu">
+                  <button
+                    ref={(node) => {
+                      tileRefs.current[heroIndex] = node
                     }}
-                    onOpen={() => openLightbox(index)}
-                  />
-                ))}
+                    type="button"
+                    className="gallery-spotlight-trigger"
+                    onClick={() => openLightbox(heroIndex)}
+                    aria-label={`Mở xem tiêu điểm: ${heroItem.title}`}
+                  >
+                    <div className="gallery-spotlight-viewport">
+                      <img
+                        src={publicGalleryFileUrl(heroItem.fileId)}
+                        alt={heroItem.altText || heroItem.title}
+                        loading="eager"
+                        decoding="async"
+                        onError={(event) => {
+                          event.currentTarget.src = fallbackImage
+                        }}
+                      />
+                      <div className="gallery-spotlight-overlay" />
+                      <div className="gallery-spotlight-narrative">
+                        <div className="gallery-spotlight-pill-row">
+                          <span className="gallery-spotlight-category-chip">
+                            {CATEGORY_LABELS[heroItem.category]}
+                          </span>
+                          <span className="gallery-spotlight-badge">Tiêu điểm</span>
+                        </div>
+                        <h2 className="gallery-spotlight-title">{heroItem.title}</h2>
+                        {heroItem.caption ? (
+                          <p className="gallery-spotlight-caption">{heroItem.caption}</p>
+                        ) : null}
+                        <div className="gallery-spotlight-footer">
+                          <time dateTime={heroItem.capturedAt || heroItem.publishedAt}>
+                            {formatDate(heroItem.capturedAt || heroItem.publishedAt)}
+                          </time>
+                          {heroItem.projectName ? (
+                            <span>· Dự án: {heroItem.projectName}</span>
+                          ) : null}
+                          <span className="gallery-spotlight-cta">
+                            <span>Xem ảnh chi tiết</span>
+                            <ArrowRight size={14} aria-hidden="true" />
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                </section>
+              )}
+
+              {/* 2. Editorial Mosaic Stream (All supporting items) */}
+              <section className="gallery-editorial-mosaic" aria-label="Tất cả tư liệu hình ảnh">
+                {items.map((item, index) => {
+                  // If hero is shown in spotlight, skip repeating it as the first mosaic item
+                  if (heroItem && index === heroIndex) return null
+                  const isFeatured = item.isFeatured
+                  // Rhythmic variation based on index
+                  const rhythmClass = isFeatured
+                    ? 'is-wide-feature'
+                    : index % 7 === 1
+                      ? 'is-portrait-tall'
+                      : index % 5 === 0
+                        ? 'is-landscape-wide'
+                        : 'is-standard-frame'
+
+                  return (
+                    <article key={item.id} className={`gallery-mosaic-card ${rhythmClass}`}>
+                      <button
+                        ref={(node) => {
+                          tileRefs.current[index] = node
+                        }}
+                        type="button"
+                        className="gallery-mosaic-btn"
+                        onClick={() => openLightbox(index)}
+                        aria-label={`Mở xem ảnh: ${item.title}`}
+                      >
+                        <div className="gallery-mosaic-media-box">
+                          <img
+                            src={publicGalleryFileUrl(item.fileId)}
+                            alt={item.altText || item.title}
+                            loading="lazy"
+                            decoding="async"
+                            onError={(event) => {
+                              event.currentTarget.src = fallbackImage
+                            }}
+                          />
+                          <div className="gallery-mosaic-hover-scrim">
+                            <span className="gallery-mosaic-hover-cat">
+                              {CATEGORY_LABELS[item.category]}
+                            </span>
+                            <span className="gallery-mosaic-hover-action">Xem toàn màn hình</span>
+                          </div>
+                        </div>
+
+                        <div className="gallery-mosaic-info">
+                          <h3 className="gallery-mosaic-title">{item.title}</h3>
+                          <div className="gallery-mosaic-submeta">
+                            <time dateTime={item.capturedAt || item.publishedAt}>
+                              {formatDate(item.capturedAt || item.publishedAt)}
+                            </time>
+                            {item.projectName ? (
+                              <span className="gallery-mosaic-project" title={item.projectName}>
+                                {item.projectName}
+                              </span>
+                            ) : item.eventTitle ? (
+                              <span className="gallery-mosaic-event" title={item.eventTitle}>
+                                {item.eventTitle}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                      </button>
+                    </article>
+                  )
+                })}
+              </section>
+
+              {/* Server-side Pagination */}
+              <div className="gallery-editorial-pagination">
+                <Pagination page={page} totalPages={totalPages} onChange={updatePage} />
               </div>
-              <Pagination page={page} totalPages={totalPages} onChange={updatePage} />
-            </>
+            </div>
           ) : null}
         </div>
-      </section>
+      </div>
 
+      {/* Contextual Filter Slide-over Drawer */}
+      {filterDrawerOpen ? (
+        <div
+          className="gallery-drawer-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setFilterDrawerOpen(false)
+          }}
+        >
+          <div
+            id="gallery-contextual-drawer"
+            className="gallery-contextual-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="gallery-drawer-heading"
+            ref={drawerRef}
+          >
+            <div className="gallery-drawer-header">
+              <div className="gallery-drawer-title-group">
+                <SlidersHorizontal size={17} aria-hidden="true" />
+                <h2 id="gallery-drawer-heading" className="gallery-drawer-title">
+                  Bộ lọc thư viện ảnh
+                </h2>
+              </div>
+              <button
+                type="button"
+                className="gallery-drawer-close-btn"
+                onClick={() => setFilterDrawerOpen(false)}
+                aria-label="Đóng bảng bộ lọc"
+              >
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="gallery-drawer-body">
+              {/* Search keyword */}
+              <div className="gallery-drawer-field">
+                <label className="gallery-drawer-label" htmlFor="drawer-search-input">
+                  Từ khóa tìm kiếm
+                </label>
+                <div className="gallery-drawer-search-box">
+                  <Search size={15} className="gallery-drawer-search-icon" aria-hidden="true" />
+                  <input
+                    id="drawer-search-input"
+                    className="gallery-drawer-search-input"
+                    type="search"
+                    value={query}
+                    onChange={(event) => updateFilter('q', event.target.value)}
+                    placeholder="Tìm theo tên ảnh, sự kiện, dự án..."
+                  />
+                </div>
+              </div>
+
+              {/* Project selector */}
+              <div className="gallery-drawer-field">
+                <label className="gallery-drawer-label">Dự án liên kết</label>
+                <PopupSelect
+                  value={projectId ? String(projectId) : 'ALL'}
+                  options={projectOptions}
+                  onChange={(value) => updateFilter('project', value)}
+                  ariaLabel="Lọc theo dự án"
+                  className="gallery-drawer-select"
+                  disabled={optionsError}
+                />
+              </div>
+
+              {/* Year selector */}
+              <div className="gallery-drawer-field">
+                <label className="gallery-drawer-label">Năm phát hành</label>
+                <PopupSelect
+                  value={year ? String(year) : 'ALL'}
+                  options={yearOptions}
+                  onChange={(value) => updateFilter('year', value)}
+                  ariaLabel="Lọc theo năm"
+                  className="gallery-drawer-select"
+                  disabled={optionsError}
+                />
+              </div>
+
+              {/* Sort selector */}
+              <div className="gallery-drawer-field">
+                <label className="gallery-drawer-label">Sắp xếp hiển thị</label>
+                <PopupSelect
+                  value={sort}
+                  options={sortOptions}
+                  onChange={(value) => updateFilter('sort', value)}
+                  ariaLabel="Sắp xếp thời gian"
+                  className="gallery-drawer-select"
+                />
+              </div>
+            </div>
+
+            <div className="gallery-drawer-footer">
+              {hasFilters ? (
+                <button
+                  type="button"
+                  className="gallery-drawer-reset-btn"
+                  onClick={() => {
+                    resetFilters()
+                    setFilterDrawerOpen(false)
+                  }}
+                >
+                  <RotateCcw size={14} aria-hidden="true" />
+                  <span>Xóa bộ lọc</span>
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="gallery-drawer-apply-btn"
+                onClick={() => setFilterDrawerOpen(false)}
+              >
+                Xem kết quả ({total} ảnh)
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Photography Exhibition Lightbox Modal */}
       {lightboxIndex !== null && items[lightboxIndex] ? (
         <GalleryLightbox
           item={items[lightboxIndex]}
@@ -352,40 +740,6 @@ export function PublicGalleryPage() {
         />
       ) : null}
     </>
-  )
-}
-
-function GalleryTile({
-  item,
-  onOpen,
-  buttonRef,
-}: {
-  item: PublicGalleryItem
-  onOpen: () => void
-  buttonRef: (node: HTMLButtonElement | null) => void
-}) {
-  return (
-    <article className="public-gallery-tile">
-      <button ref={buttonRef} type="button" onClick={onOpen} aria-label={`Mở ảnh ${item.title}`}>
-        <img
-          src={publicGalleryFileUrl(item.fileId)}
-          alt={item.altText || item.title}
-          onError={(event) => {
-            event.currentTarget.src = fallbackImage
-          }}
-        />
-        <span className="public-gallery-tile-overlay">
-          <strong>{item.title}</strong>
-          <small>{item.caption || item.projectName || 'Smart Lab'}</small>
-        </span>
-      </button>
-      <div className="public-gallery-tile-meta">
-        <span>{CATEGORY_LABELS[item.category]}</span>
-        <time dateTime={item.capturedAt || item.publishedAt}>
-          {formatDate(item.capturedAt || item.publishedAt)}
-        </time>
-      </div>
-    </article>
   )
 }
 
@@ -408,24 +762,31 @@ function GalleryLightbox({
 }) {
   return (
     <div
-      className="public-gallery-lightbox-backdrop"
+      className="gallery-lightbox-exhibition-backdrop"
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose()
       }}
     >
       <div
-        className="public-gallery-lightbox"
+        className="gallery-lightbox-exhibition-dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby="gallery-lightbox-title"
         tabIndex={-1}
         ref={dialogRef}
       >
-        <button className="public-gallery-lightbox-close" type="button" onClick={onClose} aria-label="Đóng ảnh">
-          <X aria-hidden="true" />
+        <button
+          className="gallery-lightbox-close-trigger"
+          type="button"
+          onClick={onClose}
+          aria-label="Đóng ảnh"
+        >
+          <X size={20} aria-hidden="true" />
         </button>
-        <div className="public-gallery-lightbox-media">
+
+        {/* Media Frame (Clean, Large, Exhibition Quality) */}
+        <div className="gallery-lightbox-media-viewport">
           <img
             src={publicGalleryFileUrl(item.fileId)}
             alt={item.altText || item.title}
@@ -434,27 +795,102 @@ function GalleryLightbox({
             }}
           />
         </div>
-        <div className="public-gallery-lightbox-content">
-          <span className="kicker">{CATEGORY_LABELS[item.category]}</span>
-          <h2 id="gallery-lightbox-title">{item.title}</h2>
-          {item.caption ? <p>{item.caption}</p> : null}
-          <div className="public-gallery-lightbox-meta">
-            <time dateTime={item.capturedAt || item.publishedAt}>
-              {formatDate(item.capturedAt || item.publishedAt)}
-            </time>
-            {item.projectName ? <span>{item.projectName}</span> : null}
-            {item.eventTitle ? <span>{item.eventTitle}</span> : null}
+
+        {/* Story & Context Sidebar (Pure Editorial, No Technical Slop) */}
+        <div className="gallery-lightbox-story-sidebar">
+          <div className="gallery-lightbox-meta-pills">
+            <span className="gallery-lightbox-category-chip">
+              {CATEGORY_LABELS[item.category]}
+            </span>
+            {item.isFeatured ? (
+              <span className="gallery-lightbox-featured-chip">Tiêu điểm</span>
+            ) : null}
+          </div>
+
+          <h2 id="gallery-lightbox-title" className="gallery-lightbox-headline">
+            {item.title}
+          </h2>
+
+          {item.caption ? (
+            <p className="gallery-lightbox-story-text">{item.caption}</p>
+          ) : null}
+
+          {/* Context Highlights */}
+          <div className="gallery-lightbox-context-card">
+            <div className="gallery-lightbox-context-row">
+              <span className="context-label">
+                <Calendar size={14} aria-hidden="true" />
+                <span>Thời gian:</span>
+              </span>
+              <time className="context-value" dateTime={item.capturedAt || item.publishedAt}>
+                {formatDate(item.capturedAt || item.publishedAt)}
+              </time>
+            </div>
+
+            {item.projectName ? (
+              <div className="gallery-lightbox-context-row">
+                <span className="context-label">
+                  <Layers size={14} aria-hidden="true" />
+                  <span>Dự án:</span>
+                </span>
+                <span className="context-value">{item.projectName}</span>
+              </div>
+            ) : null}
+
+            {item.eventTitle ? (
+              <div className="gallery-lightbox-context-row">
+                <span className="context-label">
+                  <Tag size={14} aria-hidden="true" />
+                  <span>Sự kiện:</span>
+                </span>
+                <span className="context-value">{item.eventTitle}</span>
+              </div>
+            ) : null}
+          </div>
+
+          {/* Action Download High-Res File */}
+          <div className="gallery-lightbox-action-row">
+            <a
+              href={publicGalleryFileUrl(item.fileId)}
+              target="_blank"
+              rel="noopener noreferrer"
+              download={item.originalFileName || true}
+              className="gallery-lightbox-download-action"
+            >
+              <Download size={15} aria-hidden="true" />
+              <span>Tải ảnh gốc</span>
+            </a>
           </div>
         </div>
-        <div className="public-gallery-lightbox-nav">
-          <button type="button" onClick={onPrevious} disabled={count < 2} aria-label="Ảnh trước">
-            <ChevronLeft aria-hidden="true" />
+
+        {/* Bottom Navigation Frame */}
+        <div className="gallery-lightbox-nav-strip">
+          <button
+            type="button"
+            className="gallery-lightbox-nav-arrow"
+            onClick={onPrevious}
+            disabled={count < 2}
+            aria-label="Xem ảnh trước"
+          >
+            <ChevronLeft size={18} aria-hidden="true" />
+            <span>Trước</span>
           </button>
-          <span>
-            {index + 1} / {count}
-          </span>
-          <button type="button" onClick={onNext} disabled={count < 2} aria-label="Ảnh tiếp theo">
-            <ChevronRight aria-hidden="true" />
+
+          <div className="gallery-lightbox-nav-counter">
+            <span>
+              <strong>{index + 1}</strong> / {count}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            className="gallery-lightbox-nav-arrow"
+            onClick={onNext}
+            disabled={count < 2}
+            aria-label="Xem ảnh tiếp theo"
+          >
+            <span>Tiếp theo</span>
+            <ChevronRight size={18} aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -463,11 +899,15 @@ function GalleryLightbox({
 }
 
 function parseCategory(value: string | null): GalleryCategory {
-  return value && GALLERY_CATEGORIES.includes(value as GalleryCategory) ? (value as GalleryCategory) : 'ALL'
+  return value && GALLERY_CATEGORIES.includes(value as GalleryCategory)
+    ? (value as GalleryCategory)
+    : 'ALL'
 }
 
 function parseSort(value: string | null): GallerySort {
-  return value && GALLERY_SORTS.includes(value as GallerySort) ? (value as GallerySort) : 'LATEST'
+  return value && GALLERY_SORTS.includes(value as GallerySort)
+    ? (value as GallerySort)
+    : 'LATEST'
 }
 
 function parsePositive(value: string | null) {
@@ -489,7 +929,7 @@ function parsePage(value: string | null) {
 }
 
 function formatRange(page: number, size: number, total: number) {
-  return total === 0 ? '0 / 0' : `${(page - 1) * size + 1}–${Math.min(page * size, total)} / ${total}`
+  return total === 0 ? '0 / 0' : `${(page - 1) * size + 1} - ${Math.min(page * size, total)} / ${total}`
 }
 
 function formatDate(value: string) {

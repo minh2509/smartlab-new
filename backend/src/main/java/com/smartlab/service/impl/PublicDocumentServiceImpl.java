@@ -1,11 +1,14 @@
 package com.smartlab.service.impl;
 
+import com.smartlab.dto.response.PublicDocumentCategoryResponse;
 import com.smartlab.dto.response.PublicDocumentSummaryResponse;
 import com.smartlab.dto.response.PublicPageResponse;
+import com.smartlab.entity.DocumentCategoryEntity;
 import com.smartlab.entity.DocumentEntity;
 import com.smartlab.entity.StoredFileEntity;
 import com.smartlab.enums.PublicDocumentFileType;
 import com.smartlab.enums.PublicDocumentSort;
+import com.smartlab.repo.DocumentCategoryRepository;
 import com.smartlab.repo.DocumentRepository;
 import com.smartlab.repo.DocumentVersionRepository;
 import com.smartlab.service.PublicDocumentService;
@@ -18,13 +21,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.time.Year;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.Year;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -33,12 +38,14 @@ public class PublicDocumentServiceImpl implements PublicDocumentService {
 
     private final DocumentRepository documentRepository;
     private final DocumentVersionRepository documentVersionRepository;
+    private final DocumentCategoryRepository documentCategoryRepository;
 
     @Override
     @Transactional(readOnly = true)
     public PublicPageResponse<PublicDocumentSummaryResponse> list(
             String query,
             Long projectId,
+            String category,
             PublicDocumentFileType fileType,
             Integer year,
             PublicDocumentSort sort,
@@ -53,9 +60,12 @@ public class PublicDocumentServiceImpl implements PublicDocumentService {
         PublicDocumentFileType normalizedType = fileType == null ? PublicDocumentFileType.ALL : fileType;
         PublicDocumentSort normalizedSort = sort == null ? PublicDocumentSort.LATEST : sort;
         Sort documentSort = sortFor(normalizedSort);
-        Specification<DocumentEntity> specification = publicSpecification(normalizedQuery, projectId, normalizedType, year);
-        return PublicPageResponse.from(documentRepository.findAll(specification, PageRequest.of(page, size, documentSort))
-                .map(this::toSummary));
+        Specification<DocumentEntity> specification = publicSpecification(normalizedQuery, projectId, category, normalizedType, year);
+        var documents = documentRepository.findAll(specification, PageRequest.of(page, size, documentSort));
+        Map<Long, Integer> versionNumbers = versionNumbers(documents.getContent().stream().map(DocumentEntity::getId).toList());
+        return new PublicPageResponse<>(documents.getContent().stream()
+                .map(document -> toSummary(document, versionNumbers.getOrDefault(document.getId(), 0)))
+                .toList(), documents.getNumber(), documents.getSize(), documents.getTotalElements(), documents.getTotalPages());
     }
 
     @Override
@@ -64,9 +74,34 @@ public class PublicDocumentServiceImpl implements PublicDocumentService {
         return documentRepository.findPublicYears();
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<PublicDocumentCategoryResponse> categories(Integer year) {
+        if (year != null && (year < 2000 || year > Year.now().getValue())) {
+            throw badRequest("Year is invalid");
+        }
+        List<DocumentCategoryEntity> activeCategories = documentCategoryRepository.findAllByIsActiveTrueOrderByDisplayOrderAscNameAscIdAsc();
+        Map<Long, Long> counts = documentCategoryRepository.countPublicDocumentsByCategory(year).stream()
+                .collect(Collectors.toMap(
+                        DocumentCategoryRepository.CategoryCountProjection::getCategoryId,
+                        DocumentCategoryRepository.CategoryCountProjection::getDocumentCount
+                ));
+        return activeCategories.stream()
+                .map(c -> new PublicDocumentCategoryResponse(
+                        c.getId(),
+                        c.getCode(),
+                        c.getName(),
+                        c.getDescription(),
+                        c.getDisplayOrder(),
+                        counts.getOrDefault(c.getId(), 0L)
+                ))
+                .toList();
+    }
+
     private Specification<DocumentEntity> publicSpecification(
             String query,
             Long projectId,
+            String category,
             PublicDocumentFileType fileType,
             Integer year
     ) {
@@ -88,11 +123,22 @@ public class PublicDocumentServiceImpl implements PublicDocumentService {
                 ));
             }
             if (projectId != null) predicates.add(builder.equal(project.get("id"), projectId));
+            if (category != null && !category.isBlank() && !category.equalsIgnoreCase("all") && !category.equalsIgnoreCase("tat-ca")) {
+                var categoryJoin = root.join("category");
+                predicates.add(builder.isTrue(categoryJoin.get("isActive")));
+                String trimmed = category.trim();
+                try {
+                    Long catId = Long.parseLong(trimmed);
+                    predicates.add(builder.equal(categoryJoin.get("id"), catId));
+                } catch (NumberFormatException e) {
+                    predicates.add(builder.equal(builder.lower(categoryJoin.get("code")), trimmed.toLowerCase(Locale.ROOT)));
+                }
+            }
             if (year != null) {
                 Instant yearStart = LocalDate.of(year, 1, 1).atStartOfDay(ZoneOffset.UTC).toInstant();
                 Instant nextYearStart = LocalDate.of(year + 1, 1, 1).atStartOfDay(ZoneOffset.UTC).toInstant();
-                predicates.add(builder.greaterThanOrEqualTo(root.get("updatedAt"), yearStart));
-                predicates.add(builder.lessThan(root.get("updatedAt"), nextYearStart));
+                predicates.add(builder.greaterThanOrEqualTo(root.get("archiveDate"), yearStart));
+                predicates.add(builder.lessThan(root.get("archiveDate"), nextYearStart));
             }
             addFileTypePredicate(predicates, fileType, file, builder);
             return builder.and(predicates.toArray(jakarta.persistence.criteria.Predicate[]::new));
@@ -164,21 +210,46 @@ public class PublicDocumentServiceImpl implements PublicDocumentService {
 
     private Sort sortFor(PublicDocumentSort sort) {
         return switch (sort) {
-            case OLDEST -> Sort.by(Sort.Order.asc("updatedAt"), Sort.Order.asc("id"));
+            case OLDEST -> Sort.by(Sort.Order.asc("archiveDate"), Sort.Order.asc("id"));
             case TITLE_ASC -> Sort.by(Sort.Order.asc("title").ignoreCase(), Sort.Order.asc("id"));
             case TITLE_DESC -> Sort.by(Sort.Order.desc("title").ignoreCase(), Sort.Order.desc("id"));
-            case LATEST -> Sort.by(Sort.Order.desc("updatedAt"), Sort.Order.desc("id"));
+            case LATEST -> Sort.by(Sort.Order.desc("archiveDate"), Sort.Order.desc("id"));
         };
     }
 
-    private PublicDocumentSummaryResponse toSummary(DocumentEntity document) {
+    private PublicDocumentSummaryResponse toSummary(DocumentEntity document, int currentVersionNo) {
         StoredFileEntity file = document.getCurrentFile();
+        DocumentCategoryEntity category = document.getCategory();
+        boolean categoryIsPublic = category != null && Boolean.TRUE.equals(category.getIsActive());
         return new PublicDocumentSummaryResponse(
-                document.getId(), document.getTitle(), document.getDescription(),
-                document.getProject().getId(), document.getProject().getCode(), document.getProject().getName(),
-                file.getId(), file.getOriginalName(), file.getMimeType(), file.getSizeBytes(),
-                documentVersionRepository.findMaxVersionNo(document.getId()), document.getUpdatedAt()
+                document.getId(),
+                document.getTitle(),
+                document.getDescription(),
+                document.getProject().getId(),
+                document.getProject().getCode(),
+                document.getProject().getName(),
+                categoryIsPublic ? category.getId() : null,
+                categoryIsPublic ? category.getCode() : null,
+                categoryIsPublic ? category.getName() : null,
+                file.getId(),
+                file.getOriginalName(),
+                file.getMimeType(),
+                file.getSizeBytes(),
+                currentVersionNo,
+                document.getArchiveDate(),
+                document.getUpdatedAt()
         );
+    }
+
+    private Map<Long, Integer> versionNumbers(List<Long> documentIds) {
+        if (documentIds.isEmpty()) return Map.of();
+        return java.util.Optional.ofNullable(documentVersionRepository.findMaxVersionNosByDocumentIds(documentIds))
+                .orElseGet(List::of)
+                .stream()
+                .collect(Collectors.toMap(
+                        DocumentVersionRepository.VersionNumberProjection::getDocumentId,
+                        projection -> projection.getMaxVersionNo() == null ? 0 : projection.getMaxVersionNo()
+                ));
     }
 
     private ResponseStatusException badRequest(String message) { return new ResponseStatusException(HttpStatus.BAD_REQUEST, message); }

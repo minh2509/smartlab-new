@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 
 @Repository
@@ -27,6 +28,19 @@ public interface DocumentVersionRepository extends JpaRepository<DocumentVersion
             where dv.document.id = :documentId
             """)
     int findMaxVersionNo(@Param("documentId") Long documentId);
+
+    @Query("""
+            select dv.document.id as documentId, max(dv.versionNo) as maxVersionNo
+            from DocumentVersionEntity dv
+            where dv.document.id in :documentIds
+            group by dv.document.id
+            """)
+    List<VersionNumberProjection> findMaxVersionNosByDocumentIds(@Param("documentIds") Collection<Long> documentIds);
+
+    interface VersionNumberProjection {
+        Long getDocumentId();
+        Integer getMaxVersionNo();
+    }
 
     boolean existsByFile_Id(Long fileId);
 

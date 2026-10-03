@@ -433,6 +433,8 @@
   height: 100%;
   min-height: 0;
   grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 100%;
   overflow: hidden;
   border-radius: inherit;
 }
@@ -917,11 +919,14 @@
   }
 
   .project-editor-dialog-head {
+    flex-wrap: wrap;
+    gap: 12px;
     padding: 16px;
   }
 
   .project-editor-dialog-heading {
     width: 100%;
+    min-width: 0;
   }
 
   .project-editor-dialog-heading .project-create-dialog-icon {
@@ -930,11 +935,23 @@
   }
 
   .project-editor-dialog-actions {
+    width: 100%;
     justify-content: space-between;
   }
 
   .project-editor-dialog-tabs {
     padding: 8px 14px;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    scroll-padding-inline: 12px;
+  }
+
+  .project-tabs {
+    scrollbar-width: none;
+  }
+
+  .project-tabs::-webkit-scrollbar {
+    display: none;
   }
 
   .project-editor-dialog-body {

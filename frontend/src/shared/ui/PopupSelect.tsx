@@ -4,7 +4,12 @@ import type { KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { useOverlayPortalTarget } from './overlayPortalStore'
 
-export type PopupSelectOption = { value: string; label: string; description?: string }
+export type PopupSelectOption = {
+  value: string
+  label: string
+  description?: string
+  disabled?: boolean
+}
 
 type PopupSelectProps = {
   value: string
@@ -15,14 +20,25 @@ type PopupSelectProps = {
   className?: string
 }
 
-export function PopupSelect({ value, options, onChange, ariaLabel, disabled = false, className = '' }: PopupSelectProps) {
+export function PopupSelect({
+  value,
+  options,
+  onChange,
+  ariaLabel,
+  disabled = false,
+  className = '',
+}: PopupSelectProps) {
   const triggerRef = useRef<HTMLButtonElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
+  const optionRefs = useRef<Array<HTMLButtonElement | null>>([])
   const id = useId()
   const [open, setOpen] = useState(false)
-  const [activeIndex, setActiveIndex] = useState(() => Math.max(0, options.findIndex((option) => option.value === value)))
+  const [activeIndex, setActiveIndex] = useState(() => {
+    const idx = options.findIndex((opt) => opt.value === value)
+    return idx >= 0 ? idx : 0
+  })
   const [position, setPosition] = useState({ top: 0, left: 0, width: 0, maxHeight: 280 })
-  const selected = options.find((option) => option.value === value) ?? options[0]
+  const selected = options.find((opt) => opt.value === value) ?? options[0]
   const portalTargetFromStore = useOverlayPortalTarget()
 
   const getTarget = useCallback(() => {
@@ -58,17 +74,24 @@ export function PopupSelect({ value, options, onChange, ariaLabel, disabled = fa
     if (!open) return
     updatePosition()
     const closeOnPointerDown = (event: PointerEvent) => {
-      if (!triggerRef.current?.contains(event.target as Node) && !listRef.current?.contains(event.target as Node)) setOpen(false)
+      if (
+        !triggerRef.current?.contains(event.target as Node) &&
+        !listRef.current?.contains(event.target as Node)
+      ) {
+        setOpen(false)
+      }
     }
     const closeOnKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault()
+        event.stopPropagation()
         setOpen(false)
         triggerRef.current?.focus()
       }
     }
     const reposition = () => updatePosition()
     const closeForModal = () => setOpen(false)
+
     window.addEventListener('pointerdown', closeOnPointerDown)
     window.addEventListener('keydown', closeOnKeyDown)
     window.addEventListener('resize', reposition)
@@ -83,44 +106,198 @@ export function PopupSelect({ value, options, onChange, ariaLabel, disabled = fa
     }
   }, [open, updatePosition])
 
+  // Scroll active option into view when activeIndex changes
+  useEffect(() => {
+    if (open && activeIndex >= 0 && optionRefs.current[activeIndex]) {
+      optionRefs.current[activeIndex]?.scrollIntoView({ block: 'nearest' })
+    }
+  }, [activeIndex, open])
+
+  function getNextIndex(current: number, direction: 1 | -1): number {
+    if (options.length === 0) return 0
+    let next = current + direction
+    while (next >= 0 && next < options.length) {
+      if (!options[next]?.disabled) return next
+      next += direction
+    }
+    return current
+  }
+
+  function getFirstEnabledIndex(): number {
+    const idx = options.findIndex((opt) => !opt.disabled)
+    return idx >= 0 ? idx : 0
+  }
+
+  function getLastEnabledIndex(): number {
+    for (let i = options.length - 1; i >= 0; i--) {
+      if (!options[i]?.disabled) return i
+    }
+    return 0
+  }
+
   function openList() {
     if (disabled) return
-    setActiveIndex(Math.max(0, options.findIndex((option) => option.value === value)))
+    const currentIdx = options.findIndex((opt) => opt.value === value)
+    setActiveIndex(
+      currentIdx >= 0 && !options[currentIdx]?.disabled
+        ? currentIdx
+        : getFirstEnabledIndex(),
+    )
     setOpen(true)
   }
+
   function choose(index: number) {
     const option = options[index]
-    if (!option) return
+    if (!option || option.disabled) return
     onChange(option.value)
     setOpen(false)
     window.requestAnimationFrame(() => triggerRef.current?.focus())
   }
+
   function onTriggerKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
-    if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openList(); return }
-    if (event.key === 'ArrowDown') { event.preventDefault(); openList(); setActiveIndex((current) => Math.min(options.length - 1, current + 1)); return }
-    if (event.key === 'ArrowUp') { event.preventDefault(); openList(); setActiveIndex((current) => Math.max(0, current - 1)); return }
-    if (event.key === 'Home') { event.preventDefault(); setActiveIndex(0); return }
-    if (event.key === 'End') { event.preventDefault(); setActiveIndex(options.length - 1) }
-  }
-  function onListKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.key === 'Escape') { event.preventDefault(); setOpen(false); triggerRef.current?.focus(); return }
-    if (event.key === 'ArrowDown') { event.preventDefault(); setActiveIndex((current) => Math.min(options.length - 1, current + 1)); return }
-    if (event.key === 'ArrowUp') { event.preventDefault(); setActiveIndex((current) => Math.max(0, current - 1)); return }
-    if (event.key === 'Home') { event.preventDefault(); setActiveIndex(0); return }
-    if (event.key === 'End') { event.preventDefault(); setActiveIndex(options.length - 1); return }
-    if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); choose(activeIndex) }
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      if (open) {
+        choose(activeIndex)
+      } else {
+        openList()
+      }
+      return
+    }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      if (!open) {
+        openList()
+      } else {
+        setActiveIndex((curr) => getNextIndex(curr, 1))
+      }
+      return
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      if (!open) {
+        openList()
+      } else {
+        setActiveIndex((curr) => getNextIndex(curr, -1))
+      }
+      return
+    }
+    if (event.key === 'Home' && open) {
+      event.preventDefault()
+      setActiveIndex(getFirstEnabledIndex())
+      return
+    }
+    if (event.key === 'End' && open) {
+      event.preventDefault()
+      setActiveIndex(getLastEnabledIndex())
+      return
+    }
+    if (event.key === 'Tab' && open) {
+      setOpen(false)
+    }
   }
 
-  return <>
-    <button ref={triggerRef} className={`popup-select-trigger ${className}`} type="button" disabled={disabled} aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open} aria-controls={`${id}-listbox`} onClick={() => open ? setOpen(false) : openList()} onKeyDown={onTriggerKeyDown} title={selected?.label}>
-      <span>{selected?.label}</span><ChevronDown size={16} aria-hidden="true" />
-    </button>
-    {open && createPortal(
-      <div ref={listRef} id={`${id}-listbox`} className="popup-select-menu" role="listbox" aria-label={ariaLabel} tabIndex={-1} style={{ top: position.top, left: position.left, width: position.width, maxHeight: position.maxHeight }} onKeyDown={onListKeyDown}>
-        {options.map((option, index) => <button key={option.value} className={`popup-select-option ${index === activeIndex ? 'is-active' : ''}`} type="button" role="option" aria-selected={option.value === value} onMouseMove={() => setActiveIndex(index)} onClick={() => choose(index)} title={option.label}>
-          <span><strong>{option.label}</strong>{option.description ? <small>{option.description}</small> : null}</span>{option.value === value ? <Check size={15} aria-hidden="true" /> : null}
-        </button>)}
-      </div>, getTarget(),
-    )}
-  </>
+  function onListKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      event.stopPropagation()
+      setOpen(false)
+      triggerRef.current?.focus()
+      return
+    }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      setActiveIndex((curr) => getNextIndex(curr, 1))
+      return
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      setActiveIndex((curr) => getNextIndex(curr, -1))
+      return
+    }
+    if (event.key === 'Home') {
+      event.preventDefault()
+      setActiveIndex(getFirstEnabledIndex())
+      return
+    }
+    if (event.key === 'End') {
+      event.preventDefault()
+      setActiveIndex(getLastEnabledIndex())
+      return
+    }
+    if (event.key === 'Tab') {
+      setOpen(false)
+      return
+    }
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      choose(activeIndex)
+    }
+  }
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        className={`popup-select-trigger ${className}`}
+        type="button"
+        disabled={disabled}
+        aria-label={ariaLabel}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={`${id}-listbox`}
+        onClick={() => (open ? setOpen(false) : openList())}
+        onKeyDown={onTriggerKeyDown}
+        title={selected?.label}
+      >
+        <span>{selected?.label}</span>
+        <ChevronDown size={16} aria-hidden="true" />
+      </button>
+      {open &&
+        createPortal(
+          <div
+            ref={listRef}
+            id={`${id}-listbox`}
+            className="popup-select-menu"
+            role="listbox"
+            aria-label={ariaLabel}
+            tabIndex={-1}
+            style={{
+              top: position.top,
+              left: position.left,
+              width: position.width,
+              maxHeight: position.maxHeight,
+            }}
+            onKeyDown={onListKeyDown}
+          >
+            {options.map((option, index) => (
+              <button
+                key={option.value}
+                ref={(node) => {
+                  optionRefs.current[index] = node
+                }}
+                className={`popup-select-option ${index === activeIndex ? 'is-active' : ''} ${option.disabled ? 'is-disabled' : ''}`}
+                type="button"
+                role="option"
+                disabled={option.disabled}
+                aria-disabled={option.disabled}
+                aria-selected={option.value === value}
+                onMouseMove={() => {
+                  if (!option.disabled) setActiveIndex(index)
+                }}
+                onClick={() => choose(index)}
+                title={option.label}
+              >
+                <span>
+                  <strong>{option.label}</strong>
+                  {option.description ? <small>{option.description}</small> : null}
+                </span>
+                {option.value === value ? <Check size={15} aria-hidden="true" /> : null}
+              </button>
+            ))}
+          </div>,
+          getTarget(),
+        )}
+    </>
+  )
 }

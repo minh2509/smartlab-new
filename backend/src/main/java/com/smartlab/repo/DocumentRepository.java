@@ -15,15 +15,16 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Collection;
 
 @Repository
 public interface DocumentRepository extends JpaRepository<DocumentEntity, Long>, JpaSpecificationExecutor<DocumentEntity> {
     @Override
-    @EntityGraph(attributePaths = {"currentFile", "project"})
+    @EntityGraph(attributePaths = {"currentFile", "project", "category"})
     Page<DocumentEntity> findAll(Specification<DocumentEntity> specification, Pageable pageable);
 
     @Query("""
-            select distinct extract(year from d.updatedAt)
+            select distinct extract(year from d.archiveDate)
             from DocumentEntity d
             join d.currentFile f
             join d.project p
@@ -32,8 +33,8 @@ public interface DocumentRepository extends JpaRepository<DocumentEntity, Long>,
               and f.accessScope = 'PUBLIC'
               and p.deletedAt is null
               and p.isPublic = true
-              and d.updatedAt is not null
-            order by extract(year from d.updatedAt) desc
+              and d.archiveDate is not null
+            order by extract(year from d.archiveDate) desc
             """)
     List<Integer> findPublicYears();
     @Query("""
@@ -47,6 +48,19 @@ public interface DocumentRepository extends JpaRepository<DocumentEntity, Long>,
             order by d.updatedAt desc, d.id desc
             """)
     List<DocumentEntity> findActiveByProjectId(@Param("projectId") Long projectId);
+
+    @Query("""
+            select d
+            from DocumentEntity d
+            join fetch d.currentFile f
+            join fetch d.project p
+            left join fetch d.category c
+            where d.deletedAt is null
+              and p.deletedAt is null
+              and f.deletedAt is null
+            order by d.updatedAt desc, d.id desc
+            """)
+    List<DocumentEntity> findAllActiveWithProjectAndFile();
 
     @Query("""
             select d
@@ -69,6 +83,17 @@ public interface DocumentRepository extends JpaRepository<DocumentEntity, Long>,
               and d.project.deletedAt is null
             """)
     Optional<DocumentEntity> findActiveByIdForUpdate(@Param("id") Long id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select d
+            from DocumentEntity d
+            where d.id in :ids
+              and d.deletedAt is null
+              and d.project.deletedAt is null
+              and d.currentFile.deletedAt is null
+            """)
+    List<DocumentEntity> findAllActiveByIdInForUpdate(@Param("ids") Collection<Long> ids);
 
     boolean existsByCurrentFile_IdAndDeletedAtIsNull(Long fileId);
 

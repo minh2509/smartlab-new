@@ -2,12 +2,18 @@ import {
   ChevronDown,
   ChevronUp,
   Download,
+  FileCheck,
   FilePlus2,
   FileText,
   History,
+  Pencil,
+  Plus,
   RefreshCw,
+  Save,
   Trash2,
+  Undo2,
   Upload,
+  X,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
@@ -26,6 +32,7 @@ import {
   downloadDocument,
   listDocumentVersions,
   listProjectDocuments,
+  updateProjectDocument,
 } from '../api'
 import type { DocumentAccessScope, DocumentVersion, ProjectDocument } from '../types'
 import './ProjectDocumentsPanel.css'
@@ -79,6 +86,11 @@ type VersionForm = {
   file: File | null
 }
 
+type DocumentEditForm = {
+  title: string
+  description: string
+}
+
 const EMPTY_CREATE_FORM: CreateDocumentForm = {
   title: '',
   description: '',
@@ -94,15 +106,20 @@ export function ProjectDocumentsPanel({ project, onDirtyChange, onBusyChange }: 
   const createFileInputRef = useRef<HTMLInputElement>(null)
   const versionFileInputRef = useRef<HTMLInputElement>(null)
   const versionsRequestIdRef = useRef(0)
+  const initialAutoOpenRef = useRef(false)
+
   const [documents, setDocuments] = useState<ProjectDocument[]>([])
   const [versions, setVersions] = useState<DocumentVersion[]>([])
   const [expandedDocumentId, setExpandedDocumentId] = useState<number | null>(null)
+  const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [createForm, setCreateForm] = useState<CreateDocumentForm>(EMPTY_CREATE_FORM)
   const [versionForm, setVersionForm] = useState<VersionForm>({
     accessScope: 'PROJECT',
     note: '',
     file: null,
   })
+  const [editingDocumentId, setEditingDocumentId] = useState<number | null>(null)
+  const [editForm, setEditForm] = useState<DocumentEditForm>({ title: '', description: '' })
   const [loading, setLoading] = useState(false)
   const [loadingVersions, setLoadingVersions] = useState(false)
   const [busyAction, setBusyAction] = useState<string | null>(null)
@@ -115,25 +132,32 @@ export function ProjectDocumentsPanel({ project, onDirtyChange, onBusyChange }: 
     profile && project?.leaders.some((leader) => leader.userId === profile.userId),
   )
   const canManage = isAdminManager || isProjectLeader
+
   const createDirty = Boolean(
     createForm.file
-    || createForm.title
-    || createForm.description
-    || createForm.note
+    || createForm.title.trim()
+    || createForm.description.trim()
+    || createForm.note.trim()
     || createForm.accessScope !== 'PROJECT',
   )
   const versionDirty = Boolean(
     versionForm.file
-    || versionForm.note
+    || versionForm.note.trim()
     || (
       expandedDocumentId
       && versionForm.accessScope !== scopeOf(documents.find((item) => item.id === expandedDocumentId))
     ),
   )
+  const editingDocument = documents.find((item) => item.id === editingDocumentId)
+  const editDirty = Boolean(
+    editingDocument
+    && (editForm.title !== editingDocument.title
+      || editForm.description !== (editingDocument.description ?? '')),
+  )
 
   useEffect(() => {
-    onDirtyChange?.(createDirty || versionDirty)
-  }, [createDirty, onDirtyChange, versionDirty])
+    onDirtyChange?.(createDirty || versionDirty || editDirty)
+  }, [createDirty, editDirty, onDirtyChange, versionDirty])
 
   useEffect(() => () => onDirtyChange?.(false), [onDirtyChange])
 
@@ -151,9 +175,13 @@ export function ProjectDocumentsPanel({ project, onDirtyChange, onBusyChange }: 
 
   useEffect(() => {
     versionsRequestIdRef.current += 1
+    initialAutoOpenRef.current = false
     setDocuments([])
     setVersions([])
     setExpandedDocumentId(null)
+    setEditingDocumentId(null)
+    setIsCreateOpen(false)
+    setEditForm({ title: '', description: '' })
     setCreateForm(EMPTY_CREATE_FORM)
     setVersionForm({ accessScope: 'PROJECT', note: '', file: null })
     setError('')
@@ -166,7 +194,13 @@ export function ProjectDocumentsPanel({ project, onDirtyChange, onBusyChange }: 
     setLoading(true)
     void listProjectDocuments(token, projectId)
       .then((result) => {
-        if (active) setDocuments(result)
+        if (active) {
+          setDocuments(result)
+          if (result.length === 0 && canManage && !initialAutoOpenRef.current) {
+            initialAutoOpenRef.current = true
+            setIsCreateOpen(true)
+          }
+        }
       })
       .catch((reason: unknown) => {
         if (active) setError(errorMessage(reason, 'Không tải được tài liệu của dự án.'))
@@ -179,12 +213,32 @@ export function ProjectDocumentsPanel({ project, onDirtyChange, onBusyChange }: 
       active = false
       versionsRequestIdRef.current += 1
     }
-  }, [projectId, token])
+  }, [canManage, projectId, token])
 
   const sortedDocuments = useMemo(
     () => [...documents].sort((left, right) => dateValue(right.updatedAt) - dateValue(left.updatedAt)),
     [documents],
   )
+
+  async function handleToggleCreate() {
+    if (isCreateOpen) {
+      if (createDirty) {
+        const discard = await confirmDialog({
+          title: 'Bỏ thông tin tài liệu đang tạo?',
+          description: 'Thông tin và file bạn đã nhập chưa được lưu sẽ bị hủy.',
+          confirmLabel: 'Bỏ thay đổi',
+          destructive: true,
+        })
+        if (!discard) return
+      }
+      setCreateForm(EMPTY_CREATE_FORM)
+      if (createFileInputRef.current) createFileInputRef.current.value = ''
+      setIsCreateOpen(false)
+    } else {
+      clearFeedback()
+      setIsCreateOpen(true)
+    }
+  }
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -208,8 +262,9 @@ export function ProjectDocumentsPanel({ project, onDirtyChange, onBusyChange }: 
       })
       setDocuments((current) => [created, ...current.filter((item) => item.id !== created.id)])
       setCreateForm(EMPTY_CREATE_FORM)
+      setIsCreateOpen(false)
       if (createFileInputRef.current) createFileInputRef.current.value = ''
-      toast.success('Đã tạo tài liệu', `“${created.title}” đã có phiên bản đầu tiên.`)
+      toast.success('Đã tạo tài liệu mới', `“${created.title}” đã được tạo với phiên bản v1.`)
     } catch (reason: unknown) {
       const message = errorMessage(reason, 'Không thể tạo tài liệu.')
       setError(message)
@@ -297,6 +352,45 @@ export function ProjectDocumentsPanel({ project, onDirtyChange, onBusyChange }: 
     }
   }
 
+  function startEditing(document: ProjectDocument) {
+    if (!canManage || busyAction) return
+    clearFeedback()
+    setEditingDocumentId(document.id)
+    setEditForm({ title: document.title, description: document.description ?? '' })
+  }
+
+  function cancelEditing() {
+    clearFeedback()
+    setEditingDocumentId(null)
+    setEditForm({ title: '', description: '' })
+  }
+
+  async function handleUpdateMetadata(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!token || !editingDocument || !canManage || busyAction) return
+
+    const validationError = validateMetadataForm(editForm)
+    if (validationError) {
+      setError(validationError)
+      return
+    }
+
+    setBusyAction(`edit:${editingDocument.id}`)
+    clearFeedback()
+    try {
+      const updated = await updateProjectDocument(token, editingDocument.id, editForm)
+      setDocuments((current) => current.map((item) => item.id === updated.id ? updated : item))
+      cancelEditing()
+      toast.success('Đã cập nhật tài liệu', `“${updated.title}” đã được đồng bộ.`)
+    } catch (reason: unknown) {
+      const message = errorMessage(reason, 'Không thể cập nhật thông tin tài liệu.')
+      setError(message)
+      toast.error('Không thể cập nhật tài liệu', message)
+    } finally {
+      setBusyAction(null)
+    }
+  }
+
   async function handleDownload(document: ProjectDocument) {
     if (!token || busyAction) return
     setBusyAction(`download:${document.id}`)
@@ -378,17 +472,19 @@ export function ProjectDocumentsPanel({ project, onDirtyChange, onBusyChange }: 
 
   return (
     <section className="panel page-section project-documents-panel">
-      <div className="panel-head">
-        <div>
+      {/* Panel Header */}
+      <div className="panel-head project-documents-panel-head">
+        <div className="project-documents-head-intro">
           <h2>Tài liệu dự án</h2>
-          <p>Quản lý file hiện tại và giữ đầy đủ lịch sử phiên bản của từng tài liệu.</p>
+          <p>Quản lý các tài liệu kỹ thuật, nghiên cứu và theo dõi đầy đủ lịch sử phiên bản.</p>
         </div>
         <div className="project-documents-head-actions">
           <span className="badge info">{documents.length} tài liệu</span>
           <button
             className="btn ghost table-btn"
             type="button"
-            disabled={loading || Boolean(busyAction)}
+            disabled={loading || Boolean(busyAction) || editingDocumentId !== null}
+            title="Tải lại danh sách tài liệu"
             onClick={() => {
               setLoading(true)
               clearFeedback()
@@ -397,168 +493,452 @@ export function ProjectDocumentsPanel({ project, onDirtyChange, onBusyChange }: 
                 .finally(() => setLoading(false))
             }}
           >
-            <RefreshCw aria-hidden="true" /> Tải lại
+            <RefreshCw size={14} aria-hidden="true" /> Tải lại
           </button>
+          {canManage ? (
+            <button
+              className={`btn ${isCreateOpen ? 'ghost' : 'primary'} table-btn project-documents-create-toggle`}
+              type="button"
+              disabled={loading || Boolean(busyAction) || editingDocumentId !== null}
+              aria-expanded={isCreateOpen}
+              onClick={() => void handleToggleCreate()}
+            >
+              {isCreateOpen ? (
+                <>
+                  <X size={14} aria-hidden="true" /> Đóng tạo mới
+                </>
+              ) : (
+                <>
+                  <Plus size={14} aria-hidden="true" /> Thêm tài liệu
+                </>
+              )}
+            </button>
+          ) : null}
         </div>
       </div>
 
       <Feedback error={error} />
 
-      <div className={`project-documents-layout ${canManage ? '' : 'read-only'}`}>
-        <div className="project-document-list">
-          {loading ? <div className="empty tight">Đang tải tài liệu...</div> : null}
-          {!loading && !sortedDocuments.length ? (
-            <EmptyState
-              title="Chưa có tài liệu"
-              description={canManage
-                ? 'Tạo tài liệu đầu tiên bằng biểu mẫu bên cạnh.'
-                : 'Dự án chưa có tài liệu mà bạn có quyền xem.'}
-            />
-          ) : null}
-          {!loading ? sortedDocuments.map((document) => (
-            <article className="project-document-card" key={document.id}>
+      {/* Collapsible Create Document Card */}
+      {canManage && isCreateOpen ? (
+        <form className="project-document-create-card" onSubmit={handleCreate}>
+          <div className="project-document-create-head">
+            <div className="project-document-create-title-wrap">
+              <span className="project-document-create-icon"><FilePlus2 size={20} aria-hidden="true" /></span>
+              <div>
+                <h3>Tạo tài liệu mới</h3>
+                <p>File được tải lên sẽ đồng thời tạo phiên bản đầu tiên (v1). Thông tin metadata có thể chỉnh sửa riêng sau này.</p>
+              </div>
+            </div>
+            <button
+              className="btn ghost icon-btn project-document-create-close"
+              type="button"
+              title="Đóng biểu mẫu tạo tài liệu"
+              aria-label="Đóng biểu mẫu tạo tài liệu"
+              disabled={Boolean(busyAction)}
+              onClick={() => void handleToggleCreate()}
+            >
+              <X size={18} aria-hidden="true" />
+            </button>
+          </div>
+
+          <div className="project-document-create-grid">
+            <div className="project-document-create-col">
+              <label className="field">
+                <span>Tiêu đề tài liệu <strong className="required-mark">*</strong></span>
+                <input
+                  className="input"
+                  required
+                  maxLength={255}
+                  value={createForm.title}
+                  disabled={Boolean(busyAction) || editingDocumentId !== null}
+                  placeholder="Ví dụ: Báo cáo kiến trúc hệ thống Q3"
+                  onChange={(event) => setCreateForm((current) => ({ ...current, title: event.target.value }))}
+                />
+              </label>
+
+              <label className="field">
+                <span>Mô tả</span>
+                <textarea
+                  className="textarea"
+                  rows={3}
+                  maxLength={20000}
+                  value={createForm.description}
+                  disabled={Boolean(busyAction) || editingDocumentId !== null}
+                  placeholder="Mô tả tóm tắt nội dung, phạm vi hoặc mục đích của tài liệu..."
+                  onChange={(event) => setCreateForm((current) => ({ ...current, description: event.target.value }))}
+                />
+              </label>
+            </div>
+
+            <div className="project-document-create-col">
+              <label className="field">
+                <span>File đính kèm (phiên bản v1) <strong className="required-mark">*</strong></span>
+                <input
+                  ref={createFileInputRef}
+                  className="project-document-file-input"
+                  type="file"
+                  accept={ACCEPTED_FILE_TYPES}
+                  required
+                  disabled={Boolean(busyAction) || editingDocumentId !== null}
+                  onChange={(event) => {
+                    clearFeedback()
+                    setCreateForm((current) => ({ ...current, file: event.target.files?.[0] ?? null }))
+                  }}
+                />
+                <small className="project-document-help-text">Hỗ trợ PDF, Office, ảnh, văn bản, ZIP. Tối đa 25 MB.</small>
+              </label>
+
+              <label className="field">
+                <span>Phạm vi truy cập</span>
+                <PopupSelect
+                  value={createForm.accessScope}
+                  disabled={Boolean(busyAction) || editingDocumentId !== null}
+                  ariaLabel="Phạm vi truy cập tài liệu"
+                  options={ACCESS_SCOPE_OPTIONS}
+                  onChange={(value) => setCreateForm((current) => ({ ...current, accessScope: value as DocumentAccessScope }))}
+                />
+                <small className="project-document-scope-help">{scopeDescription(createForm.accessScope)}</small>
+              </label>
+
+              <label className="field">
+                <span>Ghi chú phiên bản đầu tiên</span>
+                <input
+                  className="input"
+                  maxLength={5000}
+                  value={createForm.note}
+                  disabled={Boolean(busyAction) || editingDocumentId !== null}
+                  placeholder="Ví dụ: Khởi tạo tài liệu dự án..."
+                  onChange={(event) => setCreateForm((current) => ({ ...current, note: event.target.value }))}
+                />
+              </label>
+            </div>
+          </div>
+
+          <div className="project-document-create-actions">
+            <button
+              className="btn primary"
+              type="submit"
+              disabled={!createForm.file || !createForm.title.trim() || Boolean(busyAction) || editingDocumentId !== null}
+            >
+              <FilePlus2 size={16} aria-hidden="true" />
+              {busyAction === 'create' ? 'Đang tạo...' : 'Tạo tài liệu'}
+            </button>
+            <button
+              className="btn ghost"
+              type="button"
+              disabled={Boolean(busyAction)}
+              onClick={() => void handleToggleCreate()}
+            >
+              Hủy
+            </button>
+          </div>
+        </form>
+      ) : null}
+
+      {/* Document List */}
+      <div className="project-document-list">
+        {loading ? <div className="empty tight">Đang tải tài liệu...</div> : null}
+        {!loading && !sortedDocuments.length && !isCreateOpen ? (
+          <EmptyState
+            title="Chưa có tài liệu"
+            description={canManage
+              ? 'Dự án chưa có tài liệu nào. Hãy nhấn “Thêm tài liệu” ở trên để bắt đầu.'
+              : 'Dự án chưa có tài liệu mà bạn có quyền xem.'}
+          />
+        ) : null}
+
+        {!loading ? sortedDocuments.map((document) => {
+          const isEditing = editingDocumentId === document.id
+          const isExpanded = expandedDocumentId === document.id
+
+          return (
+            <article
+              className={`project-document-card ${isEditing ? 'is-editing' : ''} ${isExpanded ? 'is-expanded' : ''}`}
+              key={document.id}
+            >
               <div className="project-document-card-main">
-                <span className="project-document-icon"><FileText aria-hidden="true" /></span>
-                <div className="project-document-summary">
-                  <div className="project-document-title-row">
-                    <strong>{document.title}</strong>
-                    <span className="badge info">Bản {document.currentVersionNo}</span>
-                    <span className="badge success">{scopeLabel(document.currentFile.accessScope)}</span>
-                  </div>
-                  {document.description ? <p className="project-document-description">{document.description}</p> : null}
-                  <span className="project-document-file-name">{document.currentFile.originalName}</span>
-                  <div className="project-document-meta">
-                    <span>{formatBytes(document.currentFile.sizeBytes)}</span>
-                    <span>·</span>
-                    <span>Cập nhật {formatDateTime(document.updatedAt)}</span>
-                    <span>·</span>
-                    <span>{document.createdBy?.name ?? 'Tài khoản không còn tồn tại'}</span>
+                {/* Header: File type badge + Title + Badges */}
+                <div className="project-document-header-row">
+                  <div className="project-document-title-cluster">
+                    <span className="project-document-type-badge">
+                      {getFileExtension(document.currentFile.originalName)}
+                    </span>
+                    <div className="project-document-title-group">
+                      {isEditing ? (
+                        <div className="project-document-editing-banner">
+                          <Pencil size={14} aria-hidden="true" />
+                          <span>Chỉnh sửa thông tin tài liệu (file đính kèm được giữ nguyên)</span>
+                        </div>
+                      ) : (
+                        <div className="project-document-title-line">
+                          <h3 className="project-document-title">{document.title}</h3>
+                          <div className="project-document-badges">
+                            <span className="badge info" title={`Phiên bản hiện tại: v${document.currentVersionNo}`}>
+                              v{document.currentVersionNo}
+                            </span>
+                            <span className={`badge scope-badge scope-${document.currentFile.accessScope.toLowerCase()}`}>
+                              {scopeLabel(document.currentFile.accessScope)}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
-                <div className="project-document-actions">
-                  <button
-                    className="btn ghost table-btn"
-                    type="button"
-                    disabled={Boolean(busyAction)}
-                    title="Tải file hiện tại"
-                    onClick={() => void handleDownload(document)}
-                  >
-                    <Download aria-hidden="true" /> Tải xuống
-                  </button>
-                  <button
-                    className="btn ghost table-btn"
-                    type="button"
-                    disabled={Boolean(busyAction)}
-                    aria-expanded={expandedDocumentId === document.id}
-                    aria-controls={`project-document-history-${document.id}`}
-                    onClick={() => void toggleVersions(document)}
-                  >
-                    <History aria-hidden="true" /> Lịch sử
-                    {expandedDocumentId === document.id
-                      ? <ChevronUp aria-hidden="true" />
-                      : <ChevronDown aria-hidden="true" />}
-                  </button>
-                  {canManage ? (
-                    <button
-                      className="btn ghost table-btn danger-text"
-                      type="button"
-                      disabled={Boolean(busyAction)}
-                      title="Xóa mềm tài liệu"
-                      onClick={() => void handleDelete(document)}
-                    >
-                      <Trash2 aria-hidden="true" /> Xóa
-                    </button>
-                  ) : null}
-                </div>
+
+                {/* Edit Form OR Document Content */}
+                {isEditing ? (
+                  <form className="project-document-edit-form" onSubmit={handleUpdateMetadata}>
+                    <label className="field">
+                      <span>Tiêu đề tài liệu <strong className="required-mark">*</strong></span>
+                      <input
+                        className="input"
+                        required
+                        maxLength={255}
+                        value={editForm.title}
+                        disabled={Boolean(busyAction)}
+                        onChange={(event) => setEditForm((current) => ({ ...current, title: event.target.value }))}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Mô tả</span>
+                      <textarea
+                        className="textarea"
+                        rows={3}
+                        maxLength={20000}
+                        value={editForm.description}
+                        disabled={Boolean(busyAction)}
+                        placeholder="Nội dung hoặc mục đích của tài liệu..."
+                        onChange={(event) => setEditForm((current) => ({ ...current, description: event.target.value }))}
+                      />
+                    </label>
+                    <div className="form-actions">
+                      <button className="btn primary" type="submit" disabled={!editDirty || Boolean(busyAction)}>
+                        <Save size={15} aria-hidden="true" />
+                        {busyAction === `edit:${document.id}` ? 'Đang lưu...' : 'Lưu thông tin'}
+                      </button>
+                      <button className="btn ghost" type="button" disabled={Boolean(busyAction)} onClick={cancelEditing}>
+                        <Undo2 size={15} aria-hidden="true" /> Hủy
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <>
+                    {document.description ? (
+                      <p className="project-document-description">{document.description}</p>
+                    ) : null}
+
+                    {/* Current File Asset Row */}
+                    <div className="project-document-file-bar">
+                      <div className="project-document-file-info">
+                        <div className="project-document-file-chip">
+                          <FileText size={16} className="file-chip-icon" aria-hidden="true" />
+                          <span className="project-document-file-name" title={document.currentFile.originalName}>
+                            {document.currentFile.originalName}
+                          </span>
+                        </div>
+                        <div className="project-document-meta-chips">
+                          <span>{formatBytes(document.currentFile.sizeBytes)}</span>
+                          <span className="meta-sep">·</span>
+                          <span>Cập nhật {formatDateTime(document.updatedAt)}</span>
+                          <span className="meta-sep">·</span>
+                          <span>{document.createdBy?.name ?? 'Tài khoản không còn tồn tại'}</span>
+                        </div>
+                      </div>
+
+                      <button
+                        className="btn primary table-btn project-document-download-btn"
+                        type="button"
+                        disabled={Boolean(busyAction) || editingDocumentId !== null}
+                        title={`Tải file hiện tại: ${document.currentFile.originalName}`}
+                        onClick={() => void handleDownload(document)}
+                      >
+                        <Download size={15} aria-hidden="true" />
+                        <span>{busyAction === `download:${document.id}` ? 'Đang tải...' : 'Tải xuống'}</span>
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                {/* Footer Actions Bar */}
+                {!isEditing ? (
+                  <div className="project-document-footer-bar">
+                    <div className="project-document-footer-left">
+                      <button
+                        className={`btn ghost table-btn project-document-history-toggle ${isExpanded ? 'is-active' : ''}`}
+                        type="button"
+                        disabled={Boolean(busyAction) || editingDocumentId !== null}
+                        aria-expanded={isExpanded}
+                        aria-controls={`project-document-history-${document.id}`}
+                        onClick={() => void toggleVersions(document)}
+                      >
+                        <History size={15} aria-hidden="true" />
+                        <span>Lịch sử phiên bản</span>
+                        <span className="history-count-pill">{document.currentVersionNo}</span>
+                        {isExpanded ? (
+                          <ChevronUp size={14} aria-hidden="true" />
+                        ) : (
+                          <ChevronDown size={14} aria-hidden="true" />
+                        )}
+                      </button>
+                    </div>
+
+                    {canManage ? (
+                      <div className="project-document-footer-right">
+                        <button
+                          className="btn ghost table-btn"
+                          type="button"
+                          disabled={Boolean(busyAction) || (editingDocumentId !== null && editingDocumentId !== document.id)}
+                          title="Chỉnh sửa tiêu đề và mô tả tài liệu"
+                          onClick={() => startEditing(document)}
+                        >
+                          <Pencil size={14} aria-hidden="true" /> Sửa
+                        </button>
+                        <button
+                          className="btn ghost table-btn danger-text"
+                          type="button"
+                          disabled={Boolean(busyAction) || editingDocumentId !== null}
+                          title="Xóa mềm tài liệu khỏi dự án"
+                          onClick={() => void handleDelete(document)}
+                        >
+                          <Trash2 size={14} aria-hidden="true" /> Xóa
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
 
-              {expandedDocumentId === document.id ? (
+              {/* Version History Drawer */}
+              {isExpanded ? (
                 <div className="project-document-history" id={`project-document-history-${document.id}`}>
                   <div className="project-document-history-head">
-                    <h3>Lịch sử phiên bản</h3>
-                    <span>File mới nhất luôn là file tải xuống mặc định.</span>
+                    <div>
+                      <h4>Lịch sử phiên bản</h4>
+                      <p>Mỗi lần tải file mới sẽ sinh ra một phiên bản mới. File hiện tại (v{document.currentVersionNo}) là bản mặc định khi tải xuống.</p>
+                    </div>
+                    <span className="badge info">{versions.length} bản lưu</span>
                   </div>
-                  {loadingVersions ? <div className="empty tight">Đang tải lịch sử...</div> : null}
+
+                  {loadingVersions ? <div className="empty tight">Đang tải lịch sử phiên bản...</div> : null}
+
                   {!loadingVersions && versions.length ? (
                     <div className="project-document-versions">
-                      {versions.map((version) => (
-                        <div className="project-document-version-row" key={version.id}>
-                          <span className="project-document-version-number">v{version.versionNo}</span>
-                          <div className="project-document-version-info">
-                            <strong>{version.file.originalName}</strong>
-                            <div className="project-document-version-meta">
-                              <span>{formatBytes(version.file.sizeBytes)}</span>
-                              <span>·</span>
-                              <span>{scopeLabel(version.file.accessScope)}</span>
-                              <span>·</span>
-                              <span>{formatDateTime(version.createdAt)}</span>
-                              <span>·</span>
-                              <span>{version.uploadedBy?.name ?? 'Tài khoản không còn tồn tại'}</span>
+                      {versions.map((version) => {
+                        const isCurrent = version.versionNo === document.currentVersionNo
+                        return (
+                          <div className={`project-document-version-row ${isCurrent ? 'is-current' : ''}`} key={version.id}>
+                            <div className="project-document-version-col-number">
+                              <span className="project-document-version-number">v{version.versionNo}</span>
+                              {isCurrent ? (
+                                <span className="current-version-pill" title="File đang được sử dụng làm bản hiện tại">
+                                  <FileCheck size={12} aria-hidden="true" /> Hiện tại
+                                </span>
+                              ) : null}
                             </div>
-                            {version.note ? <p>{version.note}</p> : null}
+
+                            <div className="project-document-version-info">
+                              <strong className="project-document-version-filename">{version.file.originalName}</strong>
+                              <div className="project-document-version-meta">
+                                <span>{formatBytes(version.file.sizeBytes)}</span>
+                                <span>·</span>
+                                <span className={`scope-text scope-${version.file.accessScope.toLowerCase()}`}>{scopeLabel(version.file.accessScope)}</span>
+                                <span>·</span>
+                                <span>{formatDateTime(version.createdAt)}</span>
+                                <span>·</span>
+                                <span>{version.uploadedBy?.name ?? 'Tài khoản không còn tồn tại'}</span>
+                              </div>
+                              {version.note ? (
+                                <div className="project-document-version-note">
+                                  <p>{version.note}</p>
+                                </div>
+                              ) : null}
+                            </div>
+
+                            <button
+                              className="btn ghost table-btn project-document-version-download"
+                              type="button"
+                              disabled={Boolean(busyAction) || editingDocumentId !== null}
+                              aria-label={`Tải phiên bản ${version.versionNo}: ${version.file.originalName}`}
+                              onClick={() => void handleDownloadVersion(version)}
+                            >
+                              <Download size={14} aria-hidden="true" />
+                              <span>{busyAction === `download-version:${version.id}` ? 'Đang tải...' : 'Tải bản này'}</span>
+                            </button>
                           </div>
-                          <button
-                            className="btn ghost table-btn project-document-version-download"
-                            type="button"
-                            disabled={Boolean(busyAction)}
-                            aria-label={`Tải phiên bản ${version.versionNo}: ${version.file.originalName}`}
-                            onClick={() => void handleDownloadVersion(version)}
-                          >
-                            <Download aria-hidden="true" />
-                            {busyAction === `download-version:${version.id}` ? 'Đang tải...' : 'Tải bản này'}
-                          </button>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   ) : null}
+
                   {!loadingVersions && !versions.length ? (
                     <EmptyState title="Chưa có phiên bản" description="Không tìm thấy lịch sử phiên bản của tài liệu." />
                   ) : null}
 
+                  {/* Upload New Version Section (for managers) */}
                   {canManage ? (
                     <form className="project-document-version-form" onSubmit={handleCreateVersion}>
-                      <h4>Tải phiên bản mới</h4>
-                      <p>File mới sẽ trở thành file hiện tại; các phiên bản cũ vẫn được giữ lại.</p>
-                      <label className="field">
-                        <span>File mới</span>
-                        <input
-                          ref={versionFileInputRef}
-                          className="project-document-file-input"
-                          type="file"
-                          accept={ACCEPTED_FILE_TYPES}
-                          disabled={Boolean(busyAction)}
-                          onChange={(event) => {
-                            clearFeedback()
-                            setVersionForm((current) => ({ ...current, file: event.target.files?.[0] ?? null }))
-                          }}
-                        />
-                      </label>
-                      <label className="field">
-                        <span>Phạm vi truy cập</span>
-                        <PopupSelect value={versionForm.accessScope} disabled={Boolean(busyAction)} ariaLabel="Phạm vi truy cập phiên bản" options={ACCESS_SCOPE_OPTIONS} onChange={(value) => setVersionForm((current) => ({ ...current, accessScope: value as DocumentAccessScope }))} />
-                        <small className="project-document-scope-help">{scopeDescription(versionForm.accessScope)}</small>
-                      </label>
-                      <label className="field">
-                        <span>Ghi chú phiên bản</span>
-                        <textarea
-                          className="textarea"
-                          rows={2}
-                          maxLength={5000}
-                          value={versionForm.note}
-                          disabled={Boolean(busyAction)}
-                          placeholder="Ví dụ: Cập nhật kết quả thử nghiệm tháng 8..."
-                          onChange={(event) => setVersionForm((current) => ({ ...current, note: event.target.value }))}
-                        />
-                      </label>
+                      <div className="project-document-version-form-head">
+                        <h5>Tải lên phiên bản mới (v{document.currentVersionNo + 1})</h5>
+                        <p>File mới sẽ trở thành phiên bản hiện tại để tải xuống. Tiêu đề và mô tả của tài liệu vẫn được giữ nguyên.</p>
+                      </div>
+
+                      <div className="project-document-version-form-fields">
+                        <label className="field">
+                          <span>File phiên bản mới <strong className="required-mark">*</strong></span>
+                          <input
+                            ref={versionFileInputRef}
+                            className="project-document-file-input"
+                            type="file"
+                            accept={ACCEPTED_FILE_TYPES}
+                            disabled={Boolean(busyAction) || editingDocumentId !== null}
+                            onChange={(event) => {
+                              clearFeedback()
+                              setVersionForm((current) => ({ ...current, file: event.target.files?.[0] ?? null }))
+                            }}
+                          />
+                        </label>
+
+                        <label className="field">
+                          <span>Phạm vi truy cập</span>
+                          <PopupSelect
+                            value={versionForm.accessScope}
+                            disabled={Boolean(busyAction) || editingDocumentId !== null}
+                            ariaLabel="Phạm vi truy cập phiên bản"
+                            options={ACCESS_SCOPE_OPTIONS}
+                            onChange={(value) => setVersionForm((current) => ({ ...current, accessScope: value as DocumentAccessScope }))}
+                          />
+                          <small className="project-document-scope-help">{scopeDescription(versionForm.accessScope)}</small>
+                        </label>
+
+                        <label className="field">
+                          <span>Ghi chú phiên bản</span>
+                          <textarea
+                            className="textarea"
+                            rows={2}
+                            maxLength={5000}
+                            value={versionForm.note}
+                            disabled={Boolean(busyAction) || editingDocumentId !== null}
+                            placeholder="Ví dụ: Cập nhật kết quả thử nghiệm tháng 9, chỉnh sửa bảng số liệu..."
+                            onChange={(event) => setVersionForm((current) => ({ ...current, note: event.target.value }))}
+                          />
+                        </label>
+                      </div>
+
                       <div className="form-actions">
-                        <button className="btn primary" type="submit" disabled={!versionForm.file || Boolean(busyAction)}>
-                          <Upload aria-hidden="true" />
-                          {busyAction === `version:${document.id}` ? 'Đang tải lên...' : 'Tạo phiên bản'}
+                        <button
+                          className="btn primary"
+                          type="submit"
+                          disabled={!versionForm.file || Boolean(busyAction) || editingDocumentId !== null}
+                        >
+                          <Upload size={15} aria-hidden="true" />
+                          {busyAction === `version:${document.id}` ? 'Đang tải lên...' : 'Tải lên phiên bản mới'}
                         </button>
                         <button
                           className="btn ghost"
                           type="button"
-                          disabled={!versionDirty || Boolean(busyAction)}
+                          disabled={!versionDirty || Boolean(busyAction) || editingDocumentId !== null}
                           onClick={() => {
                             setVersionForm({ accessScope: scopeOf(document), note: '', file: null })
                             if (versionFileInputRef.current) versionFileInputRef.current.value = ''
@@ -572,80 +952,15 @@ export function ProjectDocumentsPanel({ project, onDirtyChange, onBusyChange }: 
                 </div>
               ) : null}
             </article>
-          )) : null}
-        </div>
-
-        {canManage ? (
-          <form className="project-document-create" onSubmit={handleCreate}>
-            <h3><FilePlus2 size={18} aria-hidden="true" /> Tạo tài liệu</h3>
-            <p>File được tải lên sẽ đồng thời tạo phiên bản đầu tiên.</p>
-            <label className="field">
-              <span>Tiêu đề</span>
-              <input
-                className="input"
-                required
-                maxLength={255}
-                value={createForm.title}
-                disabled={Boolean(busyAction)}
-                placeholder="Tên tài liệu dễ nhận biết"
-                onChange={(event) => setCreateForm((current) => ({ ...current, title: event.target.value }))}
-              />
-            </label>
-            <label className="field">
-              <span>Mô tả</span>
-              <textarea
-                className="textarea"
-                rows={3}
-                maxLength={20000}
-                value={createForm.description}
-                disabled={Boolean(busyAction)}
-                placeholder="Nội dung hoặc mục đích của tài liệu..."
-                onChange={(event) => setCreateForm((current) => ({ ...current, description: event.target.value }))}
-              />
-            </label>
-            <label className="field">
-              <span>File phiên bản đầu tiên</span>
-              <input
-                ref={createFileInputRef}
-                className="project-document-file-input"
-                type="file"
-                accept={ACCEPTED_FILE_TYPES}
-                required
-                disabled={Boolean(busyAction)}
-                onChange={(event) => {
-                  clearFeedback()
-                  setCreateForm((current) => ({ ...current, file: event.target.files?.[0] ?? null }))
-                }}
-              />
-            </label>
-            <label className="field">
-              <span>Phạm vi truy cập</span>
-              <PopupSelect value={createForm.accessScope} disabled={Boolean(busyAction)} ariaLabel="Phạm vi truy cập tài liệu" options={ACCESS_SCOPE_OPTIONS} onChange={(value) => setCreateForm((current) => ({ ...current, accessScope: value as DocumentAccessScope }))} />
-              <small className="project-document-scope-help">{scopeDescription(createForm.accessScope)}</small>
-            </label>
-            <label className="field">
-              <span>Ghi chú phiên bản</span>
-              <textarea
-                className="textarea"
-                rows={2}
-                maxLength={5000}
-                value={createForm.note}
-                disabled={Boolean(busyAction)}
-                placeholder="Có thể để trống"
-                onChange={(event) => setCreateForm((current) => ({ ...current, note: event.target.value }))}
-              />
-            </label>
-            <button className="btn primary" type="submit" disabled={!createForm.file || !createForm.title.trim() || Boolean(busyAction)}>
-              <FilePlus2 aria-hidden="true" />
-              {busyAction === 'create' ? 'Đang tạo...' : 'Tạo tài liệu'}
-            </button>
-          </form>
-        ) : (
-          <p className="muted small">
-            Bạn đang ở chế độ chỉ đọc. Chỉ Admin có quyền PROJECT_MANAGE hoặc leader đang hoạt động của dự án mới có thể thay đổi tài liệu.
-          </p>
-        )}
+          )
+        }) : null}
       </div>
+
+      {!canManage ? (
+        <div className="project-documents-readonly-notice">
+          <span>Chế độ chỉ đọc: Chỉ Admin hoặc Leader của dự án mới có quyền thêm tài liệu, sửa thông tin hoặc tải phiên bản mới.</span>
+        </div>
+      ) : null}
     </section>
   )
 }
@@ -654,6 +969,13 @@ function validateDocumentForm(form: CreateDocumentForm) {
   if (!form.title.trim()) return 'Tiêu đề tài liệu là bắt buộc.'
   if (form.title.trim().length > 255) return 'Tiêu đề tài liệu không được vượt quá 255 ký tự.'
   return validateFile(form.file)
+}
+
+function validateMetadataForm(form: DocumentEditForm) {
+  if (!form.title.trim()) return 'Tiêu đề tài liệu là bắt buộc.'
+  if (form.title.trim().length > 255) return 'Tiêu đề tài liệu không được vượt quá 255 ký tự.'
+  if (form.description.trim().length > 20000) return 'Mô tả tài liệu không được vượt quá 20000 ký tự.'
+  return null
 }
 
 function validateFile(file: File | null) {
@@ -684,6 +1006,15 @@ function formatBytes(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
+function getFileExtension(filename: string): string {
+  const parts = filename.split('.')
+  if (parts.length > 1) {
+    const ext = parts.pop()?.toUpperCase() ?? ''
+    return ext.length <= 5 ? ext : 'TỆP'
+  }
+  return 'TỆP'
+}
+
 function formatDateTime(value: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
@@ -705,7 +1036,7 @@ function saveBlob(blob: Blob, filename: string) {
   anchor.href = url
   anchor.download = filename
   anchor.click()
-  window.setTimeout(() => URL.revokeObjectURL(url), 0)
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
 function errorMessage(reason: unknown, fallback: string) {

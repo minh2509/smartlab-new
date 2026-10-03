@@ -24,13 +24,20 @@ const FIELD_VISUALS = {
   },
 } as const
 
-export function fieldVisual(field: ResearchField) {
+export function getFieldVisual(field: ResearchField) {
   const key = `${field.code} ${field.name}`.toLocaleLowerCase('vi')
   if (key.includes('robot')) return FIELD_VISUALS.robotics
   if (key.includes('software') || key.includes('phần mềm') || /(^|\s)se(\s|$)/.test(key)) {
     return FIELD_VISUALS.software
   }
-  return FIELD_VISUALS.ai
+  if (key.includes('ai') || key.includes('trí tuệ') || key.includes('intelligence') || key.includes('học máy')) {
+    return FIELD_VISUALS.ai
+  }
+  return null
+}
+
+export function fieldVisual(field: ResearchField) {
+  return getFieldVisual(field) ?? FIELD_VISUALS.ai
 }
 
 export function publicFileUrl(fileId: number) {

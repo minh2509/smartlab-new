@@ -1,5 +1,6 @@
 package com.smartlab.controller;
 
+import com.smartlab.dto.response.PublicDocumentCategoryResponse;
 import com.smartlab.dto.response.PublicDocumentSummaryResponse;
 import com.smartlab.dto.response.PublicPageResponse;
 import com.smartlab.enums.PublicDocumentFileType;
@@ -21,15 +22,23 @@ public class PublicDocumentController {
     public PublicPageResponse<PublicDocumentSummaryResponse> list(
             @RequestParam(required = false) String q,
             @RequestParam(required = false) Long projectId,
+            @RequestParam(required = false) String category,
             @RequestParam(defaultValue = "ALL") PublicDocumentFileType fileType,
             @RequestParam(required = false) Integer year,
             @RequestParam(defaultValue = "LATEST") PublicDocumentSort sort,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "12") int size
     ) {
-        return publicDocumentService.list(q, projectId, fileType, year, sort, page, size);
+        return publicDocumentService.list(q, projectId, category, fileType, year, sort, page, size);
     }
 
     @GetMapping("/documents/public/years")
-    public List<Integer> years() { return publicDocumentService.years(); }
+    public List<Integer> years() {
+        return publicDocumentService.years();
+    }
+
+    @GetMapping("/documents/public/categories")
+    public List<PublicDocumentCategoryResponse> categories(@RequestParam(required = false) Integer year) {
+        return publicDocumentService.categories(year);
+    }
 }

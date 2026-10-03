@@ -126,15 +126,6 @@ export function ArticleArchivePage() {
       />
       <section className="article-archive-section">
         <div className="article-archive-header">
-          <div className="article-archive-intro">
-            <div>
-              <div className="kicker">BÀI VIẾT</div>
-              <h2>Bài viết</h2>
-              <p>Bài viết, chia sẻ và nội dung chuyên môn của Smart Lab.</p>
-            </div>
-            <span className="public-archive-page-size">{PAGE_SIZE} bài / trang</span>
-          </div>
-
           <div className="article-archive-toolbar">
             <div className="article-archive-search">
               <Search size={16} />
@@ -150,12 +141,23 @@ export function ArticleArchivePage() {
 
         {loading && items.length === 0 && <div className="article-archive-empty" aria-busy="true">Đang tải bài viết...</div>}
 
-        {!loading && !error && items.length === 0 && <EmptyState title={hasFilters ? 'Không tìm thấy' : 'Chưa có bài viết công khai'} />}
+        {!loading && !error && items.length === 0 && (
+          <EmptyState
+            title={hasFilters ? 'Không tìm thấy bài viết phù hợp' : 'Chưa có bài viết nào'}
+            description={hasFilters ? 'Thử thay đổi từ khóa hoặc bộ lọc.' : 'Các bài viết công khai của Smart Lab sẽ xuất hiện tại đây.'}
+          />
+        )}
 
         {items.length > 0 && (
           <>
             <div className="article-archive-results">
-              <p className="article-archive-summary">{formatRange(page, PAGE_SIZE, totalElements)} · {totalElements} bài viết{loading && <span className="article-archive-refreshing">Đang cập nhật...</span>}</p>
+              <div className="article-archive-results-bar">
+                <p className="article-archive-summary">{formatRange(page, PAGE_SIZE, totalElements)} · {totalElements} bài viết</p>
+                <div className="article-archive-results-meta">
+                  {loading && <span className="article-archive-refreshing">Đang cập nhật...</span>}
+                  <span className="public-archive-page-size">{PAGE_SIZE} bài viết / trang</span>
+                </div>
+              </div>
               <div className="article-archive-grid">
                 {items.map((item) => <PublicArticleCard key={item.id} article={item} />)}
               </div>

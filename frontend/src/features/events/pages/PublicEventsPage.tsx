@@ -182,15 +182,6 @@ export function PublicEventsPage() {
       <PublicPageHead title="Sự kiện" description="Workshop, demo, seminar và các hoạt động cộng đồng của Smart Lab." />
       <section className="section public-events-section">
         <div className="wrap public-events-wrap">
-          <div className="public-events-intro">
-            <div>
-              <div className="kicker">LAB ACTIVITIES</div>
-              <h2>Hoạt động của Lab</h2>
-              <p>Workshop, giao lưu, outing và những hoạt động giúp cộng đồng Smart Lab học hỏi và kết nối.</p>
-            </div>
-            <span className="public-events-page-size">12 sự kiện / trang</span>
-          </div>
-
           <div className="public-events-toolbar" role="search">
             <label className="public-events-search">
               <span className="sr-only">Tìm kiếm sự kiện</span>
@@ -217,6 +208,7 @@ export function PublicEventsPage() {
             <>
               <div className="public-events-results-bar">
                 <p className="public-events-summary" aria-live="polite">{formatRange(currentPage, PAGE_SIZE, totalElements)} · {totalElements} sự kiện</p>
+                <span className="public-events-page-size">12 sự kiện / trang</span>
               </div>
               <div className="event-directory-list" aria-busy="false">
                 {events.map((event) => <EventRow key={event.id} event={event} onOpen={openEvent} />)}

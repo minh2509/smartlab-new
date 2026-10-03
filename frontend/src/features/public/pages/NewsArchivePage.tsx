@@ -94,18 +94,12 @@ export function NewsArchivePage() {
 
   return (
     <>
-      <PublicPageHead title="Tin tức" description="Tin tức truyền thông về Smart Lab." />
+      <PublicPageHead
+        title="Tin tức"
+        description="Các thông tin truyền thông công khai liên quan đến Smart Lab."
+      />
       <section className="news-archive-section">
         <div className="news-archive-header">
-          <div className="news-archive-intro">
-            <div>
-              <div className="kicker">TIN TỨC</div>
-              <h2>Tin tức &amp; truyền thông</h2>
-              <p>Thông tin truyền thông về Smart Lab từ các nguồn bên ngoài.</p>
-            </div>
-            <span className="public-archive-page-size">{PAGE_SIZE} tin tức / trang</span>
-          </div>
-
           <div className="news-archive-toolbar">
             <div className="news-archive-search">
               <Search size={16} />
@@ -122,15 +116,23 @@ export function NewsArchivePage() {
 
         {loading && items.length === 0 && <div className="news-archive-empty" aria-busy="true">Đang tải tin tức...</div>}
 
-        {!loading && !error && items.length === 0 && <EmptyState title={hasFilters ? 'Không tìm thấy' : 'Chưa có tin tức công khai'} />}
+        {!loading && !error && items.length === 0 && (
+          <EmptyState
+            title={hasFilters ? 'Không tìm thấy tin tức phù hợp' : 'Chưa có tin tức công khai'}
+            description={hasFilters ? 'Thử thay đổi từ khóa hoặc bộ lọc.' : 'Các thông tin truyền thông của Smart Lab sẽ xuất hiện tại đây.'}
+          />
+        )}
 
         {items.length > 0 && (
           <>
             <div className="news-archive-results">
-              <p className="news-archive-summary">
-                {formatRange(page, PAGE_SIZE, totalElements)} · {totalElements} tin tức
-                {loading && <span className="news-archive-refreshing">Đang cập nhật...</span>}
-              </p>
+              <div className="news-archive-results-bar">
+                <p className="news-archive-summary">{formatRange(page, PAGE_SIZE, totalElements)} · {totalElements} tin tức</p>
+                <div className="news-archive-results-meta">
+                  {loading && <span className="news-archive-refreshing">Đang cập nhật...</span>}
+                  <span className="public-archive-page-size">{PAGE_SIZE} tin tức / trang</span>
+                </div>
+              </div>
               <div className="news-archive-grid">
                 {items.map((item) => <NewsCard key={item.id} item={item} />)}
               </div>

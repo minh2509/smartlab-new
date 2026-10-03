@@ -52,11 +52,13 @@ class DocumentControllerSecurityTest {
     void anonymousCanReadPublicDocumentsButCannotReachInternalDocumentEndpoints() throws Exception {
         MockMultipartFile file = textFile();
 
-        when(publicDocumentService.list(any(), any(), any(), any(), any(), eq(0), eq(12)))
+        when(publicDocumentService.list(any(), any(), any(), any(), any(), any(), eq(0), eq(12)))
                 .thenReturn(new com.smartlab.dto.response.PublicPageResponse<>(List.of(), 0, 12, 0, 0));
         when(publicDocumentService.years()).thenReturn(List.of(2026));
         mockMvc.perform(get("/documents/public")).andExpect(status().isOk());
         mockMvc.perform(get("/documents/public/years")).andExpect(status().isOk());
+        mockMvc.perform(get("/documents/public/years/extra")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/documents/public/internal/path")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/projects/7/documents")).andExpect(status().isUnauthorized());
         mockMvc.perform(multipart("/projects/7/documents").file(file).param("title", "Proposal"))
                 .andExpect(status().isUnauthorized());
