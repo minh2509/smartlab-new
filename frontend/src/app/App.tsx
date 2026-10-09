@@ -47,6 +47,9 @@ import { MyEvaluationsPage } from '../features/evaluations/pages/MyEvaluationsPa
 import { TasksPage } from '../features/tasks/pages/TasksPage'
 import { accessPolicies } from './accessPolicy'
 import { ToastProvider } from '../shared/toast/ToastProvider'
+import { ChatDock } from '../features/chat/components/ChatDock'
+import { ChatPopupHost } from '../features/chat/components/ChatPopupHost'
+import { ChatPage } from '../features/chat/pages/ChatPage'
 
 export function App() {
   return (
@@ -110,6 +113,7 @@ export function App() {
             />
           }
         />
+        <Route path="/chat" element={<ChatPage />} />
       </Route>
 
       <Route element={<AuthLayout />}>
@@ -141,6 +145,8 @@ export function App() {
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    <ChatPopupHost />
+    <ChatDock />
     </ToastProvider>
   )
 }

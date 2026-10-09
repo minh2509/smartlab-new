@@ -19,6 +19,7 @@ import {
   useResolvedPath,
 } from "react-router-dom";
 import { useAuth } from "../../features/auth/authContext";
+import { ChatHeaderButton } from "../../features/chat/components/ChatHeaderButton";
 import { NotificationPopover } from "../../features/notifications/components/NotificationPopover";
 import { Logo } from "./Logo";
 
@@ -426,6 +427,7 @@ export function AppHeader({ onSearchOpen, onSamePageClick }: AppHeaderProps) {
                 <div className="nav-utility-actions">
                   <FeedLink />
                   <SearchButton onClick={onSearchOpen} />
+                  <ChatHeaderButton />
                   {canReadNotifications ? <NotificationPopover /> : null}
                   <button
                     className="btn sm"
