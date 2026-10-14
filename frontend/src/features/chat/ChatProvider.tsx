@@ -282,7 +282,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const sendMessage = useCallback(
     async (
       conversationId: string,
-      payload: { content?: string; fileIds?: number[]; replyToMessageId?: number },
+      payload: {
+        content?: string
+        fileIds?: number[]
+        replyToMessageId?: number
+        messageType?: ChatMessageType
+        metadataJson?: string
+      },
     ) => {
       const currentUser = profileRef.current
       if (!tokenRef.current || !currentUser) return
@@ -294,7 +300,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
       const hasFiles = Boolean(payload.fileIds && payload.fileIds.length > 0)
       const hasContent = Boolean(payload.content && payload.content.trim())
-      const messageType: ChatMessageType = hasFiles ? (hasContent ? 'MIXED' : 'FILE') : 'TEXT'
+      const messageType: ChatMessageType = payload.messageType
+        ?? (hasFiles ? (hasContent ? 'MIXED' : 'FILE') : 'TEXT')
+      const replyTarget = (messagesByConversation[conversationId] ?? [])
+        .find((message) => message.id === payload.replyToMessageId)
 
       // Construct temporary local optimistic message
       const optimisticItem: ChatMessageItem = {
@@ -309,6 +318,16 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         messageType,
         content: payload.content ?? null,
         replyToMessageId: payload.replyToMessageId ?? null,
+        replyTo: replyTarget ? {
+          id: replyTarget.id,
+          sender: replyTarget.sender,
+          messageType: replyTarget.messageType,
+          content: replyTarget.content,
+          deleted: Boolean(replyTarget.deletedAt),
+        } : null,
+        forwardedFromMessageId: null,
+        metadataJson: payload.metadataJson ?? null,
+        reactions: [],
         files: (payload.fileIds ?? []).map(
           (fid): ChatMessageFileResponse => ({
             fileId: fid,
@@ -337,6 +356,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         content: payload.content?.trim() || undefined,
         replyToMessageId: payload.replyToMessageId,
         fileIds: payload.fileIds,
+        metadataJson: payload.metadataJson,
       }
 
       // Attempt sending via STOMP if connected, else fallback to REST
@@ -370,7 +390,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    [],
+    [messagesByConversation],
   )
 
   // 7. Retry Send Message
@@ -400,6 +420,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         content: target.content ?? undefined,
         replyToMessageId: target.replyToMessageId ?? undefined,
         fileIds: target.files.map((f) => f.fileId),
+        metadataJson: target.metadataJson ?? undefined,
       }
 
       const sentStomp = chatRealtimeClient.sendMessage(conversationId, request)
@@ -541,6 +562,65 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
+  const updateConversationPreferences = useCallback(async (
+    conversationId: string,
+    request: { pinned?: boolean; muted?: boolean; archived?: boolean },
+  ) => {
+    if (!tokenRef.current) return
+    const updated = await chatApi.updateConversationPreferences(tokenRef.current, conversationId, request)
+    setConversations((prev) => prev
+      .map((item) => item.conversationId === conversationId ? updated : item)
+      .sort((a, b) => Number(b.pinned) - Number(a.pinned)
+        || new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()))
+  }, [])
+
+  const searchMessages = useCallback(async (conversationId: string, query: string) => {
+    if (!tokenRef.current || !query.trim()) return []
+    const results = await chatApi.searchConversationMessages(tokenRef.current, conversationId, query)
+    setMessagesByConversation((prev) => {
+      const existing = prev[conversationId] ?? []
+      const known = new Set(existing.map((item) => item.id))
+      const additions = results.filter((item) => !known.has(item.id)).map((item) => ({ ...item, status: 'SENT' as const }))
+      return { ...prev, [conversationId]: [...existing, ...additions].sort((a, b) => a.messageSeq - b.messageSeq) }
+    })
+    return results
+  }, [])
+
+  const replaceMessage = useCallback((conversationId: string, updated: ChatMessageResponse) => {
+    setMessagesByConversation((prev) => ({
+      ...prev,
+      [conversationId]: (prev[conversationId] ?? []).map((item) =>
+        item.id === updated.id ? { ...updated, status: 'SENT' } : item),
+    }))
+  }, [])
+
+  const toggleReaction = useCallback(async (conversationId: string, messageId: number, emoji: string) => {
+    if (!tokenRef.current) return
+    replaceMessage(conversationId,
+      await chatApi.toggleMessageReaction(tokenRef.current, conversationId, messageId, emoji))
+  }, [replaceMessage])
+
+  const forwardMessage = useCallback(async (
+    sourceConversationId: string,
+    messageId: number,
+    targetConversationId: string,
+  ) => {
+    if (!tokenRef.current) return
+    const sent = await chatApi.forwardChatMessage(
+      tokenRef.current, sourceConversationId, messageId, targetConversationId,
+    )
+    setMessagesByConversation((prev) => ({
+      ...prev,
+      [targetConversationId]: [...(prev[targetConversationId] ?? []), { ...sent, status: 'SENT' }],
+    }))
+  }, [])
+
+  const votePoll = useCallback(async (conversationId: string, messageId: number, optionId: string) => {
+    if (!tokenRef.current) return
+    replaceMessage(conversationId,
+      await chatApi.voteInPoll(tokenRef.current, conversationId, messageId, optionId))
+  }, [replaceMessage])
+
   // 10. Reconnect catch-up: fetches afterSeq for all loaded conversations
   const catchUpAfterReconnect = useCallback(async () => {
     if (!tokenRef.current) return
@@ -643,6 +723,19 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           const isFullActive = activeConversationIdRef.current === conversationId
           const isViewed = isPopupOpenAndActive || isFullActive
 
+          const incomingConversation = conversationsRef.current.find(
+            (item) => item.conversationId === conversationId,
+          )
+          const isOwnIncoming = profileRef.current?.userId === message.sender.userId
+          if (!isOwnIncoming && !isViewed && !incomingConversation?.muted
+            && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+            const notification = new Notification(message.sender.name, {
+              body: message.content || (message.files.length ? 'Đã gửi một tệp' : 'Tin nhắn mới'),
+              tag: `smartlab-chat-${conversationId}`,
+            })
+            notification.onclick = () => { window.focus(); openConversation(conversationId); notification.close() }
+          }
+
           // Update conversation lastMessage & unread count
           setConversations((prev) => {
             const idx = prev.findIndex((c) => c.conversationId === conversationId)
@@ -662,6 +755,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
                 lastMessageSeq: message.messageSeq,
                 lastReadSeq: isOwnMessage ? message.messageSeq : 0,
                 unreadCount: isViewed || isOwnMessage ? 0 : 1,
+                pinned: false,
+                muted: false,
+                archived: false,
                 createdAt: message.createdAt,
                 updatedAt: message.createdAt,
               }
@@ -702,6 +798,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
               ),
             }
           })
+          break
+        }
+
+        case 'chat.message.reactions_updated': {
+          const message = data as ChatMessageResponse
+          replaceMessage(conversationId, message)
           break
         }
 
@@ -796,7 +898,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           break
       }
     },
-    [markAsRead, refreshConversations],
+    [markAsRead, openConversation, refreshConversations, replaceMessage],
   )
 
   // 12. Typing indicators auto-expiration cleanup
@@ -853,6 +955,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
   }, [catchUpAfterReconnect, handleRealtimeEvent, isAuthenticated, refreshConversations, token])
 
+  // Refresh lightweight conversation metadata so presence/last-active stays useful even
+  // when no new message event is emitted.
+  useEffect(() => {
+    if (!isAuthenticated) return
+    const timer = window.setInterval(() => void refreshConversations(), 30_000)
+    return () => window.clearInterval(timer)
+  }, [isAuthenticated, refreshConversations])
+
   // Total unread count
   const totalUnreadCount = useMemo(() => {
     return conversations.reduce((acc, c) => acc + Math.max(0, c.unreadCount), 0)
@@ -906,6 +1016,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       changeMemberRoleInGroup,
       editMessage,
       deleteMessage,
+      updateConversationPreferences,
+      searchMessages,
+      toggleReaction,
+      forwardMessage,
+      votePoll,
     }),
     [
       conversations,
@@ -940,6 +1055,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       changeMemberRoleInGroup,
       editMessage,
       deleteMessage,
+      updateConversationPreferences,
+      searchMessages,
+      toggleReaction,
+      forwardMessage,
+      votePoll,
     ],
   )
 

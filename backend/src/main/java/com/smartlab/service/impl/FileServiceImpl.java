@@ -57,6 +57,10 @@ public class FileServiceImpl implements FileService, PostContentFileService {
             Map.entry("image/png", Set.of("png")),
             Map.entry("image/gif", Set.of("gif")),
             Map.entry("image/webp", Set.of("webp")),
+            Map.entry("audio/webm", Set.of("webm")),
+            Map.entry("audio/ogg", Set.of("ogg")),
+            Map.entry("audio/mpeg", Set.of("mp3")),
+            Map.entry("audio/mp4", Set.of("m4a", "mp4")),
             Map.entry("application/pdf", Set.of("pdf")),
             Map.entry("text/plain", Set.of("txt")),
             Map.entry("text/csv", Set.of("csv")),
@@ -441,6 +445,11 @@ public class FileServiceImpl implements FileService, PostContentFileService {
             case "image/webp" -> content.length >= 12
                     && startsWith(content, "RIFF".getBytes(StandardCharsets.US_ASCII))
                     && matchesAt(content, 8, "WEBP".getBytes(StandardCharsets.US_ASCII));
+            case "audio/webm" -> startsWith(content, new byte[]{0x1A, 0x45, (byte) 0xDF, (byte) 0xA3});
+            case "audio/ogg" -> startsWith(content, "OggS".getBytes(StandardCharsets.US_ASCII));
+            case "audio/mpeg" -> startsWith(content, "ID3".getBytes(StandardCharsets.US_ASCII))
+                    || (content.length >= 2 && (content[0] & 0xFF) == 0xFF && (content[1] & 0xE0) == 0xE0);
+            case "audio/mp4" -> content.length >= 12 && matchesAt(content, 4, "ftyp".getBytes(StandardCharsets.US_ASCII));
             case "application/pdf" -> startsWith(content, "%PDF-".getBytes(StandardCharsets.US_ASCII));
             case "text/plain", "text/csv" -> isUtf8Text(content);
             case "application/zip" -> isZip(content);

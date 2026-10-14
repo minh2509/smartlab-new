@@ -11,6 +11,8 @@ public record ChatMemberResponse(
         Instant joinedAt,
         Instant leftAt,
         long lastReadSeq,
+        boolean online,
+        Instant lastActiveAt,
         boolean active
 ) {
 }

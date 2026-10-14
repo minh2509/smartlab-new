@@ -4,5 +4,10 @@ public enum ChatMessageType {
     TEXT,
     FILE,
     MIXED,
-    SYSTEM
+    SYSTEM,
+    IMAGE,
+    VOICE,
+    GIF,
+    STICKER,
+    POLL
 }

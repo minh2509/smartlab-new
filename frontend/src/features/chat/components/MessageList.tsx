@@ -1,231 +1,131 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { AlertCircle, ArrowDown, FileText } from 'lucide-react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { AlertCircle, ArrowDown, CheckCheck, Download, FileText, Forward, MoreHorizontal, Pencil, Reply, SmilePlus, Trash2, X } from 'lucide-react'
 import { useAuth } from '../../auth/authContext'
+import { downloadFile } from '../../files/api'
 import { useChat } from '../chatContext'
-import type { ChatMessageItem } from '../types'
+import type { ChatMessageFileResponse, ChatMessageItem } from '../types'
 
-type MessageListProps = {
-  conversationId: string
-}
+type MessageListProps = { conversationId: string }
+const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '😡']
 
 export function MessageList({ conversationId }: MessageListProps) {
   const { profile, token } = useAuth()
-  const {
-    messagesByConversation,
-    typingUsers,
-    hasMoreOlderMessages,
-    isLoadingOlder,
-    loadOlderMessages,
-    retrySendMessage,
-  } = useChat()
-
+  const chat = useChat()
   const containerRef = useRef<HTMLDivElement>(null)
-  const prevScrollHeightRef = useRef<number>(0)
-  const prevScrollTopRef = useRef<number>(0)
-  const isNearBottomRef = useRef(true)
+  const previousHeight = useRef(0)
+  const previousTop = useRef(0)
+  const nearBottom = useRef(true)
+  const previousCount = useRef(0)
+  const [unseen, setUnseen] = useState(0)
+  const [menuId, setMenuId] = useState<number | null>(null)
+  const [reactionId, setReactionId] = useState<number | null>(null)
+  const [forwarding, setForwarding] = useState<ChatMessageItem | null>(null)
+  const [lightbox, setLightbox] = useState<ChatMessageFileResponse | null>(null)
+  const messages = chat.messagesByConversation[conversationId] ?? []
+  const conversation = chat.conversations.find((item) => item.conversationId === conversationId)
 
-  const [unseenCount, setUnseenCount] = useState(0)
-  const lastMessageCountRef = useRef(0)
-
-  const messages: ChatMessageItem[] = messagesByConversation[conversationId] ?? []
-  const conversationTyping = typingUsers[conversationId] ?? []
-  const hasMore = hasMoreOlderMessages(conversationId)
-  const loadingOlder = isLoadingOlder(conversationId)
-
-  // Handle scroll events
-  const handleScroll = useCallback(() => {
-    const el = containerRef.current
-    if (!el) return
-    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
-    const near = distanceFromBottom < 70
-    isNearBottomRef.current = near
-    if (near) {
-      setUnseenCount(0)
-    }
-  }, [])
-
-  // Preserve scroll position when older messages are loaded
   useLayoutEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-
-    if (prevScrollHeightRef.current > 0) {
-      const addedHeight = el.scrollHeight - prevScrollHeightRef.current
-      if (addedHeight > 0) {
-        el.scrollTop = prevScrollTopRef.current + addedHeight
-      }
-      prevScrollHeightRef.current = 0
-      prevScrollTopRef.current = 0
-    }
+    const element = containerRef.current
+    if (!element || !previousHeight.current) return
+    element.scrollTop = previousTop.current + element.scrollHeight - previousHeight.current
+    previousHeight.current = 0
   }, [messages.length])
 
-  // Handle auto-scroll on new messages or show affordance
   useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-
-    const diff = messages.length - lastMessageCountRef.current
-    lastMessageCountRef.current = messages.length
-
-    if (diff > 0) {
-      if (isNearBottomRef.current) {
-        el.scrollTop = el.scrollHeight
-        setUnseenCount(0)
-      } else {
-        setUnseenCount((c) => c + diff)
-      }
-    } else {
-      // First load: scroll to bottom
-      el.scrollTop = el.scrollHeight
-    }
+    const element = containerRef.current
+    if (!element) return
+    const diff = messages.length - previousCount.current
+    previousCount.current = messages.length
+    if (diff > 0 && !nearBottom.current) setUnseen((value) => value + diff)
+    else if (diff >= 0) element.scrollTop = element.scrollHeight
   }, [messages.length])
 
-  const scrollToBottom = useCallback(() => {
-    const el = containerRef.current
-    if (!el) return
-    el.scrollTop = el.scrollHeight
-    isNearBottomRef.current = true
-    setUnseenCount(0)
-  }, [])
-
-  const handleLoadOlder = useCallback(() => {
-    const el = containerRef.current
-    if (!el) return
-    prevScrollHeightRef.current = el.scrollHeight
-    prevScrollTopRef.current = el.scrollTop
-    void loadOlderMessages(conversationId)
-  }, [conversationId, loadOlderMessages])
-
-  return (
-    <div
-      ref={containerRef}
-      className="chat-message-list"
-      onScroll={handleScroll}
-      role="log"
-      aria-label="Danh sách tin nhắn"
-      aria-live="polite"
-    >
-      {hasMore && (
-        <button
-          className="chat-load-older-btn"
-          type="button"
-          disabled={loadingOlder}
-          onClick={handleLoadOlder}
-        >
-          {loadingOlder ? 'Đang tải tin nhắn cũ...' : 'Tải thêm tin nhắn cũ'}
-        </button>
-      )}
-
-      {messages.length === 0 && !hasMore && (
-        <div className="chat-empty-thread">
-          <p>Chưa có tin nhắn nào. Bắt đầu cuộc trò chuyện!</p>
-        </div>
-      )}
-
-      {messages.map((msg) => {
-        const isOwn = profile ? msg.sender.userId === profile.userId : false
-        const isDeleted = Boolean(msg.deletedAt)
-
-        return (
-          <div
-            key={msg.id || msg.clientMessageId}
-            className={`chat-msg-row ${isOwn ? 'is-own' : 'is-other'}`}
-          >
-            {!isOwn && (
-              <span className="chat-msg-sender-name">{msg.sender.name}</span>
-            )}
-
-            <div className="chat-bubble">
-              {isDeleted ? (
-                <em style={{ opacity: 0.7 }}>Tin nhắn đã bị thu hồi</em>
-              ) : (
-                <>
-                  {msg.content && <p>{msg.content}</p>}
-                  {msg.files && msg.files.length > 0 && (
-                    <div className="chat-bubble-files">
-                      {msg.files.map((file) => (
-                        <a
-                          key={file.fileId}
-                          href={getFileDownloadUrl(token, file.fileId)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="chat-file-chip"
-                          download={file.originalName}
-                        >
-                          <FileText size={16} aria-hidden="true" />
-                          <span>{file.originalName}</span>
-                        </a>
-                      ))}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-
-            <div className="chat-msg-meta">
-              <time dateTime={msg.createdAt}>{formatTime(msg.createdAt)}</time>
-
-              {isOwn && msg.status === 'SENDING' && (
-                <span className="chat-msg-sending">Đang gửi...</span>
-              )}
-
-              {isOwn && msg.status === 'FAILED' && (
-                <span className="chat-msg-failed">
-                  <AlertCircle size={12} aria-hidden="true" />
-                  <span>Gửi thất bại.</span>
-                  <button
-                    type="button"
-                    className="chat-msg-retry-btn"
-                    onClick={() => void retrySendMessage(conversationId, msg.clientMessageId)}
-                  >
-                    Thử lại
-                  </button>
-                </span>
-              )}
-            </div>
-          </div>
-        )
-      })}
-
-      {conversationTyping.length > 0 && (
-        <div className="chat-typing-indicator" aria-live="polite">
-          <span>{conversationTyping.map((u) => u.name).join(', ')} đang nhập</span>
-          <span className="chat-typing-dots" aria-hidden="true">
-            <span />
-            <span />
-            <span />
-          </span>
-        </div>
-      )}
-
-      {unseenCount > 0 && (
-        <button
-          className="chat-new-messages-pill"
-          type="button"
-          onClick={scrollToBottom}
-          aria-label="Cuộn xuống tin nhắn mới nhất"
-        >
-          <ArrowDown size={14} aria-hidden="true" />
-          <span>{unseenCount} tin nhắn mới</span>
-        </button>
-      )}
-    </div>
-  )
-}
-
-function formatTime(iso: string): string {
-  try {
-    const d = new Date(iso)
-    return new Intl.DateTimeFormat('vi-VN', {
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(d)
-  } catch {
-    return ''
+  const loadOlder = () => {
+    const element = containerRef.current
+    if (!element) return
+    previousHeight.current = element.scrollHeight
+    previousTop.current = element.scrollTop
+    void chat.loadOlderMessages(conversationId)
   }
+
+  const scrollToMessage = (id: number) => {
+    const target = containerRef.current?.querySelector<HTMLElement>(`[data-message-id="${id}"]`)
+    target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    target?.classList.add('is-highlighted')
+    setTimeout(() => target?.classList.remove('is-highlighted'), 1400)
+  }
+
+  const newestOwn = [...messages].reverse().find((item) => item.sender?.userId === profile?.userId)
+  const readers = newestOwn && conversation ? conversation.members.filter((member) =>
+    member.userId !== profile?.userId && member.lastReadSeq >= newestOwn.messageSeq) : []
+
+  return <div ref={containerRef} className="chat-message-list" role="log" aria-label="Danh sách tin nhắn"
+    onScroll={() => { const el = containerRef.current; if (!el) return; nearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 70; if (nearBottom.current) setUnseen(0) }}>
+    {chat.hasMoreOlderMessages(conversationId) && <button className="chat-load-older-btn" type="button" disabled={chat.isLoadingOlder(conversationId)} onClick={loadOlder}>{chat.isLoadingOlder(conversationId) ? 'Đang tải…' : 'Tải thêm tin nhắn cũ'}</button>}
+    {!messages.length && <div className="chat-empty-thread"><p>Chưa có tin nhắn. Hãy bắt đầu trò chuyện!</p></div>}
+    {messages.map((message, index) => {
+      const own = message.sender?.userId === profile?.userId
+      const previous = messages[index - 1]
+      const next = messages[index + 1]
+      const groupedBefore = previous?.sender?.userId === message.sender?.userId && closeInTime(previous.createdAt, message.createdAt)
+      const groupedAfter = next?.sender?.userId === message.sender?.userId && closeInTime(message.createdAt, next.createdAt)
+      return <div key={message.id || message.clientMessageId} data-message-id={message.id}
+        className={`chat-msg-row ${own ? 'is-own' : 'is-other'} ${groupedBefore ? 'is-grouped-before' : ''} ${groupedAfter ? 'is-grouped-after' : ''}`}>
+        {!own && !groupedBefore && <span className="chat-msg-sender-name">{message.sender?.name}</span>}
+        <div className="chat-message-line">
+          <div className="chat-bubble">{message.deletedAt ? <em className="chat-deleted-message">Tin nhắn đã được thu hồi</em> : <>
+            {message.forwardedFromMessageId && <span className="chat-forwarded-label"><Forward size={11} /> Đã chuyển tiếp</span>}
+            {message.replyTo && <button type="button" className="chat-reply-quote" onClick={() => scrollToMessage(message.replyTo!.id)}><strong>{message.replyTo.sender?.name ?? 'Tin nhắn'}</strong><span>{message.replyTo.deleted ? 'Tin nhắn đã bị thu hồi' : previewText(message.replyTo.content, message.replyTo.messageType)}</span></button>}
+            <MessageBody message={message} token={token} currentUserId={profile?.userId} onOpenImage={setLightbox} onVote={(optionId) => void chat.votePoll(conversationId, message.id, optionId)} />
+            {!!message.reactions?.length && <div className="chat-reaction-summary">{message.reactions.map((reaction) => <button key={reaction.emoji} type="button" className={reaction.userIds.includes(profile?.userId ?? '') ? 'is-mine' : ''} title={reaction.userIds.join(', ')} onClick={() => void chat.toggleReaction(conversationId, message.id, reaction.emoji)}>{reaction.emoji} {reaction.count}</button>)}</div>}
+          </>}</div>
+          {!message.deletedAt && message.status === 'SENT' && <div className="chat-message-actions">
+            <button type="button" title="Cảm xúc" onClick={() => setReactionId(reactionId === message.id ? null : message.id)}><SmilePlus size={15} /></button>
+            <button type="button" title="Trả lời" onClick={() => window.dispatchEvent(new CustomEvent('chat:reply', { detail: { conversationId, message } }))}><Reply size={15} /></button>
+            <button type="button" title="Tùy chọn" onClick={() => setMenuId(menuId === message.id ? null : message.id)}><MoreHorizontal size={16} /></button>
+            {reactionId === message.id && <div className="chat-reaction-picker">{QUICK_REACTIONS.map((emoji) => <button key={emoji} type="button" onClick={() => { void chat.toggleReaction(conversationId, message.id, emoji); setReactionId(null) }}>{emoji}</button>)}</div>}
+            {menuId === message.id && <div className="chat-message-menu">
+              {own && ['TEXT', 'MIXED'].includes(message.messageType) && <button type="button" onClick={() => { const value = prompt('Sửa tin nhắn', message.content ?? ''); if (value?.trim()) void chat.editMessage(conversationId, message.id, value); setMenuId(null) }}><Pencil size={14} /> Sửa</button>}
+              <button type="button" onClick={() => { setForwarding(message); setMenuId(null) }}><Forward size={14} /> Chuyển tiếp</button>
+              {own && <button type="button" className="is-danger" onClick={() => { if (confirm('Thu hồi tin nhắn này?')) void chat.deleteMessage(conversationId, message.id); setMenuId(null) }}><Trash2 size={14} /> Thu hồi</button>}
+            </div>}
+          </div>}
+        </div>
+        {!groupedAfter && <div className="chat-msg-meta"><time>{formatTime(message.createdAt)}</time>{message.editedAt && <span>đã sửa</span>}{own && message.status === 'SENDING' && <span>Đang gửi…</span>}{own && message.status === 'FAILED' && <span className="chat-msg-failed"><AlertCircle size={12} /> Gửi lỗi <button type="button" onClick={() => void chat.retrySendMessage(conversationId, message.clientMessageId)}>Thử lại</button></span>}{own && message.status === 'SENT' && <CheckCheck size={13} />}</div>}
+        {message.id === newestOwn?.id && readers.length > 0 && <div className="chat-seen-row">Đã xem bởi {readers.map((reader) => reader.name).join(', ')}</div>}
+      </div>
+    })}
+    {!!chat.typingUsers[conversationId]?.length && <div className="chat-typing-indicator"><span>{chat.typingUsers[conversationId].map((user) => user.name).join(', ')} đang nhập</span><span className="chat-typing-dots"><span /><span /><span /></span></div>}
+    {unseen > 0 && <button className="chat-new-messages-pill" type="button" onClick={() => { const el = containerRef.current; if (el) el.scrollTop = el.scrollHeight; setUnseen(0) }}><ArrowDown size={14} /> {unseen} tin nhắn mới</button>}
+    {forwarding && <div className="chat-modal-backdrop"><div className="chat-forward-dialog"><div className="chat-dialog-head"><strong>Chuyển tiếp tin nhắn</strong><button type="button" onClick={() => setForwarding(null)}><X size={18} /></button></div>{chat.conversations.filter((item) => !item.archived).map((item) => <button type="button" className="chat-forward-target" key={item.conversationId} onClick={() => { void chat.forwardMessage(conversationId, forwarding.id, item.conversationId); setForwarding(null) }}>{item.displayName}</button>)}</div></div>}
+    {lightbox && token && <div className="chat-lightbox" role="dialog" onClick={() => setLightbox(null)}><button type="button"><X /></button><AuthenticatedAsset token={token} file={lightbox} kind="image" /></div>}
+  </div>
 }
 
-function getFileDownloadUrl(token: string | null, fileId: number): string {
-  const base = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1.0'
-  return `${base}/files/${fileId}${token ? `?token=${encodeURIComponent(token)}` : ''}`
+function MessageBody({ message, token, onOpenImage, onVote, currentUserId }: { message: ChatMessageItem; token: string | null; onOpenImage: (file: ChatMessageFileResponse) => void; onVote: (id: string) => void; currentUserId?: string }) {
+  const poll = useMemo(() => parsePoll(message.metadataJson), [message.metadataJson])
+  const urls = extractUrls(message.content)
+  if (message.messageType === 'POLL' && poll) {
+    const total = poll.options.reduce((sum, option) => sum + option.voterIds.length, 0)
+    return <div className="chat-poll"><strong>{poll.question}</strong>{poll.options.map((option) => { const selected = option.voterIds.includes(currentUserId ?? ''); const percent = total ? Math.round(option.voterIds.length * 100 / total) : 0; return <button key={option.id} type="button" className={selected ? 'is-selected' : ''} onClick={() => onVote(option.id)}><span>{option.text}</span><small>{option.voterIds.length} phiếu · {percent}%</small><i style={{ width: `${percent}%` }} /></button> })}<small>{total} lượt chọn</small></div>
+  }
+  return <>{message.messageType === 'STICKER' ? <div className="chat-sticker">{message.content}</div> : message.messageType === 'GIF' && message.content ? <img className="chat-inline-image" src={message.content} alt="GIF" loading="lazy" /> : message.content && <p className="chat-message-text">{renderMentions(message.content)}</p>}
+    {!!message.files?.length && <div className="chat-bubble-files">{message.files.map((file) => token && (file.mimeType.startsWith('image/') ? <button className="chat-image-button" type="button" key={file.fileId} onClick={() => onOpenImage(file)}><AuthenticatedAsset token={token} file={file} kind="image" /></button> : file.mimeType.startsWith('audio/') ? <AuthenticatedAsset key={file.fileId} token={token} file={file} kind="audio" /> : <DownloadChip key={file.fileId} token={token} file={file} />))}</div>}
+    {urls.map((url) => <a className="chat-link-preview" href={url} target="_blank" rel="noreferrer" key={url}><strong>{safeHost(url)}</strong><span>{url}</span></a>)}</>
 }
+
+function AuthenticatedAsset({ token, file, kind }: { token: string; file: ChatMessageFileResponse; kind: 'image' | 'audio' }) {
+  const [url, setUrl] = useState<string | null>(null)
+  useEffect(() => { let active = true; let objectUrl = ''; void downloadFile(token, file.fileId).then((blob) => { if (active) { objectUrl = URL.createObjectURL(blob); setUrl(objectUrl) } }); return () => { active = false; if (objectUrl) URL.revokeObjectURL(objectUrl) } }, [file.fileId, token])
+  if (!url) return <span className="chat-media-loading">Đang tải…</span>
+  return kind === 'image' ? <img src={url} alt={file.originalName} loading="lazy" /> : <audio src={url} controls preload="metadata" />
+}
+
+function DownloadChip({ token, file }: { token: string; file: ChatMessageFileResponse }) { const open = async () => { const blob = await downloadFile(token, file.fileId); const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = file.originalName; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000) }; return <button type="button" className="chat-file-chip" onClick={() => void open()}><FileText size={16} /><span>{file.originalName}</span><Download size={14} /></button> }
+function parsePoll(value: string | null) { try { return value ? JSON.parse(value) as { question: string; multiple: boolean; options: { id: string; text: string; voterIds: string[] }[] } : null } catch { return null } }
+function extractUrls(value: string | null) { return value?.match(/https?:\/\/[^\s<]+/g)?.slice(0, 3) ?? [] }
+function safeHost(value: string) { try { return new URL(value).hostname } catch { return value } }
+function renderMentions(value: string) { return value.split(/(@[\p{L}\p{N}._-]+)/gu).map((part, index) => part.startsWith('@') ? <mark key={`${part}-${index}`} className="chat-mention">{part}</mark> : part) }
+function previewText(content: string | null, type: string) { return content?.slice(0, 90) || ({ IMAGE: 'Ảnh', VOICE: 'Tin nhắn thoại', FILE: 'Tệp', POLL: 'Cuộc thăm dò' }[type] ?? 'Tin nhắn') }
+function closeInTime(a: string, b: string) { return Math.abs(new Date(b).getTime() - new Date(a).getTime()) < 300_000 }
+function formatTime(value: string) { try { return new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit' }).format(new Date(value)) } catch { return '' } }

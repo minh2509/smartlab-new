@@ -16,6 +16,9 @@ public record ChatConversationResponse(
         long lastMessageSeq,
         long lastReadSeq,
         long unreadCount,
+        boolean pinned,
+        boolean muted,
+        boolean archived,
         Instant createdAt,
         Instant updatedAt
 ) {

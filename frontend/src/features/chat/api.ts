@@ -185,6 +185,65 @@ export function deleteChatMessage(
   )
 }
 
+export function updateConversationPreferences(
+  token: string,
+  conversationId: string,
+  request: { pinned?: boolean; muted?: boolean; archived?: boolean },
+): Promise<ChatConversationResponse> {
+  return apiClient<ChatConversationResponse>(
+    `/chat/conversations/${encodeURIComponent(conversationId)}/preferences`,
+    { method: 'PATCH', token, body: JSON.stringify(request) },
+  )
+}
+
+export function searchConversationMessages(
+  token: string,
+  conversationId: string,
+  query: string,
+): Promise<ChatMessageResponse[]> {
+  const params = toQuery({ query: query.trim(), limit: 50 })
+  return apiClient<ChatMessageResponse[]>(
+    `/chat/conversations/${encodeURIComponent(conversationId)}/messages/search${params}`,
+    { token },
+  )
+}
+
+export function toggleMessageReaction(
+  token: string,
+  conversationId: string,
+  messageId: number,
+  emoji: string,
+): Promise<ChatMessageResponse> {
+  return apiClient<ChatMessageResponse>(
+    `/chat/conversations/${encodeURIComponent(conversationId)}/messages/${messageId}/reactions`,
+    { method: 'POST', token, body: JSON.stringify({ emoji }) },
+  )
+}
+
+export function forwardChatMessage(
+  token: string,
+  sourceConversationId: string,
+  messageId: number,
+  targetConversationId: string,
+): Promise<ChatMessageResponse> {
+  return apiClient<ChatMessageResponse>(
+    `/chat/conversations/${encodeURIComponent(sourceConversationId)}/messages/${messageId}/forward/${encodeURIComponent(targetConversationId)}`,
+    { method: 'POST', token, body: JSON.stringify({ clientMessageId: crypto.randomUUID() }) },
+  )
+}
+
+export function voteInPoll(
+  token: string,
+  conversationId: string,
+  messageId: number,
+  optionId: string,
+): Promise<ChatMessageResponse> {
+  return apiClient<ChatMessageResponse>(
+    `/chat/conversations/${encodeURIComponent(conversationId)}/messages/${messageId}/poll-votes`,
+    { method: 'POST', token, body: JSON.stringify({ optionId }) },
+  )
+}
+
 export function searchLabMembers(token: string, keyword?: string): Promise<MemberProfile[]> {
   const query = toQuery({ keyword: keyword?.trim() || undefined })
   return apiClient<MemberProfile[]>(`/members${query}`, { token })

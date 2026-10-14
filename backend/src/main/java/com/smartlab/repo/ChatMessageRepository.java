@@ -4,6 +4,8 @@ import com.smartlab.entity.ChatMessageEntity;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Lock;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
@@ -57,4 +59,22 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessageEntity, 
     boolean existsByConversation_IdAndMessageSeqGreaterThan(Long conversationId, long messageSeq);
 
     Optional<ChatMessageEntity> findBySender_IdAndClientMessageId(Long senderId, String clientMessageId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select m from ChatMessageEntity m left join fetch m.sender where m.id = :messageId")
+    Optional<ChatMessageEntity> findByIdForUpdate(@Param("messageId") Long messageId);
+
+    @Query("""
+            select m from ChatMessageEntity m
+            left join fetch m.sender
+            where m.conversation.id = :conversationId
+              and m.deletedAt is null
+              and lower(m.content) like lower(concat('%', :query, '%'))
+            order by m.messageSeq desc
+            """)
+    List<ChatMessageEntity> searchContent(
+            @Param("conversationId") Long conversationId,
+            @Param("query") String query,
+            Pageable pageable
+    );
 }

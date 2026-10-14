@@ -19,6 +19,17 @@ public record ChatSendMessageRequest(
         @Positive(message = "Reply message id must be positive")
         Long replyToMessageId,
         @Size(max = 20, message = "A message cannot have more than 20 attachments")
-        List<@NotNull @Positive Long> fileIds
+        List<@NotNull @Positive Long> fileIds,
+        @Size(max = 20_000, message = "Message metadata must not exceed 20000 characters")
+        String metadataJson
 ) {
+    public ChatSendMessageRequest(
+            String clientMessageId,
+            ChatMessageType messageType,
+            String content,
+            Long replyToMessageId,
+            List<Long> fileIds
+    ) {
+        this(clientMessageId, messageType, content, replyToMessageId, fileIds, null);
+    }
 }

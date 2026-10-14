@@ -41,6 +41,7 @@ export function ConversationPopover({ isOpen, onClose }: ConversationPopoverProp
 
   // Filter conversations by query
   const filteredConversations = conversations.filter((c) => {
+    if (c.archived) return false
     const q = searchQuery.toLowerCase().trim()
     if (!q) return true
     const titleMatch = (c.title ?? '').toLowerCase().includes(q)

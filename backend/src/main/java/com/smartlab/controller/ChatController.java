@@ -8,6 +8,10 @@ import com.smartlab.dto.request.CreateDirectChatRequest;
 import com.smartlab.dto.request.CreateGroupChatRequest;
 import com.smartlab.dto.request.EditChatMessageRequest;
 import com.smartlab.dto.request.RenameChatRequest;
+import com.smartlab.dto.request.ChatPreferenceRequest;
+import com.smartlab.dto.request.ChatReactionRequest;
+import com.smartlab.dto.request.ChatPollVoteRequest;
+import com.smartlab.dto.request.ForwardChatMessageRequest;
 import com.smartlab.dto.response.ChatConversationResponse;
 import com.smartlab.dto.response.ChatMemberResponse;
 import com.smartlab.dto.response.ChatMessagePageResponse;
@@ -154,5 +158,56 @@ public class ChatController {
             Authentication authentication
     ) {
         chatService.deleteMessage(conversationId, messageId, authentication);
+    }
+
+    @PatchMapping("/{conversationId}/preferences")
+    public ChatConversationResponse updatePreferences(
+            @PathVariable @Size(max = 36) String conversationId,
+            @RequestBody ChatPreferenceRequest request,
+            Authentication authentication
+    ) {
+        return chatService.updatePreferences(conversationId, request, authentication);
+    }
+
+    @GetMapping("/{conversationId}/messages/search")
+    public List<ChatMessageResponse> searchMessages(
+            @PathVariable @Size(max = 36) String conversationId,
+            @RequestParam @Size(min = 1, max = 200) String query,
+            @RequestParam(defaultValue = "30") @Min(1) @Max(100) int limit,
+            Authentication authentication
+    ) {
+        return chatService.searchMessages(conversationId, query, limit, authentication);
+    }
+
+    @PostMapping("/{conversationId}/messages/{messageId}/reactions")
+    public ChatMessageResponse toggleReaction(
+            @PathVariable @Size(max = 36) String conversationId,
+            @PathVariable Long messageId,
+            @Valid @RequestBody ChatReactionRequest request,
+            Authentication authentication
+    ) {
+        return chatService.toggleReaction(conversationId, messageId, request, authentication);
+    }
+
+    @PostMapping("/{sourceConversationId}/messages/{messageId}/forward/{targetConversationId}")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ChatMessageResponse forwardMessage(
+            @PathVariable @Size(max = 36) String sourceConversationId,
+            @PathVariable Long messageId,
+            @PathVariable @Size(max = 36) String targetConversationId,
+            @Valid @RequestBody ForwardChatMessageRequest request,
+            Authentication authentication
+    ) {
+        return chatService.forwardMessage(sourceConversationId, messageId, targetConversationId, request, authentication);
+    }
+
+    @PostMapping("/{conversationId}/messages/{messageId}/poll-votes")
+    public ChatMessageResponse votePoll(
+            @PathVariable @Size(max = 36) String conversationId,
+            @PathVariable Long messageId,
+            @Valid @RequestBody ChatPollVoteRequest request,
+            Authentication authentication
+    ) {
+        return chatService.votePoll(conversationId, messageId, request, authentication);
     }
 }

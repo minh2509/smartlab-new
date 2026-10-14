@@ -1,5 +1,6 @@
 export type ChatConversationType = 'DIRECT' | 'GROUP'
-export type ChatMessageType = 'TEXT' | 'FILE' | 'MIXED' | 'SYSTEM'
+export type ChatMessageType =
+  | 'TEXT' | 'FILE' | 'MIXED' | 'SYSTEM' | 'IMAGE' | 'VOICE' | 'GIF' | 'STICKER' | 'POLL'
 export type ChatMembershipRole = 'OWNER' | 'ADMIN' | 'MEMBER'
 
 export type ChatMessageFileResponse = {
@@ -22,7 +23,23 @@ export type ChatMemberResponse = {
   joinedAt: string
   leftAt: string | null
   lastReadSeq: number
+  online: boolean
+  lastActiveAt: string | null
   active: boolean
+}
+
+export type ChatMessageReferenceResponse = {
+  id: number
+  sender: ChatUserSummary | null
+  messageType: ChatMessageType
+  content: string | null
+  deleted: boolean
+}
+
+export type ChatReactionResponse = {
+  emoji: string
+  count: number
+  userIds: string[]
 }
 
 export type ChatMessageResponse = {
@@ -34,6 +51,10 @@ export type ChatMessageResponse = {
   messageType: ChatMessageType
   content: string | null
   replyToMessageId: number | null
+  replyTo: ChatMessageReferenceResponse | null
+  forwardedFromMessageId: number | null
+  metadataJson: string | null
+  reactions: ChatReactionResponse[]
   files: ChatMessageFileResponse[]
   createdAt: string
   editedAt: string | null
@@ -58,6 +79,9 @@ export type ChatConversationResponse = {
   lastMessageSeq: number
   lastReadSeq: number
   unreadCount: number
+  pinned: boolean
+  muted: boolean
+  archived: boolean
   createdAt: string
   updatedAt: string
 }
@@ -103,6 +127,7 @@ export type ChatSendMessageRequest = {
   content?: string
   replyToMessageId?: number
   fileIds?: number[]
+  metadataJson?: string
 }
 
 export type CreateDirectChatRequest = {
@@ -193,7 +218,13 @@ export type ChatContextValue = {
   markAsRead: (conversationId: string) => Promise<void>
   sendMessage: (
     conversationId: string,
-    payload: { content?: string; fileIds?: number[]; replyToMessageId?: number },
+    payload: {
+      content?: string
+      fileIds?: number[]
+      replyToMessageId?: number
+      messageType?: ChatMessageType
+      metadataJson?: string
+    },
   ) => Promise<void>
   retrySendMessage: (conversationId: string, clientMessageId: string) => Promise<void>
   sendTypingSignal: (conversationId: string, started: boolean) => void
@@ -205,4 +236,12 @@ export type ChatContextValue = {
   changeMemberRoleInGroup: (conversationId: string, userId: string, role: ChatMembershipRole) => Promise<void>
   editMessage: (conversationId: string, messageId: number, content: string) => Promise<void>
   deleteMessage: (conversationId: string, messageId: number) => Promise<void>
+  updateConversationPreferences: (
+    conversationId: string,
+    request: { pinned?: boolean; muted?: boolean; archived?: boolean },
+  ) => Promise<void>
+  searchMessages: (conversationId: string, query: string) => Promise<ChatMessageResponse[]>
+  toggleReaction: (conversationId: string, messageId: number, emoji: string) => Promise<void>
+  forwardMessage: (sourceConversationId: string, messageId: number, targetConversationId: string) => Promise<void>
+  votePoll: (conversationId: string, messageId: number, optionId: string) => Promise<void>
 }

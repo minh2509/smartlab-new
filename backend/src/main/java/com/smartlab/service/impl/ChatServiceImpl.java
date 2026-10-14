@@ -1,5 +1,9 @@
 package com.smartlab.service.impl;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.smartlab.dto.request.AddChatMemberRequest;
 import com.smartlab.dto.request.ChangeChatMemberRoleRequest;
 import com.smartlab.dto.request.ChatReadRequest;
@@ -8,6 +12,10 @@ import com.smartlab.dto.request.ChatTypingRequest;
 import com.smartlab.dto.request.CreateGroupChatRequest;
 import com.smartlab.dto.request.EditChatMessageRequest;
 import com.smartlab.dto.request.RenameChatRequest;
+import com.smartlab.dto.request.ChatPreferenceRequest;
+import com.smartlab.dto.request.ChatReactionRequest;
+import com.smartlab.dto.request.ChatPollVoteRequest;
+import com.smartlab.dto.request.ForwardChatMessageRequest;
 import com.smartlab.dto.response.ChatConversationEventData;
 import com.smartlab.dto.response.ChatConversationResponse;
 import com.smartlab.dto.response.ChatMemberEventData;
@@ -15,6 +23,8 @@ import com.smartlab.dto.response.ChatMemberResponse;
 import com.smartlab.dto.response.ChatMessageFileResponse;
 import com.smartlab.dto.response.ChatMessagePageResponse;
 import com.smartlab.dto.response.ChatMessageResponse;
+import com.smartlab.dto.response.ChatMessageReferenceResponse;
+import com.smartlab.dto.response.ChatReactionResponse;
 import com.smartlab.dto.response.ChatReadResponse;
 import com.smartlab.dto.response.ChatTypingEventData;
 import com.smartlab.dto.response.ChatUserSummary;
@@ -22,6 +32,7 @@ import com.smartlab.entity.ChatConversationEntity;
 import com.smartlab.entity.ChatConversationMemberEntity;
 import com.smartlab.entity.ChatMessageEntity;
 import com.smartlab.entity.ChatMessageFileEntity;
+import com.smartlab.entity.ChatMessageReactionEntity;
 import com.smartlab.entity.ProjectEntity;
 import com.smartlab.entity.StoredFileEntity;
 import com.smartlab.entity.UserEntity;
@@ -32,15 +43,17 @@ import com.smartlab.repo.ChatConversationMemberRepository;
 import com.smartlab.repo.ChatConversationRepository;
 import com.smartlab.repo.ChatMessageFileRepository;
 import com.smartlab.repo.ChatMessageRepository;
+import com.smartlab.repo.ChatMessageReactionRepository;
 import com.smartlab.repo.ProjectRepository;
 import com.smartlab.repo.StoredFileRepository;
 import com.smartlab.repo.UserRepository;
 import com.smartlab.service.ChatRealtimePublisher;
 import com.smartlab.service.ChatService;
+import com.smartlab.service.ChatPresenceService;
 import com.smartlab.service.FileService;
 import com.smartlab.service.PermissionService;
 import com.smartlab.service.ProjectAccessService;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
@@ -60,7 +73,6 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor
 public class ChatServiceImpl implements ChatService {
     private static final int MAX_PAGE_SIZE = 100;
     private static final int MAX_GROUP_MEMBERS = 100;
@@ -69,6 +81,7 @@ public class ChatServiceImpl implements ChatService {
     private final ChatConversationMemberRepository memberRepository;
     private final ChatMessageRepository messageRepository;
     private final ChatMessageFileRepository messageFileRepository;
+    private final ChatMessageReactionRepository reactionRepository;
     private final UserRepository userRepository;
     private final ProjectRepository projectRepository;
     private final StoredFileRepository storedFileRepository;
@@ -76,6 +89,58 @@ public class ChatServiceImpl implements ChatService {
     private final ProjectAccessService projectAccessService;
     private final PermissionService permissionService;
     private final ChatRealtimePublisher realtimePublisher;
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ChatPresenceService presenceService;
+
+    @Autowired
+    public ChatServiceImpl(
+            ChatConversationRepository conversationRepository,
+            ChatConversationMemberRepository memberRepository,
+            ChatMessageRepository messageRepository,
+            ChatMessageFileRepository messageFileRepository,
+            ChatMessageReactionRepository reactionRepository,
+            UserRepository userRepository,
+            ProjectRepository projectRepository,
+            StoredFileRepository storedFileRepository,
+            FileService fileService,
+            ProjectAccessService projectAccessService,
+            PermissionService permissionService,
+            ChatRealtimePublisher realtimePublisher,
+            ChatPresenceService presenceService
+    ) {
+        this.conversationRepository = conversationRepository;
+        this.memberRepository = memberRepository;
+        this.messageRepository = messageRepository;
+        this.messageFileRepository = messageFileRepository;
+        this.reactionRepository = reactionRepository;
+        this.userRepository = userRepository;
+        this.projectRepository = projectRepository;
+        this.storedFileRepository = storedFileRepository;
+        this.fileService = fileService;
+        this.projectAccessService = projectAccessService;
+        this.permissionService = permissionService;
+        this.realtimePublisher = realtimePublisher;
+        this.presenceService = presenceService;
+    }
+
+    /** Backward-compatible constructor retained for focused unit tests and embedders. */
+    public ChatServiceImpl(
+            ChatConversationRepository conversationRepository,
+            ChatConversationMemberRepository memberRepository,
+            ChatMessageRepository messageRepository,
+            ChatMessageFileRepository messageFileRepository,
+            UserRepository userRepository,
+            ProjectRepository projectRepository,
+            StoredFileRepository storedFileRepository,
+            FileService fileService,
+            ProjectAccessService projectAccessService,
+            PermissionService permissionService,
+            ChatRealtimePublisher realtimePublisher
+    ) {
+        this(conversationRepository, memberRepository, messageRepository, messageFileRepository, null,
+                userRepository, projectRepository, storedFileRepository, fileService, projectAccessService,
+                permissionService, realtimePublisher, null);
+    }
 
     @Override
     @Transactional(readOnly = true)
@@ -257,6 +322,7 @@ public class ChatServiceImpl implements ChatService {
         }
 
         validateMessagePayload(request.messageType(), request.content(), request.fileIds());
+        validateMetadata(request.messageType(), request.metadataJson());
         ChatMessageEntity replyTo = resolveReply(conversation, request.replyToMessageId());
         List<StoredFileEntity> files = resolveAttachments(request.fileIds(), authentication);
         long messageSeq = conversation.nextMessageSequence();
@@ -267,7 +333,9 @@ public class ChatServiceImpl implements ChatService {
                 clientMessageId,
                 request.messageType(),
                 normalizeContent(request.content()),
-                replyTo
+                replyTo,
+                null,
+                normalizeMetadata(request.metadataJson())
         );
         messageRepository.saveAndFlush(message);
         for (int index = 0; index < files.size(); index++) {
@@ -466,6 +534,149 @@ public class ChatServiceImpl implements ChatService {
     }
 
     @Override
+    @Transactional
+    public ChatConversationResponse updatePreferences(
+            String conversationId,
+            ChatPreferenceRequest request,
+            Authentication authentication
+    ) {
+        UserEntity currentUser = currentUser(authentication);
+        ChatConversationEntity conversation = requireConversation(conversationId);
+        ChatConversationMemberEntity member = requireActiveMembershipForUpdate(conversationId, currentUser.getId());
+        if (request == null) throw badRequest("Preference request is required");
+        if (request.pinned() != null) member.setPinned(request.pinned());
+        if (request.muted() != null) member.setMuted(request.muted());
+        if (request.archived() != null) {
+            if (request.archived()) member.archive(); else member.unarchive();
+        }
+        memberRepository.saveAndFlush(member);
+        return toConversationResponse(conversation, currentUser.getId());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ChatMessageResponse> searchMessages(
+            String conversationId,
+            String query,
+            int limit,
+            Authentication authentication
+    ) {
+        UserEntity currentUser = currentUser(authentication);
+        ChatConversationEntity conversation = requireConversation(conversationId);
+        requireActiveMembership(conversationId, currentUser.getId());
+        String normalized = query == null ? "" : query.trim();
+        if (normalized.isEmpty()) throw badRequest("Search query is required");
+        return mapMessages(messageRepository.searchContent(
+                conversation.getId(), normalized, PageRequest.of(0, validatePageSize(limit))));
+    }
+
+    @Override
+    @Transactional
+    public ChatMessageResponse toggleReaction(
+            String conversationId,
+            Long messageId,
+            ChatReactionRequest request,
+            Authentication authentication
+    ) {
+        UserEntity currentUser = currentUser(authentication);
+        ChatConversationEntity conversation = requireConversation(conversationId);
+        requireActiveMembership(conversationId, currentUser.getId());
+        ChatMessageEntity message = requireMessage(conversation, messageId);
+        if (message.getDeletedAt() != null) throw conflict("Deleted messages cannot be reacted to");
+        String emoji = request == null || request.emoji() == null ? "" : request.emoji().trim();
+        if (emoji.isEmpty() || emoji.length() > 16) throw badRequest("Invalid reaction");
+        reactionRepository.findOne(message.getId(), currentUser.getId(), emoji)
+                .ifPresentOrElse(reactionRepository::delete,
+                        () -> reactionRepository.save(ChatMessageReactionEntity.create(message, currentUser, emoji)));
+        reactionRepository.flush();
+        ChatMessageResponse response = toMessageResponse(message, messageFiles(message));
+        publishMessage("chat.message.reactions_updated", conversation, response);
+        return response;
+    }
+
+    @Override
+    @Transactional
+    public ChatMessageResponse forwardMessage(
+            String sourceConversationId,
+            Long messageId,
+            String targetConversationId,
+            ForwardChatMessageRequest request,
+            Authentication authentication
+    ) {
+        UserEntity currentUser = currentUser(authentication);
+        ChatConversationEntity source = requireConversation(sourceConversationId);
+        requireActiveMembership(sourceConversationId, currentUser.getId());
+        ChatMessageEntity original = requireMessage(source, messageId);
+        if (original.getDeletedAt() != null || original.getMessageType() == ChatMessageType.SYSTEM) {
+            throw conflict("This message cannot be forwarded");
+        }
+        ChatConversationEntity target = conversationRepository.findByConversationIdForUpdate(targetConversationId)
+                .orElseThrow(() -> notFound("Target conversation not found"));
+        requireActiveMembership(targetConversationId, currentUser.getId());
+        String clientMessageId = normalizeClientMessageId(request == null ? null : request.clientMessageId());
+        ChatMessageEntity forwarded = ChatMessageEntity.create(
+                target, target.nextMessageSequence(), currentUser, clientMessageId,
+                original.getMessageType(), original.getContent(), null, original, original.getMetadataJson());
+        messageRepository.saveAndFlush(forwarded);
+        List<ChatMessageFileEntity> originalFiles = messageFiles(original);
+        for (int i = 0; i < originalFiles.size(); i++) {
+            messageFileRepository.save(ChatMessageFileEntity.create(forwarded, originalFiles.get(i).getFile(), i));
+        }
+        messageFileRepository.flush();
+        ChatMessageResponse response = toMessageResponse(forwarded, messageFiles(forwarded));
+        publishMessage("chat.message.created", target, response);
+        return response;
+    }
+
+    @Override
+    @Transactional
+    public ChatMessageResponse votePoll(
+            String conversationId,
+            Long messageId,
+            ChatPollVoteRequest request,
+            Authentication authentication
+    ) {
+        UserEntity currentUser = currentUser(authentication);
+        ChatConversationEntity conversation = requireConversation(conversationId);
+        requireActiveMembership(conversationId, currentUser.getId());
+        ChatMessageEntity message = messageRepository.findByIdForUpdate(messageId)
+                .orElseThrow(() -> notFound("Poll not found"));
+        if (!Objects.equals(message.getConversation().getId(), conversation.getId())
+                || message.getMessageType() != ChatMessageType.POLL || message.getDeletedAt() != null) {
+            throw notFound("Poll not found");
+        }
+        String optionId = request == null ? null : request.optionId();
+        try {
+            ObjectNode metadata = (ObjectNode) objectMapper.readTree(message.getMetadataJson());
+            ArrayNode options = (ArrayNode) metadata.path("options");
+            boolean multiple = metadata.path("multiple").asBoolean(false);
+            boolean found = false;
+            for (JsonNode node : options) {
+                if (!(node instanceof ObjectNode option)) continue;
+                ArrayNode voters = option.withArray("voterIds");
+                boolean selected = containsText(voters, currentUser.getUserId());
+                if (Objects.equals(option.path("id").asText(), optionId)) {
+                    found = true;
+                    if (selected) removeText(voters, currentUser.getUserId());
+                    else voters.add(currentUser.getUserId());
+                } else if (!multiple) {
+                    removeText(voters, currentUser.getUserId());
+                }
+            }
+            if (!found) throw badRequest("Poll option not found");
+            message.updateMetadata(objectMapper.writeValueAsString(metadata));
+        } catch (ResponseStatusException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw badRequest("Invalid poll data");
+        }
+        messageRepository.saveAndFlush(message);
+        ChatMessageResponse response = toMessageResponse(message, messageFiles(message));
+        publishMessage("chat.message.updated", conversation, response);
+        return response;
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public void publishTyping(
             String conversationId,
@@ -596,7 +807,7 @@ public class ChatServiceImpl implements ChatService {
 
     private void validateMessagePayload(ChatMessageType type, String content, List<Long> fileIds) {
         if (type == null || type == ChatMessageType.SYSTEM) {
-            throw badRequest("Client messages must use TEXT, FILE, or MIXED type");
+            throw badRequest("Unsupported client message type");
         }
         boolean hasContent = content != null && !content.isBlank();
         boolean hasFiles = fileIds != null && !fileIds.isEmpty();
@@ -604,9 +815,56 @@ public class ChatServiceImpl implements ChatService {
             case TEXT -> hasContent && !hasFiles;
             case FILE -> hasFiles && !hasContent;
             case MIXED -> hasContent && hasFiles;
+            case IMAGE, VOICE -> hasFiles;
+            case GIF, STICKER -> hasContent && !hasFiles;
+            case POLL -> !hasFiles;
             case SYSTEM -> false;
         };
         if (!valid) throw badRequest("Message content and attachments do not match the message type");
+    }
+
+    private void validateMetadata(ChatMessageType type, String metadataJson) {
+        if (metadataJson != null && metadataJson.length() > 20_000) {
+            throw badRequest("Message metadata must not exceed 20000 characters");
+        }
+        if (type != ChatMessageType.POLL) return;
+        if (metadataJson == null || metadataJson.isBlank()) throw badRequest("Poll data is required");
+        try {
+            JsonNode root = objectMapper.readTree(metadataJson);
+            String question = root.path("question").asText().trim();
+            JsonNode options = root.path("options");
+            if (question.isEmpty() || question.length() > 300 || !options.isArray()
+                    || options.size() < 2 || options.size() > 10) {
+                throw badRequest("A poll requires a question and 2 to 10 options");
+            }
+            LinkedHashSet<String> ids = new LinkedHashSet<>();
+            for (JsonNode option : options) {
+                String id = option.path("id").asText().trim();
+                String text = option.path("text").asText().trim();
+                if (id.isEmpty() || id.length() > 80 || text.isEmpty() || text.length() > 200 || !ids.add(id)) {
+                    throw badRequest("Invalid poll option");
+                }
+            }
+        } catch (ResponseStatusException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw badRequest("Invalid poll data");
+        }
+    }
+
+    private String normalizeMetadata(String value) {
+        return value == null || value.isBlank() ? null : value;
+    }
+
+    private boolean containsText(ArrayNode array, String value) {
+        for (JsonNode node : array) if (value.equals(node.asText())) return true;
+        return false;
+    }
+
+    private void removeText(ArrayNode array, String value) {
+        for (int i = array.size() - 1; i >= 0; i--) {
+            if (value.equals(array.get(i).asText())) array.remove(i);
+        }
     }
 
     private String normalizeClientMessageId(String value) {
@@ -701,6 +959,9 @@ public class ChatServiceImpl implements ChatService {
                 lastMessageSeq,
                 lastReadSeq,
                 Math.max(0L, lastMessageSeq - lastReadSeq),
+                Boolean.TRUE.equals(currentMember.getPinned()),
+                Boolean.TRUE.equals(currentMember.getMuted()),
+                currentMember.getArchivedAt() != null,
                 conversation.getCreatedAt(),
                 conversation.getUpdatedAt()
         );
@@ -729,6 +990,8 @@ public class ChatServiceImpl implements ChatService {
                 member.getJoinedAt() == null ? null : member.getJoinedAt(),
                 member.getLeftAt(),
                 safeSequence(member.getLastReadSeq()),
+                presenceService != null && presenceService.isOnline(user.getEmail()),
+                presenceService == null ? null : presenceService.lastActiveAt(user.getEmail()),
                 member.isActive()
         );
     }
@@ -737,26 +1000,9 @@ public class ChatServiceImpl implements ChatService {
             ChatMessageEntity message,
             List<ChatMessageFileEntity> files
     ) {
-        return new ChatMessageResponse(
-                message.getId(),
-                message.getConversation().getConversationId(),
-                safeSequence(message.getMessageSeq()),
-                message.getSender() == null ? null : userSummary(message.getSender()),
-                message.getClientMessageId(),
-                message.getMessageType(),
-                message.getDeletedAt() == null ? message.getContent() : null,
-                message.getReplyTo() == null ? null : message.getReplyTo().getId(),
-                files.stream().map(file -> new ChatMessageFileResponse(
-                        file.getFile().getId(),
-                        file.getFile().getOriginalName(),
-                        file.getFile().getMimeType(),
-                        file.getFile().getSizeBytes(),
-                        file.getFile().getAccessScope()
-                )).toList(),
-                message.getCreatedAt(),
-                message.getEditedAt(),
-                message.getDeletedAt()
-        );
+        List<ChatMessageReactionEntity> reactionEntities = reactionRepository == null
+                ? List.of() : reactionRepository.findByMessageIds(List.of(message.getId()));
+        return toMessageResponse(message, files, reactionEntities);
     }
 
     private List<ChatMessageResponse> mapMessages(List<ChatMessageEntity> messages) {
@@ -768,9 +1014,43 @@ public class ChatServiceImpl implements ChatService {
                         LinkedHashMap::new,
                         Collectors.toList()
                 ));
-        return messages.stream()
-                .map(message -> toMessageResponse(message, filesByMessage.getOrDefault(message.getId(), List.of())))
-                .toList();
+        Map<Long, List<ChatMessageReactionEntity>> reactionsByMessage = (reactionRepository == null
+                ? List.<ChatMessageReactionEntity>of() : reactionRepository.findByMessageIds(ids)).stream()
+                .collect(Collectors.groupingBy(reaction -> reaction.getMessage().getId()));
+        return messages.stream().map(message -> toMessageResponse(
+                message,
+                filesByMessage.getOrDefault(message.getId(), List.of()),
+                reactionsByMessage.getOrDefault(message.getId(), List.of())
+        )).toList();
+    }
+
+    private ChatMessageResponse toMessageResponse(
+            ChatMessageEntity message,
+            List<ChatMessageFileEntity> files,
+            List<ChatMessageReactionEntity> reactionEntities
+    ) {
+        Map<String, List<ChatMessageReactionEntity>> grouped = reactionEntities.stream()
+                .collect(Collectors.groupingBy(ChatMessageReactionEntity::getEmoji, LinkedHashMap::new, Collectors.toList()));
+        return new ChatMessageResponse(
+                message.getId(), message.getConversation().getConversationId(), safeSequence(message.getMessageSeq()),
+                message.getSender() == null ? null : userSummary(message.getSender()), message.getClientMessageId(),
+                message.getMessageType(), message.getDeletedAt() == null ? message.getContent() : null,
+                message.getReplyTo() == null ? null : message.getReplyTo().getId(), toMessageReference(message.getReplyTo()),
+                message.getForwardedFrom() == null ? null : message.getForwardedFrom().getId(),
+                message.getDeletedAt() == null ? message.getMetadataJson() : null,
+                grouped.entrySet().stream().map(entry -> new ChatReactionResponse(entry.getKey(), entry.getValue().size(),
+                        entry.getValue().stream().map(r -> r.getUser().getUserId()).toList())).toList(),
+                files.stream().map(file -> new ChatMessageFileResponse(file.getFile().getId(),
+                        file.getFile().getOriginalName(), file.getFile().getMimeType(), file.getFile().getSizeBytes(),
+                        file.getFile().getAccessScope())).toList(), message.getCreatedAt(), message.getEditedAt(),
+                message.getDeletedAt());
+    }
+
+    private ChatMessageReferenceResponse toMessageReference(ChatMessageEntity message) {
+        if (message == null) return null;
+        return new ChatMessageReferenceResponse(message.getId(),
+                message.getSender() == null ? null : userSummary(message.getSender()), message.getMessageType(),
+                message.getDeletedAt() == null ? message.getContent() : null, message.getDeletedAt() != null);
     }
 
     private List<ChatMessageFileEntity> messageFiles(ChatMessageEntity message) {

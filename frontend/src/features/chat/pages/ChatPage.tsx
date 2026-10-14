@@ -1,11 +1,17 @@
 import { useEffect, useState } from 'react'
 import {
   ArrowLeft,
+  Archive,
+  Bell,
+  BellOff,
   Edit2,
   Info,
+  Pin,
+  PinOff,
   Plus,
   Search,
   UserMinus,
+  X,
 } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../auth/authContext'
@@ -14,7 +20,7 @@ import { useChat } from '../chatContext'
 import { ChatAvatar } from '../components/ChatAvatar'
 import { MessageComposer } from '../components/MessageComposer'
 import { MessageList } from '../components/MessageList'
-import type { ChatConversationResponse, ChatMembershipRole } from '../types'
+import type { ChatConversationResponse, ChatMembershipRole, ChatMessageResponse } from '../types'
 
 export function ChatPage() {
   const { profile, token } = useAuth()
@@ -29,6 +35,8 @@ export function ChatPage() {
     changeMemberRoleInGroup,
     createGroupChat,
     createDirectChat,
+    updateConversationPreferences,
+    searchMessages,
   } = useChat()
 
   const [searchParams, setSearchParams] = useSearchParams()
@@ -37,6 +45,9 @@ export function ChatPage() {
   const [activeConvId, setActiveConvId] = useState<string | null>(activeIdFromQuery)
   const [searchQuery, setSearchQuery] = useState('')
   const [showDetails, setShowDetails] = useState(true)
+  const [showArchived, setShowArchived] = useState(false)
+  const [messageSearch, setMessageSearch] = useState('')
+  const [messageResults, setMessageResults] = useState<ChatMessageResponse[]>([])
 
   // Group editing state
   const [isRenaming, setIsRenaming] = useState(false)
@@ -87,6 +98,7 @@ export function ChatPage() {
 
   // Filter conversations
   const filteredConversations = conversations.filter((c) => {
+    if (c.archived !== showArchived) return false
     const q = searchQuery.toLowerCase().trim()
     if (!q) return true
     const titleMatch = (c.title ?? '').toLowerCase().includes(q)
@@ -101,6 +113,7 @@ export function ChatPage() {
   const isOwner = userRole === 'OWNER'
   const isManager = isOwner || userRole === 'ADMIN'
   const isGroup = activeConversation?.type === 'GROUP'
+  const directPeer = !isGroup ? activeConversation?.members.find((m) => m.userId !== profile?.userId) : undefined
 
   const handleSaveRename = async () => {
     if (!activeConvId || !newTitle.trim()) return
@@ -242,6 +255,10 @@ export function ChatPage() {
               aria-label="Tìm kiếm trong danh sách đoạn chat"
             />
           </div>
+          <button type="button" className={`chat-archive-filter ${showArchived ? 'is-active' : ''}`}
+            onClick={() => { setShowArchived((value) => !value); setActiveConvId(null); setSearchParams({}) }}>
+            <Archive size={13} /> {showArchived ? 'Quay lại hộp thư' : 'Đã lưu trữ'}
+          </button>
         </div>
 
         <div className="chat-popover-list" role="list">
@@ -279,6 +296,7 @@ export function ChatPage() {
                   <div className="chat-conv-info">
                     <div className="chat-conv-top">
                       <span className="chat-conv-name">
+                        {conv.pinned && <Pin size={11} aria-label="Đã ghim" />}
                         {isGrp ? `[Nhóm] ${displayName}` : displayName}
                       </span>
                       {conv.lastMessage?.createdAt && (
@@ -328,21 +346,20 @@ export function ChatPage() {
                   <small style={{ color: 'var(--text-3)', fontSize: 12 }}>
                     {isGroup
                       ? `${activeConversation.members.filter((m) => m.active).length} thành viên`
-                      : 'Đang hoạt động'}
+                      : directPeer?.online ? 'Đang hoạt động' : directPeer?.lastActiveAt
+                        ? `Hoạt động ${formatRelativeTime(directPeer.lastActiveAt)}` : 'Ngoại tuyến'}
                   </small>
                 </div>
               </div>
 
-              <button
-                type="button"
-                className={`chat-icon-action-btn ${showDetails ? 'is-active' : ''}`}
-                title="Thông tin cuộc trò chuyện"
-                aria-label="Bật tắt thông tin cuộc trò chuyện"
-                onClick={() => setShowDetails(!showDetails)}
-              >
-                <Info size={16} aria-hidden="true" />
-              </button>
+              <div className="chat-popover-actions">
+                <button type="button" className="chat-icon-action-btn" title="Tìm trong cuộc trò chuyện"
+                  onClick={async () => { const query = prompt('Tìm tin nhắn')?.trim(); if (!query) return; setMessageSearch(query); setMessageResults(await searchMessages(activeConversation.conversationId, query)) }}><Search size={16} /></button>
+                <button type="button" className={`chat-icon-action-btn ${showDetails ? 'is-active' : ''}`} title="Thông tin cuộc trò chuyện" aria-label="Bật tắt thông tin cuộc trò chuyện" onClick={() => setShowDetails(!showDetails)}><Info size={16} aria-hidden="true" /></button>
+              </div>
             </header>
+
+            {messageSearch && <div className="chat-search-results"><div><strong>Kết quả cho “{messageSearch}”</strong><button type="button" onClick={() => { setMessageSearch(''); setMessageResults([]) }}><X size={15} /></button></div>{messageResults.length ? messageResults.map((result) => <button type="button" key={result.id} onClick={() => document.querySelector<HTMLElement>(`[data-message-id="${result.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}><strong>{result.sender?.name}</strong><span>{result.content}</span><time>{formatShortTime(result.createdAt)}</time></button>) : <small>Không tìm thấy tin nhắn.</small>}</div>}
 
             <MessageList conversationId={activeConversation.conversationId} />
             <MessageComposer conversationId={activeConversation.conversationId} />
@@ -420,6 +437,12 @@ export function ChatPage() {
             <p style={{ color: 'var(--text-3)', fontSize: 12, marginTop: 4 }}>
               {isGroup ? 'Nhóm thảo luận nội bộ' : 'Cuộc trò chuyện trực tiếp'}
             </p>
+          </div>
+
+          <div className="chat-conversation-preferences">
+            <button type="button" onClick={() => void updateConversationPreferences(activeConversation.conversationId, { pinned: !activeConversation.pinned })}>{activeConversation.pinned ? <PinOff size={16} /> : <Pin size={16} />}{activeConversation.pinned ? 'Bỏ ghim' : 'Ghim cuộc trò chuyện'}</button>
+            <button type="button" onClick={async () => { if (activeConversation.muted && typeof Notification !== 'undefined' && Notification.permission === 'default') await Notification.requestPermission(); await updateConversationPreferences(activeConversation.conversationId, { muted: !activeConversation.muted }) }}>{activeConversation.muted ? <Bell size={16} /> : <BellOff size={16} />}{activeConversation.muted ? 'Bật thông báo' : 'Tắt thông báo'}</button>
+            <button type="button" onClick={() => { void updateConversationPreferences(activeConversation.conversationId, { archived: !activeConversation.archived }); handleBackToList() }}><Archive size={16} />{activeConversation.archived ? 'Bỏ lưu trữ' : 'Lưu trữ'}</button>
           </div>
 
           {/* Group Members Section */}
@@ -673,4 +696,12 @@ function formatShortTime(iso: string): string {
   } catch {
     return ''
   }
+}
+
+function formatRelativeTime(iso: string): string {
+  const seconds = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000))
+  if (seconds < 60) return 'vừa xong'
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} phút trước`
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)} giờ trước`
+  return `${Math.floor(seconds / 86400)} ngày trước`
 }

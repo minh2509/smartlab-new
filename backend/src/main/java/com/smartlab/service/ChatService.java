@@ -5,6 +5,10 @@ import com.smartlab.dto.request.ChangeChatMemberRoleRequest;
 import com.smartlab.dto.request.ChatReadRequest;
 import com.smartlab.dto.request.ChatSendMessageRequest;
 import com.smartlab.dto.request.ChatTypingRequest;
+import com.smartlab.dto.request.ChatPreferenceRequest;
+import com.smartlab.dto.request.ChatReactionRequest;
+import com.smartlab.dto.request.ChatPollVoteRequest;
+import com.smartlab.dto.request.ForwardChatMessageRequest;
 import com.smartlab.dto.request.CreateGroupChatRequest;
 import com.smartlab.dto.request.EditChatMessageRequest;
 import com.smartlab.dto.request.RenameChatRequest;
@@ -73,6 +77,18 @@ public interface ChatService {
     );
 
     void deleteMessage(String conversationId, Long messageId, Authentication authentication);
+
+    ChatConversationResponse updatePreferences(String conversationId, ChatPreferenceRequest request, Authentication authentication);
+
+    List<ChatMessageResponse> searchMessages(String conversationId, String query, int limit, Authentication authentication);
+
+    ChatMessageResponse toggleReaction(String conversationId, Long messageId, ChatReactionRequest request, Authentication authentication);
+
+    ChatMessageResponse forwardMessage(String sourceConversationId, Long messageId, String targetConversationId,
+                                       ForwardChatMessageRequest request, Authentication authentication);
+
+    ChatMessageResponse votePoll(String conversationId, Long messageId, ChatPollVoteRequest request,
+                                 Authentication authentication);
 
     void publishTyping(
             String conversationId,

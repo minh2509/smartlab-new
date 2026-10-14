@@ -64,6 +64,13 @@ public class ChatMessageEntity {
     @JoinColumn(name = "reply_to_message_id")
     private ChatMessageEntity replyTo;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "forwarded_from_message_id")
+    private ChatMessageEntity forwardedFrom;
+
+    @Column(name = "metadata_json", columnDefinition = "TEXT")
+    private String metadataJson;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -81,7 +88,9 @@ public class ChatMessageEntity {
             String clientMessageId,
             ChatMessageType messageType,
             String content,
-            ChatMessageEntity replyTo
+            ChatMessageEntity replyTo,
+            ChatMessageEntity forwardedFrom,
+            String metadataJson
     ) {
         return ChatMessageEntity.builder()
                 .conversation(conversation)
@@ -91,7 +100,21 @@ public class ChatMessageEntity {
                 .messageType(messageType)
                 .content(content)
                 .replyTo(replyTo)
+                .forwardedFrom(forwardedFrom)
+                .metadataJson(metadataJson)
                 .build();
+    }
+
+    public static ChatMessageEntity create(
+            ChatConversationEntity conversation,
+            long messageSeq,
+            UserEntity sender,
+            String clientMessageId,
+            ChatMessageType messageType,
+            String content,
+            ChatMessageEntity replyTo
+    ) {
+        return create(conversation, messageSeq, sender, clientMessageId, messageType, content, replyTo, null, null);
     }
 
     public void edit(String content) {
@@ -101,5 +124,10 @@ public class ChatMessageEntity {
 
     public void softDelete() {
         this.deletedAt = Instant.now();
+    }
+
+    public void updateMetadata(String metadataJson) {
+        this.metadataJson = metadataJson;
+        this.editedAt = Instant.now();
     }
 }

@@ -1,181 +1,140 @@
-import { useCallback, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react'
-import { Loader2, Paperclip, Send, X } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent } from 'react'
+import { BarChart3, Image, Loader2, Mic, Paperclip, Reply, Send, Smile, Square, X } from 'lucide-react'
 import { useAuth } from '../../auth/authContext'
 import { uploadFile } from '../../files/api'
 import { useChat } from '../chatContext'
+import type { ChatMessageItem, ChatMessageType } from '../types'
 
-type MessageComposerProps = {
-  conversationId: string
-  placeholder?: string
-}
+type Props = { conversationId: string; placeholder?: string }
+type Attachment = { fileId: number; name: string; mimeType: string }
+const EMOJIS = ['😀', '😂', '😍', '🥳', '😎', '🤔', '😭', '🔥', '🎉', '❤️', '👍', '👏']
+const STICKERS = ['👋', '🙌', '🎉', '💯', '🚀', '✨', '🧠', '🔬']
 
-type AttachedFile = {
-  fileId: number
-  name: string
-}
-
-export function MessageComposer({ conversationId, placeholder = 'Nhập tin nhắn...' }: MessageComposerProps) {
+export function MessageComposer({ conversationId, placeholder = 'Nhập tin nhắn...' }: Props) {
   const { token } = useAuth()
-  const { sendMessage, sendTypingSignal } = useChat()
-
-  const [text, setText] = useState('')
-  const [attachments, setAttachments] = useState<AttachedFile[]>([])
+  const chat = useChat()
+  const draftKey = `smartlab-chat-draft:${conversationId}`
+  const [text, setText] = useState(() => localStorage.getItem(draftKey) ?? '')
+  const [attachments, setAttachments] = useState<Attachment[]>([])
+  const [replyTo, setReplyTo] = useState<ChatMessageItem | null>(null)
+  const [showEmoji, setShowEmoji] = useState(false)
+  const [showExtras, setShowExtras] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [sending, setSending] = useState(false)
+  const [recording, setRecording] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastTyping = useRef(0)
+  const recorder = useRef<MediaRecorder | null>(null)
+  const chunks = useRef<Blob[]>([])
+  const mentionMatch = text.match(/(?:^|\s)@([^\s@]*)$/)
+  const mentionCandidates = mentionMatch ? (chat.conversations.find((item) => item.conversationId === conversationId)?.members ?? [])
+    .filter((member) => member.active && member.name.toLowerCase().includes(mentionMatch[1].toLowerCase()))
+    .slice(0, 5) : []
 
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const lastTypingSignalRef = useRef<number>(0)
+  useEffect(() => { setText(localStorage.getItem(draftKey) ?? ''); setReplyTo(null); setAttachments([]) }, [draftKey])
+  useEffect(() => { localStorage.setItem(draftKey, text) }, [draftKey, text])
+  useEffect(() => {
+    const syncDraft = (event: StorageEvent) => { if (event.key === draftKey) setText(event.newValue ?? '') }
+    window.addEventListener('storage', syncDraft)
+    return () => window.removeEventListener('storage', syncDraft)
+  }, [draftKey])
+  useEffect(() => {
+    const listener = (event: Event) => { const detail = (event as CustomEvent<{ conversationId: string; message: ChatMessageItem }>).detail; if (detail.conversationId === conversationId) { setReplyTo(detail.message); setTimeout(() => document.querySelector<HTMLTextAreaElement>(`.chat-composer[data-conversation-id="${conversationId}"] textarea`)?.focus(), 0) } }
+    window.addEventListener('chat:reply', listener)
+    return () => window.removeEventListener('chat:reply', listener)
+  }, [conversationId])
 
-  const handleTyping = useCallback(() => {
+  const signalTyping = useCallback(() => {
     const now = Date.now()
-    if (now - lastTypingSignalRef.current > 3000) {
-      lastTypingSignalRef.current = now
-      sendTypingSignal(conversationId, true)
-    }
+    if (now - lastTyping.current > 3000) { lastTyping.current = now; chat.sendTypingSignal(conversationId, true) }
+    if (typingTimer.current) clearTimeout(typingTimer.current)
+    typingTimer.current = setTimeout(() => chat.sendTypingSignal(conversationId, false), 2500)
+  }, [chat, conversationId])
 
-    if (typingTimerRef.current) {
-      clearTimeout(typingTimerRef.current)
-    }
-
-    typingTimerRef.current = setTimeout(() => {
-      sendTypingSignal(conversationId, false)
-      typingTimerRef.current = null
-    }, 2500)
-  }, [conversationId, sendTypingSignal])
-
-  const handleStopTyping = useCallback(() => {
-    if (typingTimerRef.current) {
-      clearTimeout(typingTimerRef.current)
-      typingTimerRef.current = null
-    }
-    sendTypingSignal(conversationId, false)
-  }, [conversationId, sendTypingSignal])
-
-  const handleFileUpload = async (e: ChangeEvent<HTMLInputElement>) => {
-    if (!token || !e.target.files || e.target.files.length === 0) return
-    const files = Array.from(e.target.files)
+  const uploadFiles = async (files: File[]) => {
+    if (!token || !files.length) return
     setUploading(true)
-
     try {
       for (const file of files) {
         const uploaded = await uploadFile(token, file, 'LAB', 'Chat attachment')
-        setAttachments((prev) => [...prev, { fileId: uploaded.id, name: uploaded.originalName }])
+        setAttachments((items) => [...items, { fileId: uploaded.id, name: uploaded.originalName, mimeType: uploaded.mimeType }])
       }
-    } catch (err) {
-      console.error('File upload failed:', err)
-      alert('Không thể tải tệp lên. Vui lòng thử lại.')
-    } finally {
-      setUploading(false)
-      if (fileInputRef.current) fileInputRef.current.value = ''
-    }
+    } catch (error) { console.error(error); alert('Không thể tải tệp lên.') }
+    finally { setUploading(false); if (inputRef.current) inputRef.current.value = '' }
   }
 
-  const removeAttachment = (fileId: number) => {
-    setAttachments((prev) => prev.filter((a) => a.fileId !== fileId))
-  }
-
-  const handleSend = async () => {
-    const content = text.trim()
-    const fileIds = attachments.map((a) => a.fileId)
-
-    if (!content && fileIds.length === 0) return
-    if (uploading || sending) return
-
-    handleStopTyping()
+  const send = async (override?: { messageType: ChatMessageType; content?: string; metadataJson?: string }) => {
+    const content = override?.content ?? text.trim()
+    const fileIds = attachments.map((item) => item.fileId)
+    if (!override && !content && !fileIds.length || uploading || sending) return
+    const allImages = attachments.length > 0 && attachments.every((item) => item.mimeType.startsWith('image/'))
     setSending(true)
-
     try {
-      await sendMessage(conversationId, {
-        content: content || undefined,
-        fileIds: fileIds.length > 0 ? fileIds : undefined,
+      await chat.sendMessage(conversationId, {
+        content: content || undefined, fileIds: fileIds.length ? fileIds : undefined,
+        replyToMessageId: replyTo?.id, messageType: override?.messageType ?? (allImages ? 'IMAGE' : undefined),
+        metadataJson: override?.metadataJson,
       })
-      setText('')
-      setAttachments([])
-    } catch (err) {
-      console.error('Failed to send message:', err)
-    } finally {
-      setSending(false)
-    }
+      setText(''); localStorage.removeItem(draftKey); setAttachments([]); setReplyTo(null); setShowExtras(false)
+    } finally { setSending(false) }
   }
 
-  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      void handleSend()
-    }
+  const createPoll = () => {
+    const question = prompt('Câu hỏi bình chọn?')?.trim()
+    if (!question) return
+    const raw = prompt('Các lựa chọn, ngăn cách bằng dấu phẩy')
+    const values = raw?.split(',').map((value) => value.trim()).filter(Boolean) ?? []
+    if (values.length < 2) return alert('Cần ít nhất 2 lựa chọn.')
+    const metadataJson = JSON.stringify({ question, multiple: false, options: values.slice(0, 10).map((value, index) => ({ id: `${Date.now()}-${index}`, text: value, voterIds: [] })) })
+    void send({ messageType: 'POLL', metadataJson })
   }
 
-  const canSend = (text.trim().length > 0 || attachments.length > 0) && !uploading && !sending
+  const sendGif = () => {
+    const url = prompt('Dán URL ảnh GIF (https://…)')?.trim()
+    if (url && /^https:\/\//i.test(url)) void send({ messageType: 'GIF', content: url })
+  }
 
-  return (
-    <div className="chat-composer">
-      {attachments.length > 0 && (
-        <div className="chat-composer-attachments-preview">
-          {attachments.map((att) => (
-            <span key={att.fileId} className="chat-composer-chip">
-              <span>{att.name}</span>
-              <button
-                type="button"
-                onClick={() => removeAttachment(att.fileId)}
-                aria-label={`Xóa đính kèm ${att.name}`}
-              >
-                <X size={13} aria-hidden="true" />
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
+  const startRecording = async () => {
+    if (!token || !navigator.mediaDevices || !window.MediaRecorder) return alert('Trình duyệt không hỗ trợ ghi âm.')
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    const mediaRecorder = new MediaRecorder(stream)
+    chunks.current = []
+    mediaRecorder.ondataavailable = (event) => { if (event.data.size) chunks.current.push(event.data) }
+    mediaRecorder.onstop = async () => {
+      stream.getTracks().forEach((track) => track.stop())
+      const mimeType = mediaRecorder.mimeType || 'audio/webm'
+      const blob = new Blob(chunks.current, { type: mimeType })
+      const file = new File([blob], `voice-${Date.now()}.webm`, { type: 'audio/webm' })
+      setUploading(true)
+      try { const uploaded = await uploadFile(token, file, 'LAB', 'Voice message'); await chat.sendMessage(conversationId, { fileIds: [uploaded.id], messageType: 'VOICE' }) }
+      catch (error) { console.error(error); alert('Không thể gửi tin nhắn thoại.') }
+      finally { setUploading(false) }
+    }
+    recorder.current = mediaRecorder; mediaRecorder.start(); setRecording(true)
+  }
 
-      <div className="chat-composer-row">
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          style={{ display: 'none' }}
-          onChange={(e) => void handleFileUpload(e)}
-        />
+  const stopRecording = () => { recorder.current?.stop(); recorder.current = null; setRecording(false) }
+  const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => { const files = [...event.clipboardData.files]; if (files.length) { event.preventDefault(); void uploadFiles(files) } }
+  const handleDrop = (event: DragEvent<HTMLDivElement>) => { event.preventDefault(); void uploadFiles([...event.dataTransfer.files]) }
 
-        <button
-          type="button"
-          className="chat-composer-action-btn"
-          title="Đính kèm tệp"
-          aria-label="Đính kèm tệp"
-          disabled={uploading}
-          onClick={() => fileInputRef.current?.click()}
-        >
-          {uploading ? (
-            <Loader2 size={16} className="animate-spin" aria-hidden="true" />
-          ) : (
-            <Paperclip size={16} aria-hidden="true" />
-          )}
-        </button>
-
-        <textarea
-          className="chat-composer-input"
-          placeholder={placeholder}
-          rows={1}
-          value={text}
-          onChange={(e) => {
-            setText(e.target.value)
-            handleTyping()
-          }}
-          onKeyDown={handleKeyDown}
-          onBlur={handleStopTyping}
-          aria-label="Soạn tin nhắn"
-        />
-
-        <button
-          type="button"
-          className="chat-composer-action-btn chat-composer-send-btn"
-          disabled={!canSend}
-          title="Gửi tin nhắn"
-          aria-label="Gửi tin nhắn"
-          onClick={() => void handleSend()}
-        >
-          <Send size={15} aria-hidden="true" />
-        </button>
-      </div>
+  return <div className="chat-composer" data-conversation-id={conversationId} onDragOver={(event) => event.preventDefault()} onDrop={handleDrop}>
+    {replyTo && <div className="chat-composer-reply"><Reply size={15} /><span><strong>{replyTo.sender?.name}</strong>{replyTo.content || 'Tin nhắn đa phương tiện'}</span><button type="button" onClick={() => setReplyTo(null)}><X size={15} /></button></div>}
+    {!!attachments.length && <div className="chat-composer-attachments-preview">{attachments.map((item) => <span key={item.fileId} className="chat-composer-chip">{item.mimeType.startsWith('image/') && <Image size={13} />} {item.name}<button type="button" onClick={() => setAttachments((all) => all.filter((value) => value.fileId !== item.fileId))}><X size={13} /></button></span>)}</div>}
+    {showEmoji && <div className="chat-emoji-panel"><div>{EMOJIS.map((emoji) => <button key={emoji} type="button" onClick={() => { setText((value) => value + emoji); setShowEmoji(false) }}>{emoji}</button>)}</div><small>Sticker</small><div>{STICKERS.map((sticker) => <button className="is-sticker" key={sticker} type="button" onClick={() => { void send({ messageType: 'STICKER', content: sticker }); setShowEmoji(false) }}>{sticker}</button>)}</div></div>}
+    {showExtras && <div className="chat-composer-extras"><button type="button" onClick={createPoll}><BarChart3 size={16} /> Bình chọn</button><button type="button" onClick={sendGif}><Image size={16} /> GIF từ URL</button></div>}
+    {!!mentionCandidates.length && <div className="chat-mention-suggestions">{mentionCandidates.map((member) => <button type="button" key={member.userId} onClick={() => setText((value) => value.replace(/@[^\s@]*$/, `@${member.name.replace(/\s+/g, '_')} `))}>@{member.name}</button>)}</div>}
+    <div className="chat-composer-row">
+      <input ref={inputRef} type="file" multiple hidden onChange={(event) => void uploadFiles([...(event.target.files ?? [])])} />
+      <button type="button" className="chat-composer-action-btn" title="Đính kèm" disabled={uploading} onClick={() => inputRef.current?.click()}>{uploading ? <Loader2 size={16} className="animate-spin" /> : <Paperclip size={16} />}</button>
+      <button type="button" className="chat-composer-action-btn" title="Emoji và sticker" onClick={() => setShowEmoji((value) => !value)}><Smile size={16} /></button>
+      <button type="button" className="chat-composer-action-btn" title="Bình chọn và GIF" onClick={() => setShowExtras((value) => !value)}><BarChart3 size={16} /></button>
+      <textarea className="chat-composer-input" placeholder={placeholder} rows={1} value={text} onPaste={handlePaste}
+        onChange={(event) => { setText(event.target.value); signalTyping() }}
+        onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send() } }} />
+      <button type="button" className={`chat-composer-action-btn ${recording ? 'is-recording' : ''}`} title="Tin nhắn thoại" onClick={() => recording ? stopRecording() : void startRecording()}>{recording ? <Square size={14} /> : <Mic size={16} />}</button>
+      <button type="button" className="chat-composer-action-btn chat-composer-send-btn" disabled={(!text.trim() && !attachments.length) || uploading || sending} onClick={() => void send()}><Send size={15} /></button>
     </div>
-  )
+    {recording && <div className="chat-recording-status"><span /> Đang ghi âm… nhấn nút vuông để gửi</div>}
+  </div>
 }
