@@ -50,6 +50,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.inOrder;
 
 @ExtendWith(MockitoExtension.class)
 class ChatServiceImplTest {
@@ -200,6 +201,31 @@ class ChatServiceImplTest {
                 authentication
         )).isInstanceOfSatisfying(ResponseStatusException.class,
                 error -> assertThat(error.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
+    }
+
+    @Test
+    void forwardChecksSourceMembershipOnlyAfterBothConversationLocks() {
+        ChatConversationEntity target = ChatConversationEntity.createDirect(alice, bob, alice);
+        ReflectionTestUtils.setField(target, "id", 11L);
+        ReflectionTestUtils.setField(target, "conversationId", "target-conversation");
+        when(conversations.findByConversationIdForUpdate("conversation-1"))
+                .thenReturn(Optional.of(conversation));
+        when(conversations.findByConversationIdForUpdate("target-conversation"))
+                .thenReturn(Optional.of(target));
+        when(members.findMembership("conversation-1", alice.getId()))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.forwardMessage("conversation-1", 101L,
+                "target-conversation", new com.smartlab.dto.request.ForwardChatMessageRequest("forward-1"),
+                authentication))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        error -> assertThat(error.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
+
+        var order = inOrder(conversations, members);
+        order.verify(conversations).findByConversationIdForUpdate("conversation-1");
+        order.verify(conversations).findByConversationIdForUpdate("target-conversation");
+        order.verify(members).findMembership("conversation-1", alice.getId());
+        verify(messages, never()).findById(anyLong());
     }
 
     @Test

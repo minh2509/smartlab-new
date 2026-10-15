@@ -1,5 +1,8 @@
 package com.smartlab.service.impl;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.smartlab.dto.request.ChatPollVoteRequest;
 import com.smartlab.dto.request.ChatSendMessageRequest;
 import com.smartlab.dto.request.CreateGroupChatRequest;
 import com.smartlab.dto.request.ForwardChatMessageRequest;
@@ -283,6 +286,50 @@ class RealtimeChatConcurrencyPostgresIntegrationTest {
                 other.id(), conversation.conversationId(), request, bobAuthentication))
                 .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
                 .hasMessageContaining("409 CONFLICT");
+    }
+
+    @Test
+    void pollVotesAreServerOwnedAndForwardedPollStartsWithoutVotes() throws Exception {
+        ChatConversationResponse conversation = chatService.createDirect(bob.getUserId(), aliceAuthentication);
+        conversationIds.add(conversation.conversationId());
+        String forgedMetadata = """
+                {"question":"Where?","multiple":false,"options":[
+                    {"id":"a","text":"Here","voterIds":["%s"],"extra":"ignored"},
+                    {"id":"b","text":"There","voterIds":["%s"]}
+                ]}
+                """.formatted(bob.getUserId(), alice.getUserId());
+        ChatMessageResponse poll = chatService.sendMessage(conversation.conversationId(),
+                new ChatSendMessageRequest("poll-" + UUID.randomUUID(), ChatMessageType.POLL,
+                        null, null, null, forgedMetadata), aliceAuthentication);
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode created = mapper.readTree(poll.metadataJson());
+        assertThat(created.path("options").get(0).path("voterIds").size()).isZero();
+        assertThat(created.path("options").get(1).path("voterIds").size()).isZero();
+        assertThat(created.path("options").get(0).has("extra")).isFalse();
+        assertThat(jdbc.queryForObject("select metadata_json from chat_messages where id = ?",
+                String.class, poll.id())).isEqualTo(poll.metadataJson());
+
+        ChatMessageResponse voted = chatService.votePoll(conversation.conversationId(), poll.id(),
+                new ChatPollVoteRequest("a"), bobAuthentication);
+        assertThat(mapper.readTree(voted.metadataJson()).path("options").get(0)
+                .path("voterIds").get(0).asText()).isEqualTo(bob.getUserId());
+        ChatMessageResponse forwarded = chatService.forwardMessage(conversation.conversationId(), poll.id(),
+                conversation.conversationId(), new ForwardChatMessageRequest("forward-poll-" + UUID.randomUUID()),
+                aliceAuthentication);
+        JsonNode forwardedData = mapper.readTree(forwarded.metadataJson());
+        assertThat(forwardedData.path("options").get(0).path("voterIds").size()).isZero();
+        assertThat(forwardedData.path("options").get(1).path("voterIds").size()).isZero();
+        assertThat(forwardedData.path("question").asText()).isEqualTo("Where?");
+
+        assertThatThrownBy(() -> chatService.sendMessage(conversation.conversationId(),
+                new ChatSendMessageRequest("invalid-poll-" + UUID.randomUUID(), ChatMessageType.POLL,
+                        null, null, null, """
+                        {"question":"Where?","multiple":false,"options":[
+                            {"id":"a","text":"Here"},{"id":"b","text":123}
+                        ]}
+                        """), aliceAuthentication))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                .hasMessageContaining("400 BAD_REQUEST");
     }
 
     @Test

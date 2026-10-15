@@ -324,7 +324,7 @@ public class ChatServiceImpl implements ChatService {
         }
 
         validateMessagePayload(request.messageType(), request.content(), request.fileIds());
-        validateMetadata(request.messageType(), request.metadataJson());
+        String metadata = normalizeMetadata(request.messageType(), request.metadataJson());
         ChatMessageEntity replyTo = resolveReply(conversation, request.replyToMessageId());
         List<StoredFileEntity> files = resolveAttachments(request.fileIds(), currentUser, authentication);
         long messageSeq = conversation.nextMessageSequence();
@@ -337,7 +337,7 @@ public class ChatServiceImpl implements ChatService {
                 normalizeContent(request.content()),
                 replyTo,
                 null,
-                normalizeMetadata(request.metadataJson())
+                metadata
         );
         messageRepository.saveAndFlush(message);
         senderMembership.markRead(messageSeq);
@@ -670,8 +670,6 @@ public class ChatServiceImpl implements ChatService {
             Authentication authentication
     ) {
         UserEntity currentUser = currentUser(authentication);
-        requireConversation(sourceConversationId);
-        requireActiveMembership(sourceConversationId, currentUser.getId());
         if (targetConversationId == null || targetConversationId.isBlank()) {
             throw notFound("Target conversation not found");
         }
@@ -683,6 +681,9 @@ public class ChatServiceImpl implements ChatService {
                 ? first : lockedConversation(sourceFirst ? targetConversationId : sourceConversationId);
         ChatConversationEntity source = sourceFirst ? first : second;
         ChatConversationEntity target = sourceFirst ? second : first;
+        // Membership can be revoked while acquiring either conversation lock.
+        // Recheck it inside the locked section before copying source content/files.
+        requireActiveMembership(sourceConversationId, currentUser.getId());
         requireOpen(source);
         ChatConversationMemberEntity senderMembership = requireActiveMembershipForUpdate(
                 targetConversationId, currentUser.getId());
@@ -706,7 +707,8 @@ public class ChatServiceImpl implements ChatService {
         long messageSeq = target.nextMessageSequence();
         ChatMessageEntity forwarded = ChatMessageEntity.create(
                 target, messageSeq, currentUser, clientMessageId,
-                original.getMessageType(), original.getContent(), null, original, original.getMetadataJson());
+                original.getMessageType(), original.getContent(), null, original,
+                normalizeMetadata(original.getMessageType(), original.getMetadataJson()));
         messageRepository.saveAndFlush(forwarded);
         senderMembership.markRead(messageSeq);
         memberRepository.saveAndFlush(senderMembership);
@@ -947,37 +949,53 @@ public class ChatServiceImpl implements ChatService {
         if (!valid) throw badRequest("Message content and attachments do not match the message type");
     }
 
-    private void validateMetadata(ChatMessageType type, String metadataJson) {
+    private String normalizeMetadata(ChatMessageType type, String metadataJson) {
         if (metadataJson != null && metadataJson.length() > 20_000) {
             throw badRequest("Message metadata must not exceed 20000 characters");
         }
-        if (type != ChatMessageType.POLL) return;
+        if (type != ChatMessageType.POLL) {
+            return metadataJson == null || metadataJson.isBlank() ? null : metadataJson;
+        }
         if (metadataJson == null || metadataJson.isBlank()) throw badRequest("Poll data is required");
         try {
             JsonNode root = objectMapper.readTree(metadataJson);
+            if (!root.isObject() || !root.path("question").isTextual()
+                    || (root.has("multiple") && !root.path("multiple").isBoolean())) {
+                throw badRequest("Invalid poll data");
+            }
             String question = root.path("question").asText().trim();
             JsonNode options = root.path("options");
             if (question.isEmpty() || question.length() > 300 || !options.isArray()
                     || options.size() < 2 || options.size() > 10) {
                 throw badRequest("A poll requires a question and 2 to 10 options");
             }
+            ObjectNode cleanPoll = objectMapper.createObjectNode();
+            cleanPoll.put("question", question);
+            cleanPoll.put("multiple", root.path("multiple").asBoolean(false));
+            ArrayNode cleanOptions = cleanPoll.putArray("options");
             LinkedHashSet<String> ids = new LinkedHashSet<>();
             for (JsonNode option : options) {
+                if (!option.isObject() || !option.path("id").isTextual()
+                        || !option.path("text").isTextual()) {
+                    throw badRequest("Invalid poll option");
+                }
                 String id = option.path("id").asText().trim();
                 String text = option.path("text").asText().trim();
                 if (id.isEmpty() || id.length() > 80 || text.isEmpty() || text.length() > 200 || !ids.add(id)) {
                     throw badRequest("Invalid poll option");
                 }
+                // Votes are server-owned state: neither new polls nor forwards inherit client-supplied votes.
+                ObjectNode cleanOption = cleanOptions.addObject();
+                cleanOption.put("id", id);
+                cleanOption.put("text", text);
+                cleanOption.putArray("voterIds");
             }
+            return cleanPoll.toString();
         } catch (ResponseStatusException ex) {
             throw ex;
         } catch (Exception ex) {
             throw badRequest("Invalid poll data");
         }
-    }
-
-    private String normalizeMetadata(String value) {
-        return value == null || value.isBlank() ? null : value;
     }
 
     private boolean containsText(ArrayNode array, String value) {
