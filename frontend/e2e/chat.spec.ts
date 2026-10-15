@@ -603,6 +603,29 @@ test.describe('SmartLab Realtime Chat Automation Suite', () => {
     await expect(unreadBadge).toHaveCount(0)
   })
 
+  test('14b. stale read acknowledgement cannot restore cleared unread badge', async ({ page }) => {
+    let sendEvent: ((envelope: any) => void) | null = null
+    await setupMockChatRoutes(page, {
+      initialUnread: 2,
+      onWebSocketConnected: (sender) => { sendEvent = sender },
+    })
+    await page.goto('/')
+    const unreadBadge = page.locator('.chat-header-btn .notification-count')
+    await expect(unreadBadge).toHaveText('2')
+    await expect.poll(() => sendEvent !== null).toBeTruthy()
+    await openConvFromHeader(page, 'Thành viên B')
+    await expect(unreadBadge).toHaveCount(0)
+
+    // A delayed acknowledgement for seq 3 may arrive after viewing seq 5.
+    sendEvent!({
+      event: 'chat.read.updated', eventId: 'evt-stale-read',
+      occurredAt: new Date().toISOString(), conversationId: 'conv-a',
+      data: { conversationId: 'conv-a', userId: 'user-01', lastReadSeq: 3 },
+    })
+    await page.waitForTimeout(150)
+    await expect(unreadBadge).toHaveCount(0)
+  })
+
   test('15. optimistic send: sending -> sent', async ({ page }) => {
     await setupMockChatRoutes(page)
     await page.goto('/')

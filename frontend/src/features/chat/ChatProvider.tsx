@@ -864,10 +864,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
               if (c.conversationId !== conversationId) return c
               // If read belongs to current user, update lastReadSeq & clear unreadCount
               if (profileRef.current && readData.userId === profileRef.current.userId) {
+                // An older socket acknowledgement must not undo a newer local read.
+                const lastReadSeq = Math.max(c.lastReadSeq, readData.lastReadSeq)
                 return {
                   ...c,
-                  lastReadSeq: Math.max(c.lastReadSeq, readData.lastReadSeq),
-                  unreadCount: Math.max(0, c.lastMessageSeq - readData.lastReadSeq),
+                  lastReadSeq,
+                  unreadCount: Math.max(0, c.lastMessageSeq - lastReadSeq),
                 }
               }
               // Update member lastReadSeq
