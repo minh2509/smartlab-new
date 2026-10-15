@@ -140,6 +140,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           loadingOlder: false,
         },
       }))
+      return highest
     } catch (err) {
       console.error(`Failed to load messages for conversation ${conversationId}:`, err)
     }
@@ -198,24 +199,18 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     const conv = conversationsRef.current.find((c) => c.conversationId === conversationId)
     const currentSeq = Math.max(conv?.lastMessageSeq ?? 0, upToSeq ?? 0)
 
-    // Send read signal via socket or REST
-    const sent = chatRealtimeClient.sendRead(conversationId, { lastReadSeq: currentSeq })
-    if (!sent) {
-      try {
-        await chatApi.markConversationRead(tokenRef.current, conversationId, currentSeq)
-      } catch (err) {
-        console.error('Failed to mark read via REST:', err)
-      }
+    // An unacknowledged STOMP publish can be lost across reconnects. Use the
+    // persisted REST response as the read receipt; the server broadcasts it live.
+    try {
+      const receipt = await chatApi.markConversationRead(tokenRef.current, conversationId, currentSeq)
+      setConversations((prev) => prev.map((c) => {
+        if (c.conversationId !== conversationId) return c
+        const lastReadSeq = Math.max(c.lastReadSeq, receipt.lastReadSeq)
+        return { ...c, lastReadSeq, unreadCount: Math.max(0, c.lastMessageSeq - lastReadSeq) }
+      }))
+    } catch (err) {
+      console.error('Failed to mark conversation as read:', err)
     }
-
-    // Optimistically update conversation unread state
-    setConversations((prev) =>
-      prev.map((c) =>
-        c.conversationId === conversationId
-          ? { ...c, unreadCount: 0, lastReadSeq: Math.max(c.lastReadSeq, currentSeq) }
-          : c,
-      ),
-    )
   }, [])
 
   // 5. Popup Manager: STRICT FIFO EVICTION by openedAt (max 3)
@@ -269,8 +264,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     setActivePopupId(conversationId)
     setActiveConversationId(conversationId)
 
-    // Ensure messages are loaded
-    void loadMessages(conversationId)
+    // The list may lag behind the history response. Acknowledge its highest
+    // sequence too, but only while the popup is still visible.
+    void loadMessages(conversationId).then((highest) => {
+      if (highest && popupsRef.current.some((p) => p.conversationId === conversationId && !p.minimized)) {
+        void markAsRead(conversationId, highest)
+      }
+    })
     void markAsRead(conversationId)
   }, [loadMessages, markAsRead])
 

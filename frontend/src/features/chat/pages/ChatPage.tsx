@@ -93,17 +93,18 @@ export function ChatPage() {
 
   // Do not probe message/read endpoints for a stale or unauthorized conversation id.
   useEffect(() => {
-    if (resolvedActiveConversationId) {
-      void loadMessages(resolvedActiveConversationId)
-      void markAsRead(resolvedActiveConversationId)
-    }
+    if (!resolvedActiveConversationId) return
+    let cancelled = false
+    void loadMessages(resolvedActiveConversationId).then((highest) => {
+      if (!cancelled && highest) void markAsRead(resolvedActiveConversationId, highest)
+    })
+    void markAsRead(resolvedActiveConversationId)
+    return () => { cancelled = true }
   }, [resolvedActiveConversationId, loadMessages, markAsRead])
 
   const handleSelectConversation = (convId: string) => {
     setActiveConvId(convId)
     setSearchParams({ id: convId })
-    void loadMessages(convId)
-    void markAsRead(convId)
   }
 
   const handleBackToList = () => {

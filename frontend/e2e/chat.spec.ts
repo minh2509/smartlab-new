@@ -140,6 +140,8 @@ async function setupMockChatRoutes(
   page: Page,
   options?: {
     initialUnread?: number
+    historyLatestSeq?: number
+    onReadRequest?: (sequence: number) => void
     rejectSocket?: boolean
     onWebSocketConnected?: (sendRealtimeEvent: (envelope: any) => void, disconnect: () => void) => void
   },
@@ -184,7 +186,7 @@ async function setupMockChatRoutes(
             {
               id: 101,
               conversationId: 'conv-a',
-              messageSeq: 1,
+              messageSeq: options?.historyLatestSeq ?? 1,
               sender: { userId: 'user-02', name: 'Thành viên B' },
               clientMessageId: 'cmsg-init',
               messageType: 'TEXT',
@@ -228,10 +230,13 @@ async function setupMockChatRoutes(
     }
 
     if (url.includes('/read') && method === 'PATCH') {
+      const sequence = Number(route.request().postDataJSON().lastReadSeq)
+      options?.onReadRequest?.(sequence)
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ conversationId: 'conv-a', userId: 'user-01', lastReadSeq: 6 }),
+        body: JSON.stringify({ conversationId: 'conv-a', userId: 'user-01',
+          lastReadSeq: options?.historyLatestSeq ? sequence : 6 }),
       })
       return
     }
@@ -624,6 +629,18 @@ test.describe('SmartLab Realtime Chat Automation Suite', () => {
     })
     await page.waitForTimeout(150)
     await expect(unreadBadge).toHaveCount(0)
+  })
+
+  test('14c. late history sequence is acknowledged even when list is stale', async ({ page }) => {
+    const readSequences: number[] = []
+    await setupMockChatRoutes(page, {
+      initialUnread: 2,
+      historyLatestSeq: 6,
+      onReadRequest: (sequence) => readSequences.push(sequence),
+    })
+    await page.goto('/')
+    await openConvFromHeader(page, 'Thành viên B')
+    await expect.poll(() => readSequences.includes(6)).toBeTruthy()
   })
 
   test('15. optimistic send: sending -> sent', async ({ page }) => {

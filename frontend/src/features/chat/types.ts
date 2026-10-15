@@ -211,14 +211,14 @@ export type ChatContextValue = {
 
   // Actions
   refreshConversations: () => Promise<void>
-  loadMessages: (conversationId: string) => Promise<void>
+  loadMessages: (conversationId: string) => Promise<number | undefined>
   loadOlderMessages: (conversationId: string) => Promise<void>
   openConversation: (conversationId: string) => void
   closePopup: (conversationId: string) => void
   minimizePopup: (conversationId: string) => void
   focusPopup: (conversationId: string) => void
   removeDockItem: (conversationId: string) => void
-  markAsRead: (conversationId: string) => Promise<void>
+  markAsRead: (conversationId: string, upToSeq?: number) => Promise<void>
   sendMessage: (
     conversationId: string,
     payload: {
