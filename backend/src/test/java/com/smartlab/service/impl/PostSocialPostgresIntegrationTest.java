@@ -254,8 +254,8 @@ class PostSocialPostgresIntegrationTest {
     private long insertPost(long authorId, Long projectId, String slugPrefix, String visibility, String status, Instant publishedAt) {
         String slug = slugPrefix + "-" + UUID.randomUUID();
         return jdbc.queryForObject("""
-                insert into posts(author_user_id,project_id,title,slug,excerpt,content_json,visibility,status,published_at,created_at,updated_at)
-                values(?,?,?,?,'Excerpt',jsonb_build_object('body', ?),?,?,?,now(),now()) returning id
+                insert into posts(author_user_id,project_id,category_id,title,slug,excerpt,content_json,visibility,status,published_at,created_at,updated_at)
+                values(?,?,(select id from content_categories where code = 'NEWS'),?,?,'Excerpt',jsonb_build_object('body', ?),?,?,?,now(),now()) returning id
                 """, Long.class, authorId, projectId, "Title " + slugPrefix, slug, "Body " + slugPrefix,
                 visibility, status, publishedAt == null ? null : Timestamp.from(publishedAt));
     }

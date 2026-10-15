@@ -7,9 +7,8 @@ test.describe('public browsing', () => {
     const routes = [
       { path: '/', heading: /Nơi sinh viên làm/i },
       { path: '/gioi-thieu', heading: 'Về phòng Smart Lab' },
-      { path: '/linh-vuc', heading: 'Lĩnh vực nghiên cứu' },
-      { path: '/thanh-vien', heading: 'Thành viên' },
-      { path: '/du-an', heading: 'Dự án' },
+      { path: '/linh-vuc', heading: /Nơi sinh viên làm/i, destination: /\/#research-fields$/ },
+      { path: '/du-an', heading: 'Kho Dự án Nghiên cứu & Ứng dụng' },
       { path: '/posts', heading: 'Bảng tin Smart Lab' },
       { path: '/su-kien', heading: 'Sự kiện' },
     ]
@@ -18,14 +17,15 @@ test.describe('public browsing', () => {
       await test.step(route.path, async () => {
         await page.goto(route.path)
         await expect(page.getByRole('heading', { level: 1, name: route.heading })).toBeVisible()
+        if ('destination' in route) await expect(page).toHaveURL(route.destination)
         await expect(page).not.toHaveURL(/\/login(?:\?|$)/)
       })
     }
   })
 
-  test('member directory renders the public API fixture', async ({ page }) => {
-    test.skip(!env.publicData.memberName, 'Set E2E_PUBLIC_MEMBER_NAME to assert the seeded public member.')
-    await expectApiFixture(page, '/thanh-vien', '/members', env.publicData.memberName as string)
+  test('guest cannot read the private member directory', async ({ request }) => {
+    const response = await request.get(`${env.apiBaseURL}/members`)
+    expect(response.status()).toBe(401)
   })
 
   test('research fields render the public API fixture', async ({ page }) => {
@@ -43,7 +43,7 @@ test.describe('public browsing', () => {
 
   test('project catalogue renders the public API fixture', async ({ page }) => {
     test.skip(!env.publicData.projectName, 'Set E2E_PUBLIC_PROJECT_NAME to assert the seeded public project.')
-    await expectApiFixture(page, '/du-an', '/projects', env.publicData.projectName as string)
+    await expectApiFixture(page, '/du-an', '/projects/public', env.publicData.projectName as string, 6)
   })
 
   test('post feed renders the public API fixture', async ({ page }) => {
@@ -53,17 +53,18 @@ test.describe('public browsing', () => {
 
   test('event listing renders the public API fixture', async ({ page }) => {
     test.skip(!env.publicData.eventTitle, 'Set E2E_PUBLIC_EVENT_TITLE to assert the seeded public event.')
-    await expectApiFixture(page, '/su-kien', '/events/public', env.publicData.eventTitle as string)
+    await expectApiFixture(page, '/su-kien', '/events/public/archive', env.publicData.eventTitle as string)
   })
 })
 
-async function expectApiFixture(page: Page, route: string, apiSuffix: string, expectedText: string) {
+async function expectApiFixture(page: Page, route: string, apiSuffix: string, expectedText: string, pageSize?: number) {
   const responsePromise = page.waitForResponse((response) => {
     const url = new URL(response.url())
     const apiBase = new URL(env.apiBaseURL)
     return response.request().method() === 'GET'
       && url.origin === apiBase.origin
       && url.pathname.endsWith(apiSuffix)
+      && (pageSize === undefined || url.searchParams.get('size') === String(pageSize))
   })
 
   await page.goto(route)

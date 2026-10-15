@@ -48,7 +48,7 @@ test.describe('final ADMIN dependency journey', () => {
       await expectOk(await rolesResponsePromise, 'GET /admin/roles')
       await expectOk(await permissionsResponsePromise, 'GET /admin/permissions')
       await expect(page.getByRole('heading', { level: 1, name: 'Vai trò & quyền' })).toBeVisible()
-      await expect(page.getByRole('heading', { level: 2, name: 'Gán quyền cho vai trò' })).toBeVisible()
+      await expect(page.getByText('Vai trò đang chọn', { exact: true })).toBeVisible()
     })
 
     await test.step('ADMIN member profile catalogue is reachable', async () => {
@@ -106,9 +106,9 @@ test.describe('final ADMIN dependency journey', () => {
       await expectOk(await tasksResponsePromise, 'GET /projects/{id}/tasks')
 
       await expect(
-        page.getByRole('heading', { level: 1, name: 'Quản lý Nhiệm vụ & Đánh giá (D4)' }),
+        page.getByRole('heading', { level: 1, name: 'Quản lý Nhiệm vụ & Đánh giá' }),
       ).toBeVisible()
-      await expect(page.getByRole('button', { name: 'Nhiệm vụ', exact: true })).toBeVisible()
+      await expect(page.getByRole('navigation', { name: 'Không gian làm việc' }).getByRole('button', { name: 'Nhiệm vụ', exact: true })).toBeVisible()
     })
 
     await test.step('ADMIN evaluation surface loads criteria and active members', async () => {
@@ -133,7 +133,7 @@ test.describe('final ADMIN dependency journey', () => {
       )
 
       await expect(
-        page.getByRole('heading', { level: 2, name: 'Đánh giá thành viên trong dự án' }),
+        page.getByRole('heading', { level: 2, name: 'Đánh giá thành viên' }),
       ).toBeVisible()
     })
 
@@ -169,7 +169,7 @@ test.describe('final ADMIN dependency journey', () => {
 
       await expectOk(await profileResponsePromise, 'GET /me/profile')
       await expect(
-        page.getByRole('heading', { level: 1, name: 'Hồ sơ của tôi' }),
+        page.getByRole('heading', { level: 1, name: /Hồ sơ cá nhân/ }),
       ).toBeVisible()
     })
   })
@@ -198,7 +198,7 @@ test.describe('ADMIN authorization boundaries', () => {
 
     await expect(page).toHaveURL(/\/profile$/)
     await expect(
-      page.getByRole('heading', { level: 1, name: 'Hồ sơ của tôi' }),
+      page.getByRole('heading', { level: 1, name: /Hồ sơ cá nhân/ }),
     ).toBeVisible()
 
     const response = await request.get(

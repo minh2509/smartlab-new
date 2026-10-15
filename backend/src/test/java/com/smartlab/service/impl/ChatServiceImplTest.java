@@ -4,6 +4,7 @@ import com.smartlab.dto.request.ChangeChatMemberRoleRequest;
 import com.smartlab.dto.request.ChatReadRequest;
 import com.smartlab.dto.request.ChatSendMessageRequest;
 import com.smartlab.dto.request.EditChatMessageRequest;
+import com.smartlab.dto.response.ChatConversationResponse;
 import com.smartlab.dto.response.ChatMessagePageResponse;
 import com.smartlab.dto.response.ChatMessageResponse;
 import com.smartlab.entity.ChatConversationEntity;
@@ -91,6 +92,40 @@ class ChatServiceImplTest {
         lenient().when(permissions.hasInactiveAssignedRole(any(UserEntity.class))).thenReturn(false);
         lenient().when(messages.findLatest(anyLong(), any())).thenReturn(List.of());
         lenient().when(messageFiles.findByMessageIdOrderByPositionAscIdAsc(any())).thenReturn(List.of());
+    }
+
+    @Test
+    void conversationListBatchesMembersAndLatestMessagesWithoutChangingDisplayOrder() {
+        UserEntity charlie = user(3L, "charlie", "charlie@example.test");
+        ChatConversationEntity second = ChatConversationEntity.createDirect(alice, charlie, alice);
+        ReflectionTestUtils.setField(second, "id", 11L);
+        ReflectionTestUtils.setField(second, "conversationId", "conversation-2");
+        ChatConversationMemberEntity bobMember = ChatConversationMemberEntity.create(
+                conversation, bob, ChatMembershipRole.MEMBER);
+        ChatConversationMemberEntity secondAlice = ChatConversationMemberEntity.create(
+                second, alice, ChatMembershipRole.MEMBER);
+        ChatConversationMemberEntity charlieMember = ChatConversationMemberEntity.create(
+                second, charlie, ChatMembershipRole.MEMBER);
+        ChatMessageEntity latest = ChatMessageEntity.create(conversation,
+                conversation.nextMessageSequence(), bob, "list-latest", ChatMessageType.TEXT,
+                "Latest message", null, null, null);
+        ReflectionTestUtils.setField(latest, "id", 55L);
+        when(members.findActiveByUserId(alice.getId())).thenReturn(List.of(aliceMember, secondAlice));
+        when(members.findActiveMembersByConversationIds(List.of(10L, 11L)))
+                .thenReturn(List.of(aliceMember, bobMember, secondAlice, charlieMember));
+        when(messages.findLatestByConversationIds(List.of(10L, 11L))).thenReturn(List.of(latest));
+        when(messageFiles.findByMessageIds(List.of(55L))).thenReturn(List.of());
+
+        List<ChatConversationResponse> result = service.listConversations(authentication);
+
+        assertThat(result).extracting(ChatConversationResponse::conversationId)
+                .containsExactly("conversation-1", "conversation-2");
+        assertThat(result.get(0).displayName()).isEqualTo("bob");
+        assertThat(result.get(0).lastMessage().content()).isEqualTo("Latest message");
+        assertThat(result.get(1).displayName()).isEqualTo("charlie");
+        assertThat(result.get(1).lastMessage()).isNull();
+        verify(members, never()).findActiveMembers(anyString());
+        verify(messages, never()).findLatest(anyLong(), any());
     }
 
     @Test

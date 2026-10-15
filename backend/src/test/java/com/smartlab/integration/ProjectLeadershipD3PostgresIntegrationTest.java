@@ -331,8 +331,9 @@ class ProjectLeadershipD3PostgresIntegrationTest {
                             password,
                             is_active,
                             is_account_verified,
-                            reset_otp_expire_at
-                        ) values (?, ?, ?, ?, true, true, NULL)
+                            reset_otp_expire_at,
+                            created_at
+                        ) values (?, ?, ?, ?, true, true, NULL, now())
                         returning id
                         """,
                 Long.class,
@@ -343,8 +344,8 @@ class ProjectLeadershipD3PostgresIntegrationTest {
         );
         int assignedRoles = jdbcTemplate.update(
                 """
-                        insert into user_roles (user_id, role_id, assigned_by)
-                        select ?, id, 'd3-integration-test'
+                        insert into user_roles (user_id, role_id, assigned_by, created_at)
+                        select ?, id, 'd3-integration-test', now()
                         from roles
                         where code = 'MEMBER'
                         """,
@@ -360,8 +361,8 @@ class ProjectLeadershipD3PostgresIntegrationTest {
     private void assignInactiveRole(Long userDatabaseId, String suffix) {
         Long roleId = jdbcTemplate.queryForObject(
                 """
-                        insert into roles (code, name, is_system, is_active)
-                        values (?, ?, false, false)
+                        insert into roles (code, name, is_system, is_active, created_at)
+                        values (?, ?, false, false, now())
                         returning id
                         """,
                 Long.class,
@@ -369,7 +370,7 @@ class ProjectLeadershipD3PostgresIntegrationTest {
                 "D3 disabled integration role"
         );
         int assignedRoles = jdbcTemplate.update(
-                "insert into user_roles (user_id, role_id, assigned_by) values (?, ?, 'd3-integration-test')",
+                "insert into user_roles (user_id, role_id, assigned_by, created_at) values (?, ?, 'd3-integration-test', now())",
                 userDatabaseId,
                 roleId
         );

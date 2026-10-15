@@ -25,7 +25,6 @@ export const env = Object.freeze({
     researchFieldName: value('E2E_RESEARCH_FIELD_NAME'),
   },
   publicData: {
-    memberName: value('E2E_PUBLIC_MEMBER_NAME'),
     researchFieldName: value('E2E_PUBLIC_RESEARCH_FIELD_NAME'),
     projectName: value('E2E_PUBLIC_PROJECT_NAME'),
     postTitle: value('E2E_PUBLIC_POST_TITLE'),

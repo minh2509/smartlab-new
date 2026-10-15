@@ -146,9 +146,22 @@ public class ChatServiceImpl implements ChatService {
     @Transactional(readOnly = true)
     public List<ChatConversationResponse> listConversations(Authentication authentication) {
         UserEntity currentUser = currentUser(authentication);
-        return memberRepository.findActiveByUserId(currentUser.getId()).stream()
-                .map(member -> toConversationResponse(member.getConversation(), currentUser.getId()))
-                .toList();
+        List<ChatConversationMemberEntity> memberships = memberRepository.findActiveByUserId(currentUser.getId());
+        if (memberships.isEmpty()) return List.of();
+        List<Long> conversationIds = memberships.stream()
+                .map(member -> member.getConversation().getId()).toList();
+        Map<Long, List<ChatConversationMemberEntity>> membersByConversation =
+                memberRepository.findActiveMembersByConversationIds(conversationIds).stream()
+                        .collect(Collectors.groupingBy(member -> member.getConversation().getId()));
+        List<ChatMessageEntity> latestMessages = messageRepository.findLatestByConversationIds(conversationIds);
+        Map<String, ChatMessageResponse> latestByConversation = mapMessages(latestMessages).stream()
+                .collect(Collectors.toMap(ChatMessageResponse::conversationId, Function.identity()));
+        return memberships.stream().map(member -> {
+            ChatConversationEntity conversation = member.getConversation();
+            return toConversationResponse(conversation, currentUser.getId(),
+                    membersByConversation.getOrDefault(conversation.getId(), List.of()),
+                    latestByConversation.get(conversation.getConversationId()));
+        }).toList();
     }
 
     @Override
@@ -1071,16 +1084,25 @@ public class ChatServiceImpl implements ChatService {
     ) {
         List<ChatConversationMemberEntity> members = memberRepository.findActiveMembers(
                 conversation.getConversationId());
-        ChatConversationMemberEntity currentMember = members.stream()
-                .filter(member -> Objects.equals(member.getUser().getId(), currentUserId))
-                .findFirst()
-                .orElseThrow(() -> notFound("Conversation not found"));
         ChatMessageResponse lastMessage = messageRepository.findLatest(
                         conversation.getId(), PageRequest.of(0, 1))
                 .stream()
                 .findFirst()
                 .map(message -> toMessageResponse(message, messageFiles(message)))
                 .orElse(null);
+        return toConversationResponse(conversation, currentUserId, members, lastMessage);
+    }
+
+    private ChatConversationResponse toConversationResponse(
+            ChatConversationEntity conversation,
+            Long currentUserId,
+            List<ChatConversationMemberEntity> members,
+            ChatMessageResponse lastMessage
+    ) {
+        ChatConversationMemberEntity currentMember = members.stream()
+                .filter(member -> Objects.equals(member.getUser().getId(), currentUserId))
+                .findFirst()
+                .orElseThrow(() -> notFound("Conversation not found"));
         long lastMessageSeq = latestSequence(conversation);
         long lastReadSeq = safeSequence(currentMember.getLastReadSeq());
         String displayName = conversation.getConversationType() == ChatConversationType.GROUP

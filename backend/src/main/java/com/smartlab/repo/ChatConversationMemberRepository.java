@@ -26,6 +26,17 @@ public interface ChatConversationMemberRepository extends JpaRepository<ChatConv
     @Query("""
             select m
             from ChatConversationMemberEntity m
+            join fetch m.user
+            where m.conversation.id in :conversationIds
+              and m.leftAt is null
+            order by m.conversation.id, m.joinedAt, m.id
+            """)
+    List<ChatConversationMemberEntity> findActiveMembersByConversationIds(
+            @Param("conversationIds") List<Long> conversationIds);
+
+    @Query("""
+            select m
+            from ChatConversationMemberEntity m
             join fetch m.conversation c
             where m.user.id = :userId
               and m.leftAt is null

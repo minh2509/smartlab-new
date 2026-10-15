@@ -41,7 +41,7 @@ async function loginWithCredentials(page: Page, email: string, password: string)
     return response.request().method() === 'POST' && url.pathname.endsWith('/login')
   })
 
-  await page.getByRole('button', { name: /^Đăng nhập$/ }).click()
+  await page.getByRole('button', { name: 'Đăng nhập vào Workspace' }).click()
   const loginResponse = await loginResponsePromise
 
   expect(loginResponse.ok(), await responseMessage(loginResponse)).toBeTruthy()

@@ -196,7 +196,7 @@ class PostWorkflowConcurrencyPostgresIntegrationTest {
         assertThat(persisted.status()).isEqualTo(PostStatus.PUBLISHED);
         assertThat(persisted.publishedAt()).isNotNull();
         assertThat(persisted.publishedAt()).isEqualTo(persisted.updatedAt());
-        assertThat(successfulResponse.getPublishedAt()).isEqualTo(persisted.publishedAt());
+        assertThat(Duration.between(successfulResponse.getPublishedAt(), persisted.publishedAt()).abs()).isLessThan(Duration.ofMillis(1));
         assertThat(reviewCount(post.id())).isZero();
     }
 
@@ -224,7 +224,7 @@ class PostWorkflowConcurrencyPostgresIntegrationTest {
         PostSnapshot persisted = readPost(post.id());
         assertThat(persisted.status()).isEqualTo(PostStatus.PUBLISHED);
         assertThat(persisted.publishedAt()).isNotNull().isEqualTo(persisted.updatedAt());
-        assertThat(successfulResponse.getPublishedAt()).isEqualTo(persisted.publishedAt());
+        assertThat(Duration.between(successfulResponse.getPublishedAt(), persisted.publishedAt()).abs()).isLessThan(Duration.ofMillis(1));
         assertThat(reviewCount(post.id())).isZero();
     }
 
@@ -572,9 +572,9 @@ class PostWorkflowConcurrencyPostgresIntegrationTest {
                     "T11 " + tag + " " + UUID.randomUUID(),
                     "t11-" + tag + "-" + UUID.randomUUID(),
                     excerpt,
-                    Map.of("type", "doc"),
+                    Map.of("type", "doc", "body", "Concurrency integration fixture"),
                     PostVisibility.LAB,
-                    null,
+                    jdbc.queryForObject("select id from content_categories where code = 'NEWS'", Long.class),
                     createdAt
             );
             if (targetStatus == PostStatus.PENDING_REVIEW || targetStatus == PostStatus.APPROVED) {

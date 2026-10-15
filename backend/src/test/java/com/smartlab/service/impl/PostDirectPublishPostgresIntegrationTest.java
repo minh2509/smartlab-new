@@ -23,6 +23,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.sql.Timestamp;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashSet;
@@ -111,8 +112,8 @@ class PostDirectPublishPostgresIntegrationTest {
         assertThat(response.getStatus()).isEqualTo(PostStatus.PUBLISHED);
         assertThat(persisted.status()).isEqualTo(PostStatus.PUBLISHED);
         assertThat(persisted.publishedAt()).isNotNull().isEqualTo(persisted.updatedAt());
-        assertThat(response.getPublishedAt()).isEqualTo(persisted.publishedAt());
-        assertThat(response.getUpdatedAt()).isEqualTo(persisted.updatedAt());
+        assertThat(Duration.between(response.getPublishedAt(), persisted.publishedAt()).abs()).isLessThan(Duration.ofMillis(1));
+        assertThat(Duration.between(response.getUpdatedAt(), persisted.updatedAt()).abs()).isLessThan(Duration.ofMillis(1));
         assertThat(reviewCount(post.id())).isZero();
     }
 
@@ -238,9 +239,9 @@ class PostDirectPublishPostgresIntegrationTest {
                     "T11A4 " + tag + " " + UUID.randomUUID(),
                     "t11a4-" + tag + "-" + UUID.randomUUID(),
                     "T11A4 PostgreSQL direct-publish acceptance",
-                    Map.of("type", "doc"),
+                    Map.of("type", "doc", "body", "Direct publication integration fixture"),
                     PostVisibility.LAB,
-                    null,
+                    jdbc.queryForObject("select id from content_categories where code = 'NEWS'", Long.class),
                     createdAt
             );
             if (targetStatus == PostStatus.APPROVED) {

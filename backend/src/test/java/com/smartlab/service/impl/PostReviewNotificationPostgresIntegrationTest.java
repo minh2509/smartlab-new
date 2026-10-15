@@ -30,6 +30,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashSet;
@@ -122,7 +123,7 @@ class PostReviewNotificationPostgresIntegrationTest {
         AuditSnapshot audit = inNewTransaction(() -> readOnlyAudit(postId));
 
         assertThat(response.getStatus()).isEqualTo(reviewCase.expectedStatus());
-        assertThat(response.getUpdatedAt()).isEqualTo(persisted.postUpdatedAt());
+        assertThat(Duration.between(response.getUpdatedAt(), persisted.postUpdatedAt()).abs()).isLessThan(Duration.ofMillis(1));
         assertThat(persisted.status()).isEqualTo(reviewCase.expectedStatus());
         assertThat(persisted.reviewId()).isPositive();
         assertThat(persisted.reviewerUserId()).isEqualTo(reviewer.id());

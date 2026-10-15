@@ -51,11 +51,11 @@ test.describe('MEMBER profile and file access', () => {
       await fieldCheckbox.setChecked(!originallyChecked)
 
       const saveResponsePromise = page.waitForResponse((response) => apiPathEndsWith(response, '/me/profile', 'PATCH'))
-      await page.getByRole('button', { name: 'Lưu hồ sơ' }).click()
+      await page.getByRole('button', { name: 'Lưu thay đổi' }).click()
       const saveResponse = await saveResponsePromise
       await expectOk(saveResponse, 'PATCH /me/profile')
 
-      await expect(page.getByText('Đã lưu hồ sơ thành viên.')).toBeVisible()
+      await expect(page.getByText('Đã lưu hồ sơ', { exact: true })).toBeVisible()
       await expect(bio).toHaveValue(marker)
       if (originallyChecked) {
         await expect(fieldCheckbox).not.toBeChecked()
@@ -66,7 +66,7 @@ test.describe('MEMBER profile and file access', () => {
       await bio.fill(originalBio)
       await fieldCheckbox.setChecked(originallyChecked)
       const restoreResponsePromise = page.waitForResponse((response) => apiPathEndsWith(response, '/me/profile', 'PATCH'))
-      await page.getByRole('button', { name: 'Lưu hồ sơ' }).click()
+      await page.getByRole('button', { name: 'Lưu thay đổi' }).click()
       await expectOk(await restoreResponsePromise, 'restore PATCH /me/profile')
     }
   })
@@ -81,7 +81,7 @@ test.describe('MEMBER profile and file access', () => {
     try {
       const uploadResponsePromise = page.waitForResponse((response) => apiPathEndsWith(response, '/files/upload', 'POST'))
       const profileResponsePromise = page.waitForResponse((response) => apiPathEndsWith(response, '/me/profile', 'PATCH'))
-      await page.getByTitle('Đổi ảnh đại diện').locator('input[type="file"]').setInputFiles({
+      await page.getByTitle('Đổi ảnh đại diện').first().locator('input[type="file"]').setInputFiles({
         name: `member-avatar-${Date.now()}.png`,
         mimeType: 'image/png',
         buffer: onePixelPng(),
@@ -128,7 +128,7 @@ test.describe('MEMBER profile and file access', () => {
         mimeType: 'text/plain',
         buffer: Buffer.from(fileContents, 'utf8'),
       })
-      await page.getByLabel('Phạm vi truy cập').selectOption('PRIVATE')
+      await expect(page.getByRole('button', { name: 'Chọn phạm vi truy cập file' })).toHaveAttribute('title', 'Riêng tư')
       await page.getByLabel('Mô tả').fill('Playwright MEMBER private-file verification')
 
       const uploadResponsePromise = page.waitForResponse((response) => apiPathEndsWith(response, '/files/upload', 'POST'))

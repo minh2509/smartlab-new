@@ -229,6 +229,18 @@ UI race and failure-state tests. Other backend PostgreSQL integration suites
 require their own dedicated databases; do not run all suites against this chat
 database or interpret those database guards as chat failures.
 
+## Complete local backend test matrix
+
+After separately backing up and bringing each disposable test database to the
+current migration level, run `./scripts/test-local-matrix.ps1` from PowerShell.
+The script routes tests to their guarded databases (`smartlab_chat_it`,
+`smartlab_d1_auth_it`, `smartlab_rich_editor_it`, and
+`smartlab_rich_editor_deploy_rehearsal`), runs non-DB tests, and reports the
+Surefire counts. It performs **no schema or data migration** and stops on the
+first failed group. The Drive HTTP integration test remains gated by
+`smartlab.drive.it=true` and real Google Drive credentials; a skipped test is
+not evidence that external storage works.
+
 ## Messenger group lifecycle
 
 `022` adds `closed_at` and a unique active-owner index. Its preflight refuses
