@@ -137,6 +137,18 @@ export function removeConversationMember(
   )
 }
 
+export function leaveGroupWithSuccessor(token: string, conversationId: string, successorUserId: string): Promise<void> {
+  return apiClient<void>(`/chat/conversations/${encodeURIComponent(conversationId)}/leave-with-successor`, {
+    method: 'POST', token, body: JSON.stringify({ successorUserId }),
+  })
+}
+
+export function closeChatGroup(token: string, conversationId: string): Promise<ChatConversationResponse> {
+  return apiClient<ChatConversationResponse>(`/chat/conversations/${encodeURIComponent(conversationId)}/close`, {
+    method: 'POST', token,
+  })
+}
+
 export function changeMemberRole(
   token: string,
   conversationId: string,

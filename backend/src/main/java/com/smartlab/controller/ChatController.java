@@ -2,6 +2,7 @@ package com.smartlab.controller;
 
 import com.smartlab.dto.request.AddChatMemberRequest;
 import com.smartlab.dto.request.ChangeChatMemberRoleRequest;
+import com.smartlab.dto.request.ChatSuccessorRequest;
 import com.smartlab.dto.request.ChatReadRequest;
 import com.smartlab.dto.request.ChatSendMessageRequest;
 import com.smartlab.dto.request.CreateDirectChatRequest;
@@ -128,6 +129,24 @@ public class ChatController {
             Authentication authentication
     ) {
         chatService.removeMember(conversationId, userId, authentication);
+    }
+
+    @PostMapping("/{conversationId}/leave-with-successor")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void leaveWithSuccessor(
+            @PathVariable @Size(max = 36) String conversationId,
+            @Valid @RequestBody ChatSuccessorRequest request,
+            Authentication authentication
+    ) {
+        chatService.leaveGroupWithSuccessor(conversationId, request.successorUserId(), authentication);
+    }
+
+    @PostMapping("/{conversationId}/close")
+    public ChatConversationResponse closeGroup(
+            @PathVariable @Size(max = 36) String conversationId,
+            Authentication authentication
+    ) {
+        return chatService.closeGroup(conversationId, authentication);
     }
 
     @PatchMapping("/{conversationId}/members/{userId}/role")

@@ -27,14 +27,20 @@ public class ChatWebSocketAuthenticationService {
                 throw invalid();
             }
             userSessionService.touchSession(sessionId);
-            return new UsernamePasswordAuthenticationToken(
-                    userDetails,
-                    null,
-                    userDetails.getAuthorities()
-            );
+            UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                    userDetails, null, userDetails.getAuthorities());
+            authentication.setDetails(sessionId);
+            return authentication;
         } catch (BadCredentialsException exception) {
             throw exception;
         } catch (RuntimeException exception) {
+            throw invalid();
+        }
+    }
+
+    public void requireActiveSession(Authentication authentication) {
+        Object details = authentication == null ? null : authentication.getDetails();
+        if (!(details instanceof String sessionId) || !userSessionService.isSessionActive(sessionId)) {
             throw invalid();
         }
     }

@@ -49,6 +49,13 @@ public class ChatStompAuthInterceptor implements ChannelInterceptor {
             accessor.setUser(authentication);
         }
 
+        if (command == StompCommand.SEND || command == StompCommand.SUBSCRIBE) {
+            if (!(accessor.getUser() instanceof Authentication authentication)) {
+                throw new IllegalStateException("Authenticated STOMP CONNECT is required");
+            }
+            authenticationService.requireActiveSession(authentication);
+        }
+
         if (command == StompCommand.SUBSCRIBE && !USER_QUEUE.equals(accessor.getDestination())) {
             throw new IllegalStateException("Only the authenticated chat user queue may be subscribed to");
         }

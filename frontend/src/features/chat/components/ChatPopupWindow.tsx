@@ -113,7 +113,7 @@ export function ChatPopupWindow({ popup, isActive }: ChatPopupWindowProps) {
       {!minimized && (
         <div className="chat-popup-body">
           <MessageList conversationId={conversationId} />
-          <MessageComposer conversationId={conversationId} />
+          {conversation?.closedAt ? <div role="status" style={{ padding: 12, textAlign: 'center' }}>Nhóm đã giải tán · chỉ đọc</div> : <MessageComposer conversationId={conversationId} />}
         </div>
       )}
     </div>

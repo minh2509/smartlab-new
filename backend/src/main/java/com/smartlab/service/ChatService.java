@@ -62,6 +62,10 @@ public interface ChatService {
 
     void removeMember(String conversationId, String userId, Authentication authentication);
 
+    void leaveGroupWithSuccessor(String conversationId, String successorUserId, Authentication authentication);
+
+    ChatConversationResponse closeGroup(String conversationId, Authentication authentication);
+
     ChatMemberResponse changeMemberRole(
             String conversationId,
             String userId,

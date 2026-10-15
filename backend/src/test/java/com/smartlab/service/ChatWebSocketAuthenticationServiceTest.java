@@ -40,6 +40,19 @@ class ChatWebSocketAuthenticationServiceTest {
     }
 
     @Test
+    void revokedAfterConnectCannotSendAnotherFrame() {
+        ChatWebSocketAuthenticationService service =
+                new ChatWebSocketAuthenticationService(userDetailsService, jwtUtil, sessions);
+        var authentication = new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                "alice@example.test", null);
+        authentication.setDetails("session-1");
+        when(sessions.isSessionActive("session-1")).thenReturn(false);
+
+        assertThatThrownBy(() -> service.requireActiveSession(authentication))
+                .isInstanceOf(BadCredentialsException.class);
+    }
+
+    @Test
     void revokedSessionIsRejected() {
         ChatWebSocketAuthenticationService service =
                 new ChatWebSocketAuthenticationService(userDetailsService, jwtUtil, sessions);

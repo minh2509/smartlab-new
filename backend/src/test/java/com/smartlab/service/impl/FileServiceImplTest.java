@@ -5,6 +5,7 @@ import com.smartlab.entity.UserEntity;
 import com.smartlab.entity.ProjectEntity;
 import com.smartlab.enums.ProjectStatus;
 import com.smartlab.enums.ProjectType;
+import com.smartlab.repo.ChatMessageFileRepository;
 import com.smartlab.repo.DocumentRepository;
 import com.smartlab.repo.DocumentVersionRepository;
 import com.smartlab.repo.GalleryItemRepository;
@@ -54,6 +55,7 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class FileServiceImplTest {
     @Mock StoredFileRepository storedFileRepository;
+    @Mock ChatMessageFileRepository chatMessageFileRepository;
     @Mock UserRepository userRepository;
     @Mock FileStorage fileStorage;
     @Mock MemberProfileRepository memberProfileRepository;
@@ -291,6 +293,35 @@ class FileServiceImplTest {
         assertThatThrownBy(() -> service.delete(17L, owner.getEmail(), authentication(owner.getEmail())))
                 .isInstanceOfSatisfying(ResponseStatusException.class,
                         exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+        verify(fileStorage, never()).trash(any());
+    }
+
+    @Test
+    void chatAttachmentIsReadableOnlyByAnActiveConversationMember() {
+        StoredFileEntity entity = storedFile(50L, "CHAT");
+        when(storedFileRepository.findByIdAndDeletedAtIsNull(50L)).thenReturn(Optional.of(entity));
+        when(chatMessageFileRepository.countActiveMembershipsForFile(50L, owner.getEmail())).thenReturn(1L);
+        when(fileStorage.download("drive-id")).thenReturn(new FileStorage.StoredFileContent(new byte[]{5}));
+
+        assertThat(service.download(50L, authentication(owner.getEmail())).content()).containsExactly(5);
+
+        Authentication unrelatedAdmin = new UsernamePasswordAuthenticationToken(
+                "admin@lab.test", "n/a", List.of(new SimpleGrantedAuthority("ROLE_ADMIN")));
+        when(chatMessageFileRepository.countActiveMembershipsForFile(50L, "admin@lab.test")).thenReturn(0L);
+        assertThat(service.canRead(50L, unrelatedAdmin)).isFalse();
+    }
+
+    @Test
+    void chatAttachmentCannotBeDeletedWhileRetainedByAMessage() {
+        StoredFileEntity entity = storedFile(51L, "CHAT");
+        when(storedFileRepository.findByIdAndDeletedAtIsNull(51L)).thenReturn(Optional.of(entity));
+        when(chatMessageFileRepository.existsByFile_Id(51L)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.delete(51L, owner.getEmail(), authentication(owner.getEmail())))
+                .isInstanceOfSatisfying(ResponseStatusException.class, error -> {
+                    assertThat(error.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+                    assertThat(error.getReason()).isEqualTo("File is retained by a chat message");
+                });
         verify(fileStorage, never()).trash(any());
     }
 

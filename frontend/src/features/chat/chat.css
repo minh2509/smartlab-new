@@ -976,3 +976,9 @@
 .chat-search-results > button { width: 100%; display: grid; grid-template-columns: 110px 1fr auto; gap: 8px; padding: 6px; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--text-1); text-align: left; cursor: pointer; }
 .chat-search-results > button span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .chat-search-results time { color: var(--text-3); font-size: 10px; }
+
+.chat-details-mobile-close { display: none; }
+@media (max-width: 768px) {
+  .chat-page-details.is-mobile-open { display: flex; position: fixed; inset: 0 0 0 auto; z-index: 1200; width: min(360px, 100vw); box-shadow: var(--sh-3); }
+  .chat-details-mobile-close { display: grid; align-self: flex-end; margin-bottom: 8px; }
+}

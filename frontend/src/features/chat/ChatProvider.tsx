@@ -52,8 +52,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   activePopupIdRef.current = activePopupId
   const popupsRef = useRef<OpenPopup[]>([])
   popupsRef.current = popups
-  const activeConversationIdRef = useRef<string | null>(null)
-  activeConversationIdRef.current = activeConversationId
+  const fullPageConversationIdRef = useRef<string | null>(null)
+  const setFullPageConversationId = useCallback((id: string | null) => {
+    fullPageConversationIdRef.current = id
+  }, [])
   const tokenRef = useRef<string | null>(null)
   tokenRef.current = token
   const historyMetadataRef = useRef(historyMetadata)
@@ -69,6 +71,21 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     try {
       setLoadingConversations(true)
       const list = await chatApi.listConversations(tokenRef.current)
+      // A removed participant must not retain a readable popup or cached thread.
+      const allowed = new Set(list.map((item) => item.conversationId))
+      setPopups((prev) => prev.filter((item) => allowed.has(item.conversationId)))
+      setDockItems((prev) => prev.filter((item) => allowed.has(item.conversationId)))
+      setActivePopupId((prev) => prev && allowed.has(prev) ? prev : null)
+      setActiveConversationId((prev) => prev && allowed.has(prev) ? prev : null)
+      setMessagesByConversation((prev) => Object.fromEntries(
+        Object.entries(prev).filter(([id]) => allowed.has(id)),
+      ))
+      setHistoryMetadata((prev) => Object.fromEntries(
+        Object.entries(prev).filter(([id]) => allowed.has(id)),
+      ))
+      setTypingUsers((prev) => Object.fromEntries(
+        Object.entries(prev).filter(([id]) => allowed.has(id)),
+      ))
       setConversations((prev) => {
         if (prev.length === 0) return list
         return list.map((serverConv) => {
@@ -100,18 +117,26 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       const sorted = [...page.messages].sort((a, b) => a.messageSeq - b.messageSeq)
       const items: ChatMessageItem[] = sorted.map((m) => ({ ...m, status: 'SENT' }))
       const highest = items.reduce((max, m) => Math.max(max, m.messageSeq), 0)
+      const lowest = items[0]?.messageSeq ?? Number.POSITIVE_INFINITY
 
-      setMessagesByConversation((prev) => ({
-        ...prev,
-        [conversationId]: items,
-      }))
+      setMessagesByConversation((prev) => {
+        const cached = prev[conversationId] ?? []
+        const ids = new Set(items.map((item) => item.id))
+        const clientIds = new Set(items.map((item) => item.clientMessageId))
+        // A history request may finish after a realtime event or optimistic send.
+        const later = cached.filter((item) =>
+          (item.status !== 'SENT' || item.messageSeq < lowest || item.messageSeq > highest)
+          && !ids.has(item.id) && !clientIds.has(item.clientMessageId),
+        )
+        return { ...prev, [conversationId]: [...items, ...later].sort((a, b) => a.messageSeq - b.messageSeq) }
+      })
       setHistoryMetadata((prev) => ({
         ...prev,
         [conversationId]: {
           nextBeforeSeq: page.nextBeforeSeq,
           nextAfterSeq: page.nextAfterSeq,
           hasMore: page.hasMore,
-          highestSeq: highest,
+          highestSeq: Math.max(highest, prev[conversationId]?.highestSeq ?? 0),
           loadingOlder: false,
         },
       }))
@@ -168,10 +193,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   }, [])
 
   // 4. Mark conversation as read
-  const markAsRead = useCallback(async (conversationId: string) => {
+  const markAsRead = useCallback(async (conversationId: string, upToSeq?: number) => {
     if (!tokenRef.current) return
     const conv = conversationsRef.current.find((c) => c.conversationId === conversationId)
-    const currentSeq = conv ? conv.lastMessageSeq : 0
+    const currentSeq = Math.max(conv?.lastMessageSeq ?? 0, upToSeq ?? 0)
 
     // Send read signal via socket or REST
     const sent = chatRealtimeClient.sendRead(conversationId, { lastReadSeq: currentSeq })
@@ -334,7 +359,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             originalName: `file-${fid}`,
             mimeType: 'application/octet-stream',
             sizeBytes: 0,
-            accessScope: 'LAB',
+            accessScope: 'CHAT',
           }),
         ),
         createdAt: new Date().toISOString(),
@@ -359,35 +384,33 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         metadataJson: payload.metadataJson,
       }
 
-      // Attempt sending via STOMP if connected, else fallback to REST
-      const sentStomp = chatRealtimeClient.sendMessage(conversationId, request)
-      if (!sentStomp) {
-        try {
-          const res = await chatApi.sendChatMessage(tokenRef.current, conversationId, request)
-          // Mark sent and replace temporary ID with canonical ID
-          setMessagesByConversation((prev) => {
-            const list = prev[conversationId] ?? []
-            return {
-              ...prev,
-              [conversationId]: list.map((m) =>
-                m.clientMessageId === clientMessageId ? { ...res, status: 'SENT' } : m,
-              ),
-            }
-          })
-        } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : 'Gửi tin nhắn thất bại'
-          setMessagesByConversation((prev) => {
-            const list = prev[conversationId] ?? []
-            return {
-              ...prev,
-              [conversationId]: list.map((m) =>
-                m.clientMessageId === clientMessageId
-                  ? { ...m, status: 'FAILED', errorMessage: msg }
-                  : m,
-              ),
-            }
-          })
-        }
+      // Persist durable messages over HTTP so the sender always receives an
+      // explicit success/error response. The backend publishes the canonical
+      // message over STOMP after commit for realtime fan-out to every client.
+      try {
+        const res = await chatApi.sendChatMessage(tokenRef.current, conversationId, request)
+        setMessagesByConversation((prev) => {
+          const list = prev[conversationId] ?? []
+          return {
+            ...prev,
+            [conversationId]: list.map((m) =>
+              m.clientMessageId === clientMessageId ? { ...res, status: 'SENT' } : m,
+            ),
+          }
+        })
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Gửi tin nhắn thất bại'
+        setMessagesByConversation((prev) => {
+          const list = prev[conversationId] ?? []
+          return {
+            ...prev,
+            [conversationId]: list.map((m) =>
+              m.clientMessageId === clientMessageId && m.status === 'SENDING'
+                ? { ...m, status: 'FAILED', errorMessage: msg }
+                : m,
+            ),
+          }
+        })
       }
     },
     [messagesByConversation],
@@ -423,33 +446,30 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         metadataJson: target.metadataJson ?? undefined,
       }
 
-      const sentStomp = chatRealtimeClient.sendMessage(conversationId, request)
-      if (!sentStomp) {
-        try {
-          const res = await chatApi.sendChatMessage(tokenRef.current, conversationId, request)
-          setMessagesByConversation((prev) => {
-            const currentList = prev[conversationId] ?? []
-            return {
-              ...prev,
-              [conversationId]: currentList.map((m) =>
-                m.clientMessageId === clientMessageId ? { ...res, status: 'SENT' } : m,
-              ),
-            }
-          })
-        } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : 'Gửi tin nhắn thất bại'
-          setMessagesByConversation((prev) => {
-            const currentList = prev[conversationId] ?? []
-            return {
-              ...prev,
-              [conversationId]: currentList.map((m) =>
-                m.clientMessageId === clientMessageId
-                  ? { ...m, status: 'FAILED', errorMessage: msg }
-                  : m,
-              ),
-            }
-          })
-        }
+      try {
+        const res = await chatApi.sendChatMessage(tokenRef.current, conversationId, request)
+        setMessagesByConversation((prev) => {
+          const currentList = prev[conversationId] ?? []
+          return {
+            ...prev,
+            [conversationId]: currentList.map((m) =>
+              m.clientMessageId === clientMessageId ? { ...res, status: 'SENT' } : m,
+            ),
+          }
+        })
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Gửi tin nhắn thất bại'
+        setMessagesByConversation((prev) => {
+          const currentList = prev[conversationId] ?? []
+          return {
+            ...prev,
+            [conversationId]: currentList.map((m) =>
+              m.clientMessageId === clientMessageId && m.status === 'SENDING'
+                ? { ...m, status: 'FAILED', errorMessage: msg }
+                : m,
+            ),
+          }
+        })
       }
     },
     [messagesByConversation],
@@ -501,18 +521,33 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const removeMemberFromGroup = useCallback(async (conversationId: string, userId: string) => {
     if (!tokenRef.current) return
     await chatApi.removeConversationMember(tokenRef.current, conversationId, userId)
-    setConversations((prev) =>
-      prev.map((c) =>
-        c.conversationId === conversationId
-          ? {
-              ...c,
-              members: c.members.map((m) =>
-                m.userId === userId ? { ...m, active: false, leftAt: new Date().toISOString() } : m,
-              ),
-            }
-          : c,
-      ),
-    )
+    if (profileRef.current?.userId === userId) {
+      setConversations((prev) => prev.filter((c) => c.conversationId !== conversationId))
+      setPopups((prev) => prev.filter((item) => item.conversationId !== conversationId))
+      setDockItems((prev) => prev.filter((item) => item.conversationId !== conversationId))
+      setActivePopupId((prev) => prev === conversationId ? null : prev)
+      setActiveConversationId((prev) => prev === conversationId ? null : prev)
+      setMessagesByConversation((prev) => { const next = { ...prev }; delete next[conversationId]; return next })
+      setHistoryMetadata((prev) => { const next = { ...prev }; delete next[conversationId]; return next })
+    } else {
+      setConversations((prev) => prev.map((c) => c.conversationId === conversationId
+        ? { ...c, members: c.members.map((m) =>
+            m.userId === userId ? { ...m, active: false, leftAt: new Date().toISOString() } : m) }
+        : c))
+    }
+  }, [])
+
+  const leaveGroupWithSuccessor = useCallback(async (conversationId: string, successorUserId: string) => {
+    if (!tokenRef.current) return
+    await chatApi.leaveGroupWithSuccessor(tokenRef.current, conversationId, successorUserId)
+    await refreshConversations()
+  }, [refreshConversations])
+
+  const closeChatGroup = useCallback(async (conversationId: string) => {
+    if (!tokenRef.current) return
+    const updated = await chatApi.closeChatGroup(tokenRef.current, conversationId)
+    setConversations((prev) => prev.map((item) => item.conversationId === conversationId ? updated : item))
+    setTypingUsers((prev) => ({ ...prev, [conversationId]: [] }))
   }, [])
 
   const changeMemberRoleInGroup = useCallback(
@@ -556,7 +591,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       return {
         ...prev,
         [conversationId]: list.map((m) =>
-          m.id === messageId ? { ...m, deletedAt: new Date().toISOString() } : m,
+          m.id === messageId ? { ...m, deletedAt: new Date().toISOString(), content: null,
+            metadataJson: null, files: [], reactions: [] } : m,
         ),
       }
     })
@@ -609,11 +645,17 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     const sent = await chatApi.forwardChatMessage(
       tokenRef.current, sourceConversationId, messageId, targetConversationId,
     )
-    setMessagesByConversation((prev) => ({
-      ...prev,
-      [targetConversationId]: [...(prev[targetConversationId] ?? []), { ...sent, status: 'SENT' }],
-    }))
-  }, [])
+    setMessagesByConversation((prev) => {
+      const list = prev[targetConversationId] ?? []
+      if (list.some((item) => item.id === sent.id || item.clientMessageId === sent.clientMessageId)) {
+        return { ...prev, [targetConversationId]: list.map((item) =>
+          item.id === sent.id || item.clientMessageId === sent.clientMessageId
+            ? { ...sent, status: 'SENT' } : item) }
+      }
+      return { ...prev, [targetConversationId]: [...list, { ...sent, status: 'SENT' }] }
+    })
+    void refreshConversations()
+  }, [refreshConversations])
 
   const votePoll = useCallback(async (conversationId: string, messageId: number, optionId: string) => {
     if (!tokenRef.current) return
@@ -627,48 +669,40 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     // Refresh conversation list to get latest unread counts & last messages
     void refreshConversations()
 
-    // For every loaded conversation, fetch missed messages after highestSeq
+    // Page until exhausted, including conversations that were empty when first opened.
     const loadedConvIds = Object.keys(historyMetadataRef.current)
     for (const convId of loadedConvIds) {
       const meta = historyMetadataRef.current[convId]
-      if (meta && meta.highestSeq > 0) {
-        try {
+      if (!meta) continue
+      let cursor = meta.highestSeq
+      try {
+        while (true) {
           const page: ChatMessagePageResponse = await chatApi.getConversationMessages(
-            tokenRef.current,
-            convId,
-            { afterSeq: meta.highestSeq, limit: 100 },
+            tokenRef.current, convId, { afterSeq: cursor, limit: 100 },
           )
-          if (page.messages.length > 0) {
-            const newSorted = [...page.messages].sort((a, b) => a.messageSeq - b.messageSeq)
-            const newItems: ChatMessageItem[] = newSorted.map((m) => ({ ...m, status: 'SENT' }))
-            const maxSeq = newItems.reduce((max, m) => Math.max(max, m.messageSeq), meta.highestSeq)
+          const newSorted = [...page.messages].sort((a, b) => a.messageSeq - b.messageSeq)
+          const newItems: ChatMessageItem[] = newSorted.map((m) => ({ ...m, status: 'SENT' }))
+          const maxSeq = newItems.reduce((max, m) => Math.max(max, m.messageSeq), cursor)
 
+          if (newItems.length) {
             setMessagesByConversation((prev) => {
               const currentList = prev[convId] ?? []
               const knownIds = new Set(currentList.map((m) => m.id))
-              const knownClientIds = new Set(
-                currentList.map((m) => m.clientMessageId).filter(Boolean),
-              )
+              const knownClientIds = new Set(currentList.map((m) => m.clientMessageId).filter(Boolean))
               const nonDuplicate = newItems.filter(
                 (m) => !knownIds.has(m.id) && !knownClientIds.has(m.clientMessageId),
               )
-              return {
-                ...prev,
-                [convId]: [...currentList, ...nonDuplicate],
-              }
+              return { ...prev, [convId]: [...currentList, ...nonDuplicate].sort((a, b) => a.messageSeq - b.messageSeq) }
             })
-
             setHistoryMetadata((prev) => ({
-              ...prev,
-              [convId]: {
-                ...prev[convId],
-                highestSeq: maxSeq,
-              },
+              ...prev, [convId]: { ...prev[convId], highestSeq: Math.max(prev[convId]?.highestSeq ?? 0, maxSeq) },
             }))
           }
-        } catch (err) {
-          console.error(`Failed to catch-up conversation ${convId}:`, err)
+          if (!page.hasMore || page.nextAfterSeq == null || page.nextAfterSeq <= cursor) break
+          cursor = page.nextAfterSeq
         }
+      } catch (err) {
+        console.error(`Failed to catch-up conversation ${convId}:`, err)
       }
     }
   }, [refreshConversations])
@@ -720,7 +754,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           const isPopupOpenAndActive = popupsRef.current.some(
             (p) => p.conversationId === conversationId && !p.minimized,
           )
-          const isFullActive = activeConversationIdRef.current === conversationId
+          const isFullActive = fullPageConversationIdRef.current === conversationId
           const isViewed = isPopupOpenAndActive || isFullActive
 
           const incomingConversation = conversationsRef.current.find(
@@ -758,17 +792,19 @@ export function ChatProvider({ children }: { children: ReactNode }) {
                 pinned: false,
                 muted: false,
                 archived: false,
+                closedAt: null,
                 createdAt: message.createdAt,
                 updatedAt: message.createdAt,
               }
               return [newConv, ...prev]
             }
             const conv = prev[idx]
-            const newUnread = isViewed || isOwnMessage ? conv.unreadCount : conv.unreadCount + 1
+            const newUnread = isOwnMessage ? 0 : isViewed ? conv.unreadCount : conv.unreadCount + 1
             const updated: ChatConversationResponse = {
               ...conv,
               lastMessage: message,
               lastMessageSeq: message.messageSeq,
+              lastReadSeq: isOwnMessage ? Math.max(conv.lastReadSeq, message.messageSeq) : conv.lastReadSeq,
               unreadCount: newUnread,
               updatedAt: message.createdAt,
             }
@@ -782,7 +818,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
           // If viewed, automatically acknowledge read
           if (isViewed && profileRef.current && message.sender.userId !== profileRef.current.userId) {
-            void markAsRead(conversationId)
+            void markAsRead(conversationId, message.messageSeq)
           }
           break
         }
@@ -986,6 +1022,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     () => ({
       conversations,
       activeConversationId,
+      setFullPageConversationId,
       popups,
       dockItems,
       activePopupId,
@@ -1013,6 +1050,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       renameChatGroup,
       addMemberToGroup,
       removeMemberFromGroup,
+      leaveGroupWithSuccessor,
+      closeChatGroup,
       changeMemberRoleInGroup,
       editMessage,
       deleteMessage,
@@ -1025,6 +1064,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     [
       conversations,
       activeConversationId,
+      setFullPageConversationId,
       popups,
       dockItems,
       activePopupId,
@@ -1052,6 +1092,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       renameChatGroup,
       addMemberToGroup,
       removeMemberFromGroup,
+      leaveGroupWithSuccessor,
+      closeChatGroup,
       changeMemberRoleInGroup,
       editMessage,
       deleteMessage,

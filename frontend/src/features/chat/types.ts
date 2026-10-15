@@ -82,6 +82,7 @@ export type ChatConversationResponse = {
   pinned: boolean
   muted: boolean
   archived: boolean
+  closedAt: string | null
   createdAt: string
   updatedAt: string
 }
@@ -107,6 +108,7 @@ export type ChatConversationEventData = {
   projectId: number | null
   members: ChatMemberResponse[]
   lastMessageSeq: number
+  closedAt: string | null
   updatedAt: string
 }
 
@@ -195,6 +197,7 @@ export type ChatConnectionState = 'DISCONNECTED' | 'CONNECTING' | 'CONNECTED' | 
 export type ChatContextValue = {
   conversations: ChatConversationResponse[]
   activeConversationId: string | null
+  setFullPageConversationId: (conversationId: string | null) => void
   popups: OpenPopup[]
   dockItems: ChatDockItem[]
   activePopupId: string | null
@@ -233,6 +236,8 @@ export type ChatContextValue = {
   renameChatGroup: (conversationId: string, title: string) => Promise<void>
   addMemberToGroup: (conversationId: string, userId: string) => Promise<void>
   removeMemberFromGroup: (conversationId: string, userId: string) => Promise<void>
+  leaveGroupWithSuccessor: (conversationId: string, successorUserId: string) => Promise<void>
+  closeChatGroup: (conversationId: string) => Promise<void>
   changeMemberRoleInGroup: (conversationId: string, userId: string, role: ChatMembershipRole) => Promise<void>
   editMessage: (conversationId: string, messageId: number, content: string) => Promise<void>
   deleteMessage: (conversationId: string, messageId: number) => Promise<void>

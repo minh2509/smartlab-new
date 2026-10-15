@@ -29,9 +29,12 @@ export function ChatPage() {
     loadingConversations,
     loadMessages,
     markAsRead,
+    setFullPageConversationId,
     renameChatGroup,
     addMemberToGroup,
     removeMemberFromGroup,
+    leaveGroupWithSuccessor,
+    closeChatGroup,
     changeMemberRoleInGroup,
     createGroupChat,
     createDirectChat,
@@ -44,7 +47,7 @@ export function ChatPage() {
 
   const [activeConvId, setActiveConvId] = useState<string | null>(activeIdFromQuery)
   const [searchQuery, setSearchQuery] = useState('')
-  const [showDetails, setShowDetails] = useState(true)
+  const [showDetails, setShowDetails] = useState(() => !window.matchMedia('(max-width: 768px)').matches)
   const [showArchived, setShowArchived] = useState(false)
   const [messageSearch, setMessageSearch] = useState('')
   const [messageResults, setMessageResults] = useState<ChatMessageResponse[]>([])
@@ -56,6 +59,10 @@ export function ChatPage() {
   const [candidateMembers, setCandidateMembers] = useState<{ userId: string; name: string }[]>([])
   const [selectedAddUserId, setSelectedAddUserId] = useState('')
   const [loadingCandidates, setLoadingCandidates] = useState(false)
+  const [ownerAction, setOwnerAction] = useState<'leave' | 'dissolve' | null>(null)
+  const [successorId, setSuccessorId] = useState('')
+  const [ownerActionBusy, setOwnerActionBusy] = useState(false)
+  const [ownerActionError, setOwnerActionError] = useState('')
 
   // New Chat Modal state
   const [showNewChatModal, setShowNewChatModal] = useState(false)
@@ -72,17 +79,25 @@ export function ChatPage() {
     }
   }, [activeIdFromQuery, activeConvId])
 
-  // When active conversation changes, load messages and mark read
-  useEffect(() => {
-    if (activeConvId) {
-      void loadMessages(activeConvId)
-      void markAsRead(activeConvId)
-    }
-  }, [activeConvId, loadMessages, markAsRead])
-
   const activeConversation: ChatConversationResponse | undefined = conversations.find(
     (c) => c.conversationId === activeConvId,
   )
+
+  const resolvedActiveConversationId = activeConversation?.conversationId
+
+  // The page has its own selection; register it with realtime read tracking.
+  useEffect(() => {
+    setFullPageConversationId(resolvedActiveConversationId ?? null)
+    return () => setFullPageConversationId(null)
+  }, [resolvedActiveConversationId, setFullPageConversationId])
+
+  // Do not probe message/read endpoints for a stale or unauthorized conversation id.
+  useEffect(() => {
+    if (resolvedActiveConversationId) {
+      void loadMessages(resolvedActiveConversationId)
+      void markAsRead(resolvedActiveConversationId)
+    }
+  }, [resolvedActiveConversationId, loadMessages, markAsRead])
 
   const handleSelectConversation = (convId: string) => {
     setActiveConvId(convId)
@@ -160,6 +175,32 @@ export function ChatPage() {
     if (isSelf) {
       setActiveConvId(null)
       setSearchParams({})
+    }
+  }
+
+  const successorCandidates = activeConversation?.members
+    .filter((member) => member.active && member.userId !== profile?.userId)
+    .sort((a, b) => Number(b.role === 'ADMIN') - Number(a.role === 'ADMIN') || a.name.localeCompare(b.name)) ?? []
+
+  const handleOwnerAction = async () => {
+    if (!activeConvId || !ownerAction || ownerActionBusy || (ownerAction === 'leave' && !successorId)) return
+    setOwnerActionBusy(true)
+    setOwnerActionError('')
+    try {
+      if (ownerAction === 'leave') {
+        await leaveGroupWithSuccessor(activeConvId, successorId)
+        setActiveConvId(null)
+        setSearchParams({})
+      } else {
+        await closeChatGroup(activeConvId)
+        setShowArchived(true)
+        if (window.matchMedia('(max-width: 768px)').matches) setShowDetails(false)
+      }
+      setOwnerAction(null)
+    } catch (error) {
+      setOwnerActionError(error instanceof Error ? error.message : 'Không thể hoàn tất thao tác. Vui lòng thử lại.')
+    } finally {
+      setOwnerActionBusy(false)
     }
   }
 
@@ -344,7 +385,7 @@ export function ChatPage() {
                     {activeConversation.displayName || activeConversation.title || 'Đoạn chat'}
                   </h2>
                   <small style={{ color: 'var(--text-3)', fontSize: 12 }}>
-                    {isGroup
+                    {activeConversation.closedAt ? 'Đã giải tán · chỉ đọc' : isGroup
                       ? `${activeConversation.members.filter((m) => m.active).length} thành viên`
                       : directPeer?.online ? 'Đang hoạt động' : directPeer?.lastActiveAt
                         ? `Hoạt động ${formatRelativeTime(directPeer.lastActiveAt)}` : 'Ngoại tuyến'}
@@ -362,22 +403,25 @@ export function ChatPage() {
             {messageSearch && <div className="chat-search-results"><div><strong>Kết quả cho “{messageSearch}”</strong><button type="button" onClick={() => { setMessageSearch(''); setMessageResults([]) }}><X size={15} /></button></div>{messageResults.length ? messageResults.map((result) => <button type="button" key={result.id} onClick={() => document.querySelector<HTMLElement>(`[data-message-id="${result.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}><strong>{result.sender?.name}</strong><span>{result.content}</span><time>{formatShortTime(result.createdAt)}</time></button>) : <small>Không tìm thấy tin nhắn.</small>}</div>}
 
             <MessageList conversationId={activeConversation.conversationId} />
-            <MessageComposer conversationId={activeConversation.conversationId} />
+            {activeConversation.closedAt ? <div role="status" style={{ padding: 16, textAlign: 'center', color: 'var(--text-3)' }}>Nhóm đã giải tán. Lịch sử được lưu trữ chỉ đọc.</div> : <MessageComposer conversationId={activeConversation.conversationId} />}
           </>
         ) : (
           <div className="chat-empty-thread">
             <ChatAvatar name="SmartLab" size="lg" />
             <h2 style={{ fontSize: 18, color: 'var(--text-1)' }}>Hệ thống tin nhắn SmartLab</h2>
             <p style={{ maxWidth: 360, textAlign: 'center' }}>
-              Chọn một cuộc hội thoại từ danh sách bên trái hoặc tạo đoạn chat mới để bắt đầu trao đổi công việc và nghiên cứu.
+              {activeConvId && !loadingConversations
+                ? 'Cuộc trò chuyện không tồn tại hoặc bạn không có quyền truy cập.'
+                : 'Chọn một cuộc hội thoại từ danh sách bên trái hoặc tạo đoạn chat mới để bắt đầu trao đổi công việc và nghiên cứu.'}
             </p>
           </div>
         )}
       </main>
 
-      {/* 3. RIGHT SIDEBAR: Conversation Details (Desktop only) */}
+      {/* 3. Conversation Details: sidebar on desktop, overlay on mobile */}
       {activeConversation && showDetails && (
-        <aside className="chat-page-details" aria-label="Chi tiết cuộc trò chuyện">
+        <aside className="chat-page-details is-mobile-open" aria-label="Chi tiết cuộc trò chuyện">
+          <button type="button" className="chat-icon-action-btn chat-details-mobile-close" aria-label="Đóng thông tin cuộc trò chuyện" onClick={() => setShowDetails(false)}><X size={18} /></button>
           <div className="chat-page-details-head">
             <ChatAvatar
               name={activeConversation.displayName || activeConversation.title || 'Chat'}
@@ -416,7 +460,7 @@ export function ChatPage() {
                 <span className="chat-page-details-title">
                   {activeConversation.displayName || activeConversation.title}
                 </span>
-                {isGroup && isManager && (
+                {isGroup && isManager && !activeConversation.closedAt && (
                   <button
                     type="button"
                     className="chat-icon-action-btn"
@@ -435,14 +479,14 @@ export function ChatPage() {
             )}
 
             <p style={{ color: 'var(--text-3)', fontSize: 12, marginTop: 4 }}>
-              {isGroup ? 'Nhóm thảo luận nội bộ' : 'Cuộc trò chuyện trực tiếp'}
+              {activeConversation.closedAt ? 'Nhóm đã giải tán · lưu trữ chỉ đọc' : isGroup ? 'Nhóm thảo luận nội bộ' : 'Cuộc trò chuyện trực tiếp'}
             </p>
           </div>
 
           <div className="chat-conversation-preferences">
             <button type="button" onClick={() => void updateConversationPreferences(activeConversation.conversationId, { pinned: !activeConversation.pinned })}>{activeConversation.pinned ? <PinOff size={16} /> : <Pin size={16} />}{activeConversation.pinned ? 'Bỏ ghim' : 'Ghim cuộc trò chuyện'}</button>
             <button type="button" onClick={async () => { if (activeConversation.muted && typeof Notification !== 'undefined' && Notification.permission === 'default') await Notification.requestPermission(); await updateConversationPreferences(activeConversation.conversationId, { muted: !activeConversation.muted }) }}>{activeConversation.muted ? <Bell size={16} /> : <BellOff size={16} />}{activeConversation.muted ? 'Bật thông báo' : 'Tắt thông báo'}</button>
-            <button type="button" onClick={() => { void updateConversationPreferences(activeConversation.conversationId, { archived: !activeConversation.archived }); handleBackToList() }}><Archive size={16} />{activeConversation.archived ? 'Bỏ lưu trữ' : 'Lưu trữ'}</button>
+            {!activeConversation.closedAt && <button type="button" onClick={() => { void updateConversationPreferences(activeConversation.conversationId, { archived: !activeConversation.archived }); handleBackToList() }}><Archive size={16} />{activeConversation.archived ? 'Bỏ lưu trữ' : 'Lưu trữ'}</button>}
           </div>
 
           {/* Group Members Section */}
@@ -452,7 +496,7 @@ export function ChatPage() {
                 <strong style={{ fontSize: 13, color: 'var(--text-1)' }}>
                   Thành viên ({activeConversation.members.filter((m) => m.active).length})
                 </strong>
-                {isManager && (
+                {isManager && !activeConversation.closedAt && (
                   <button
                     type="button"
                     className="chat-see-all-link"
@@ -512,11 +556,11 @@ export function ChatPage() {
                   .filter((m) => m.active)
                   .map((member) => {
                     const isTargetSelf = member.userId === profile?.userId
-                    const canRemoveThisMember =
-                      isTargetSelf ||
+                    const canRemoveThisMember = !activeConversation.closedAt && (
+                      (isTargetSelf && member.role !== 'OWNER') ||
                       (isOwner && member.role !== 'OWNER') ||
-                      (userRole === 'ADMIN' && member.role === 'MEMBER')
-                    const canChangeRole = isOwner && !isTargetSelf
+                      (userRole === 'ADMIN' && member.role === 'MEMBER'))
+                    const canChangeRole = isOwner && !isTargetSelf && !activeConversation.closedAt
 
                     return (
                       <div key={member.userId} className="chat-page-member-row">
@@ -561,9 +605,37 @@ export function ChatPage() {
                     )
                   })}
               </div>
+              {isOwner && !activeConversation.closedAt && (
+                <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+                  <button type="button" className="btn sm" onClick={() => { setOwnerActionError(''); setSuccessorId(successorCandidates[0]?.userId ?? ''); setOwnerAction('leave') }}>Rời nhóm</button>
+                  <button type="button" className="btn sm" style={{ color: 'var(--danger)' }} onClick={() => { setOwnerActionError(''); setOwnerAction('dissolve') }}>Giải tán nhóm</button>
+                </div>
+              )}
             </div>
           )}
         </aside>
+      )}
+
+      {ownerAction && activeConversation && (
+        <div role="dialog" aria-modal="true" aria-label={ownerAction === 'leave' ? 'Chỉ định trưởng nhóm kế nhiệm' : 'Xác nhận giải tán nhóm'}
+          style={{ position: 'fixed', inset: 0, zIndex: 2100, background: 'rgba(10, 27, 51, 0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ width: 420, maxWidth: '100%', background: 'var(--surface)', borderRadius: 'var(--r-lg)', padding: 20 }}>
+            <h2 style={{ fontSize: 18 }}>{ownerAction === 'leave' ? 'Rời nhóm và chuyển trưởng nhóm' : 'Giải tán nhóm?'}</h2>
+            {ownerAction === 'leave' ? <>
+              <p>Chọn một thành viên còn trong nhóm làm trưởng nhóm mới. Sau khi rời, bạn sẽ không còn quyền truy cập cuộc trò chuyện.</p>
+              {successorCandidates.length ? <select aria-label="Chọn trưởng nhóm kế nhiệm" value={successorId} onChange={(event) => setSuccessorId(event.target.value)} style={{ width: '100%', padding: 8 }}>
+                {successorCandidates.map((member) => <option key={member.userId} value={member.userId}>{member.name} ({member.role === 'ADMIN' ? 'Quản trị viên' : 'Thành viên'})</option>)}
+              </select> : <p>Chưa có thành viên khác. Bạn có thể giải tán nhóm thay vì rời.</p>}
+            </> : <p>Nhóm sẽ đóng vĩnh viễn. Những người đang là thành viên vẫn tìm và đọc được tin nhắn, tệp cũ trong mục Đã lưu trữ, nhưng không thể gửi hay chỉnh sửa nữa. Người đã rời trước đó không được cấp lại quyền truy cập.</p>}
+            {ownerActionError && <p role="alert" style={{ color: 'var(--danger)' }}>{ownerActionError}</p>}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
+              <button type="button" className="btn sm" disabled={ownerActionBusy} onClick={() => setOwnerAction(null)}>Hủy</button>
+              <button type="button" className="btn sm" disabled={ownerActionBusy || (ownerAction === 'leave' && !successorId)} onClick={() => void handleOwnerAction()}>
+                {ownerActionBusy ? 'Đang xử lý...' : ownerAction === 'leave' ? 'Xác nhận rời nhóm' : 'Xác nhận giải tán'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* New Chat Modal Dialog */}

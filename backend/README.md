@@ -24,6 +24,10 @@ database:
 16. `sql/016_content_category_description_seed.sql`
 17. `sql/017_seed_100_projects.sql`
 18. `sql/018_document_categories.sql`
+19. `sql/019_realtime_chat_foundation.sql`
+20. `sql/020_chat_messenger_features.sql`
+21. `sql/021_chat_attachment_access.sql`
+22. `sql/022_chat_group_lifecycle.sql`
 
 These are manual, operator-executed SQL migrations. The repository does not
 contain Flyway, Liquibase, or another automatic numbered migration runner.
@@ -35,7 +39,8 @@ passwords in shell history, command output, tickets, or documentation.
 
 ## Fresh bootstrap and current-lineage upgrades
 
-On an empty database, apply `001` through `017` in numeric order. `001` creates
+On an empty database, apply the numbered migrations in order after checking
+the prerequisites below. `001` creates
 the current backend schema, roles, permissions, and foundational seed data;
 `002` adds the social-feed reaction and comment tables. Both scripts are
 designed to be re-run safely for the current `001`/`002` lineage.
@@ -72,6 +77,20 @@ The later migrations extend that foundation:
   document categories and assignment indexes, and the `DOCUMENT_MANAGE`
   permission. Re-running it preserves customized category and permission
   fields and does not rewrite archive dates after the initial backfill.
+- `019` creates persistent direct/group conversations, membership, messages,
+  read watermarks, attachment links and chat indexes.
+- `020` extends messages with forwarding, reactions, polls and the messenger
+  interaction contract. Apply after `019`.
+- `021` adds the conversation-scoped `CHAT` file access value and changes
+  every existing file linked to a chat message from its previous scope to
+  `CHAT`. Apply after `020`, with a backup and an audit for files
+  also referenced outside chat. The migration aborts if it finds a known
+  non-chat relational reference rather than silently changing its audience.
+  Audit embedded file IDs in rich content separately before deployment.
+  Access is then limited to current members of a conversation containing a
+  non-deleted message with the attachment; a
+  global administrator has no implicit access to private chat files.
+
 
 ### Migration 010 prerequisite and lineage decision
 
@@ -187,9 +206,49 @@ objects in `public` are not included.
 ## Verification workflow
 
 Use a new disposable PostgreSQL database for a migration rehearsal. Apply the
-approved `001` through `017` fresh-install sequence, then inspect the resulting
+approved applicable migrations through `022` in order, then inspect the resulting
 schema, enum checks, role seed, permission count, role-permission count, grants,
 and affected endpoint health. Re-run only migrations whose source explicitly
 documents idempotent behavior. Do not point a rehearsal at an existing
 SmartLab database unless it is an explicitly approved and classified upgrade
 target.
+
+## Messenger verification on an isolated database
+
+The PostgreSQL integration tests for chat assert the exact disposable database
+name `smartlab_chat_it` before creating fixtures. Apply the applicable
+migrations there first. From `backend/`, set `DB_URL` to
+`jdbc:postgresql://localhost:5432/smartlab_chat_it` and run:
+
+`mvn -Dtest=RealtimeChatConcurrencyPostgresIntegrationTest,RealtimeChatWebSocketPostgresIntegrationTest,ChatServiceImplTest,FileServiceImplTest,ChatAttachmentAccessMigrationContractTest test`
+
+The frontend Playwright live suite uses the running backend on this isolated
+database and real test accounts, not intercepted API/socket responses. The
+separate `frontend/e2e/chat.spec.ts` suite deliberately mocks transport for
+UI race and failure-state tests. Other backend PostgreSQL integration suites
+require their own dedicated databases; do not run all suites against this chat
+database or interpret those database guards as chat failures.
+
+## Messenger group lifecycle
+
+`022` adds `closed_at` and a unique active-owner index. Its preflight refuses
+active groups without exactly one owner; audit before applying. Owner exit
+requires an explicitly selected active successor and atomically revokes the
+former owner. Dissolution is owner-only, permanent and read-only: existing
+active members retain searchable history and chat-file access, while former
+members do not regain access. No new sends, edits, deletes, reactions, votes, forwarding,
+member or title changes are allowed. Per-user archive remains independent.
+
+## Messenger deployment boundary
+
+Chat CONNECT validates the JWT and login session. Subsequent SEND/SUBSCRIBE
+frames and private outbound messages also check whether that login session is
+still active, so revocation takes effect for an already connected socket.
+
+The current WebSocket setup uses Spring's in-process simple broker, and
+presence is held in the backend process. Durable messages and reconnect
+catch-up use PostgreSQL, but live fan-out and presence are **single-instance**.
+Do not run multiple backend replicas behind a load balancer and assume
+cross-node realtime delivery works; deploy a broker relay/shared presence
+before making that availability claim. Live browser verification here also does
+not exercise the production Google Drive file-storage credentials.

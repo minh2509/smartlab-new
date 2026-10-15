@@ -13,6 +13,22 @@ import java.util.Collection;
 public interface ChatMessageFileRepository extends JpaRepository<ChatMessageFileEntity, Long> {
     List<ChatMessageFileEntity> findByMessageIdOrderByPositionAscIdAsc(Long messageId);
 
+    boolean existsByFile_Id(Long fileId);
+
+    @Query("""
+            select count(cm.id)
+            from ChatMessageFileEntity mf, ChatConversationMemberEntity cm
+            where mf.file.id = :fileId
+              and mf.message.deletedAt is null
+              and cm.conversation.id = mf.message.conversation.id
+              and lower(cm.user.email) = lower(:email)
+              and cm.leftAt is null
+            """)
+    long countActiveMembershipsForFile(
+            @Param("fileId") Long fileId,
+            @Param("email") String email
+    );
+
     @Query("""
             select mf
             from ChatMessageFileEntity mf

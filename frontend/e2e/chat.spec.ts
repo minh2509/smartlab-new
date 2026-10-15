@@ -141,7 +141,7 @@ async function setupMockChatRoutes(
   options?: {
     initialUnread?: number
     rejectSocket?: boolean
-    onWebSocketConnected?: (sendRealtimeEvent: (envelope: any) => void) => void
+    onWebSocketConnected?: (sendRealtimeEvent: (envelope: any) => void, disconnect: () => void) => void
   },
 ) {
   await page.addInitScript(() => {
@@ -263,7 +263,7 @@ async function setupMockChatRoutes(
               ws.send(
                 `MESSAGE\ndestination:/user/queue/chat\nsubscription:${subId}\nmessage-id:msg-${Date.now()}\ncontent-type:application/json\n\n${JSON.stringify(envelope)}\0`,
               )
-            })
+            }, () => ws.close({ code: 1000 }))
           }
         }
       })
@@ -620,6 +620,126 @@ test.describe('SmartLab Realtime Chat Automation Suite', () => {
     await expect(popupA.getByText('Chào bạn nhé')).toBeVisible()
   })
 
+  test('15b. late history response does not erase a sent message', async ({ page }) => {
+    await setupMockChatRoutes(page)
+    let releaseHistory!: () => void
+    let historyStarted!: () => void
+    const gate = new Promise<void>((resolve) => { releaseHistory = resolve })
+    const started = new Promise<void>((resolve) => { historyStarted = resolve })
+    await page.route('**/api/v1.0/chat/conversations/conv-a/messages*', async (route) => {
+      if (route.request().method() === 'GET' && !new URL(route.request().url()).searchParams.has('afterSeq')) {
+        historyStarted()
+        await gate
+      }
+      await route.fallback()
+    })
+    await page.goto('/')
+    await openConvFromHeader(page, 'Thành viên B')
+    await started
+    const popup = page.locator('.chat-popup-window[data-conversation-id="conv-a"]')
+    await popup.getByRole('textbox', { name: /soạn tin nhắn/i }).fill('Gửi trong khi lịch sử đang tải')
+    await popup.getByRole('button', { name: /gửi tin nhắn/i }).click()
+    await expect(popup.getByText('Gửi trong khi lịch sử đang tải')).toBeVisible()
+    releaseHistory()
+    await expect(popup.getByText('Chào buổi sáng!')).toBeVisible()
+    await expect(popup.getByText('Gửi trong khi lịch sử đang tải')).toHaveCount(1)
+  })
+
+  test('15c. reopening a conversation retains already loaded older messages', async ({ page }) => {
+    await setupMockChatRoutes(page)
+    await page.route('**/api/v1.0/chat/conversations/conv-a/messages*', async (route) => {
+      if (route.request().method() !== 'GET') return route.fallback()
+      const older = new URL(route.request().url()).searchParams.has('beforeSeq')
+      const seq = older ? 1 : 2
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        messages: [{ id: seq + 100, conversationId: 'conv-a', messageSeq: seq,
+          sender: { userId: 'user-02', name: 'Thành viên B' }, clientMessageId: `old-${seq}`,
+          messageType: 'TEXT', content: older ? 'Lịch sử đã tải' : 'Tin nhắn mới nhất',
+          replyToMessageId: null, files: [], reactions: [], metadataJson: null,
+          createdAt: '2026-10-01T08:00:00Z', editedAt: null, deletedAt: null }],
+        nextBeforeSeq: older ? null : 2, nextAfterSeq: null, hasMore: !older,
+      }) })
+    })
+    await page.goto('/')
+    await openConvFromHeader(page, 'Thành viên B')
+    const popup = page.locator('.chat-popup-window[data-conversation-id="conv-a"]')
+    await popup.getByRole('button', { name: 'Tải thêm tin nhắn cũ' }).click()
+    await expect(popup.getByText('Lịch sử đã tải')).toBeVisible()
+    await popup.getByRole('button', { name: 'Đóng cửa sổ chat' }).click()
+    await openConvFromHeader(page, 'Thành viên B')
+    await expect(popup.getByText('Tin nhắn mới nhất')).toBeVisible()
+    await expect(popup.getByText('Lịch sử đã tải')).toBeVisible()
+    await expect(popup.getByText('Lịch sử đã tải')).toHaveCount(1)
+  })
+  test('15d. committed realtime message stays sent when its HTTP response is lost', async ({ page }) => {
+    let sendEvent: ((envelope: any) => void) | null = null
+    let releaseHttp!: () => void
+    const gate = new Promise<void>((resolve) => { releaseHttp = resolve })
+    await setupMockChatRoutes(page, { onWebSocketConnected: (sender) => { sendEvent = sender } })
+    await page.route('**/api/v1.0/chat/conversations/conv-a/messages', async (route) => {
+      if (route.request().method() !== 'POST') return route.fallback()
+      const request = route.request().postDataJSON()
+      sendEvent!({
+        event: 'chat.message.created', eventId: 'evt-committed-http-lost',
+        occurredAt: new Date().toISOString(), conversationId: 'conv-a',
+        data: {
+          id: 888, conversationId: 'conv-a', messageSeq: 6,
+          sender: { userId: 'user-01', name: 'Nguyễn Văn A' },
+          clientMessageId: request.clientMessageId, messageType: 'TEXT', content: request.content,
+          replyToMessageId: null, files: [], reactions: [], metadataJson: null,
+          createdAt: new Date().toISOString(), editedAt: null, deletedAt: null,
+        },
+      })
+      await gate
+      await route.fulfill({ status: 502, contentType: 'application/json', body: '{"message":"response lost"}' })
+    })
+    await page.goto('/')
+    await openConvFromHeader(page, 'Thành viên B')
+    await expect.poll(() => sendEvent !== null).toBeTruthy()
+    const popup = page.locator('.chat-popup-window[data-conversation-id="conv-a"]')
+    await popup.getByRole('textbox', { name: /soạn tin nhắn/i }).fill('Đã lưu nhưng mất HTTP')
+    await popup.getByRole('button', { name: /gửi tin nhắn/i }).click()
+    const row = popup.locator('.chat-msg-row', { hasText: 'Đã lưu nhưng mất HTTP' })
+    await expect(row.locator('.lucide-check-check')).toBeVisible()
+    const lostResponse = page.waitForResponse((response) => response.url().includes('/conv-a/messages') && response.status() === 502)
+    releaseHttp()
+    await lostResponse
+    await expect(row.getByText('Gửi thất bại')).toHaveCount(0)
+    await expect(row.locator('.lucide-check-check')).toBeVisible()
+    await expect(popup.getByText('Đã lưu nhưng mất HTTP')).toHaveCount(1)
+  })
+  test('15e. chat attachment uploads privately before sending file id', async ({ page }) => {
+    await setupMockChatRoutes(page)
+    let uploadScope = ''
+    let sentFileIds: number[] = []
+    await page.route('**/api/v1.0/files/upload', async (route) => {
+      const multipart = route.request().postData() ?? ''
+      uploadScope = multipart.includes('name="accessScope"\r\n\r\nPRIVATE') ? 'PRIVATE' : 'incorrect'
+      await route.fulfill({ status: 201, contentType: 'application/json',
+        body: JSON.stringify({ id: 777, originalName: 'notes.txt', mimeType: 'text/plain', sizeBytes: 5, accessScope: 'PRIVATE' }) })
+    })
+    await page.route('**/api/v1.0/chat/conversations/conv-a/messages*', async (route) => {
+      if (route.request().method() !== 'POST') return route.fallback()
+      const body = route.request().postDataJSON()
+      sentFileIds = body.fileIds
+      await route.fulfill({ status: 201, contentType: 'application/json',
+        body: JSON.stringify({ id: 778, conversationId: 'conv-a', messageSeq: 6,
+          sender: { userId: 'user-01', name: 'Nguyễn Văn A' }, clientMessageId: body.clientMessageId,
+          messageType: 'FILE', content: null, replyToMessageId: null, metadataJson: null, reactions: [],
+          files: [{ fileId: 777, originalName: 'notes.txt', mimeType: 'text/plain', sizeBytes: 5, accessScope: 'CHAT' }],
+          createdAt: new Date().toISOString(), editedAt: null, deletedAt: null }) })
+    })
+    await page.goto('/')
+    await openConvFromHeader(page, 'Thành viên B')
+    const popup = page.locator('.chat-popup-window[data-conversation-id="conv-a"]')
+    await popup.locator('input[type=file]').setInputFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('hello') })
+    await expect(popup.getByText('notes.txt')).toBeVisible()
+    await popup.getByRole('button', { name: /gửi tin nhắn/i }).click()
+    await expect(popup.locator('.chat-file-chip').getByText('notes.txt')).toBeVisible()
+    expect(uploadScope).toBe('PRIVATE')
+    expect(sentFileIds).toEqual([777])
+  })
+
   test('16. failed send: sending -> failed -> retry', async ({ page }) => {
     await setupMockChatRoutes(page, { rejectSocket: true })
     let shouldFail = true
@@ -846,6 +966,60 @@ test.describe('SmartLab Realtime Chat Automation Suite', () => {
     await expect(page.locator('.chat-popup-window[data-conversation-id="conv-a"]')).toBeVisible()
   })
 
+  test('18b. reconnect drains multiple catch-up pages exactly once', async ({ page }) => {
+    let disconnect: (() => void) | null = null
+    const cursors: number[] = []
+    await setupMockChatRoutes(page, { onWebSocketConnected: (_send, close) => { disconnect = close } })
+    await page.route('**/api/v1.0/chat/conversations/conv-a/messages*', async (route) => {
+      const cursor = new URL(route.request().url()).searchParams.get('afterSeq')
+      if (cursor === null) return route.fallback()
+      cursors.push(Number(cursor))
+      const seq = Number(cursor) + 1
+      if (seq > 3) return route.fulfill({ status: 200, contentType: 'application/json',
+        body: JSON.stringify({ messages: [], hasMore: false, nextAfterSeq: null, nextBeforeSeq: null }) })
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        messages: [{ id: 100 + seq, conversationId: 'conv-a', messageSeq: seq,
+          sender: { userId: 'user-02', name: 'Thành viên B' }, clientMessageId: 'catchup-' + seq,
+          messageType: 'TEXT', content: 'missed-' + seq, files: [],
+          createdAt: new Date().toISOString(), editedAt: null, deletedAt: null }],
+        hasMore: seq < 3, nextAfterSeq: seq < 3 ? seq : null, nextBeforeSeq: null,
+      }) })
+    })
+    await page.goto('/')
+    await openConvFromHeader(page, 'Thành viên B')
+    await expect.poll(() => disconnect !== null).toBeTruthy()
+    disconnect!()
+    const popup = page.locator('.chat-popup-window[data-conversation-id="conv-a"]')
+    await expect(popup.getByText('missed-2')).toBeVisible({ timeout: 12_000 })
+    await expect(popup.getByText('missed-3')).toBeVisible()
+    await expect(popup.getByText('missed-2')).toHaveCount(1)
+    await expect(popup.getByText('missed-3')).toHaveCount(1)
+    expect(cursors).toEqual(expect.arrayContaining([1, 2]))
+  })
+
+  test('18c. forward command and realtime event render only one message', async ({ page }) => {
+    let sendEvent: ((envelope: any) => void) | null = null
+    await setupMockChatRoutes(page, { onWebSocketConnected: (send) => { sendEvent = send } })
+    await page.route('**/api/v1.0/chat/conversations/conv-a/messages/101/forward/conv-a', async (route) => {
+      const body = route.request().postDataJSON()
+      const message = { id: 888, conversationId: 'conv-a', messageSeq: 6,
+        sender: { userId: 'user-01', name: 'Nguyễn Văn A' }, clientMessageId: body.clientMessageId,
+        messageType: 'TEXT', content: 'Chào buổi sáng!', forwardedFromMessageId: 101,
+        files: [], reactions: [], createdAt: new Date().toISOString(), editedAt: null, deletedAt: null }
+      sendEvent!({ event: 'chat.message.created', eventId: 'forward-1',
+        occurredAt: new Date().toISOString(), conversationId: 'conv-a', data: message })
+      await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify(message) })
+    })
+    await page.goto('/')
+    await openConvFromHeader(page, 'Thành viên B')
+    await expect.poll(() => sendEvent !== null).toBeTruthy()
+    const popup = page.locator('.chat-popup-window[data-conversation-id="conv-a"]')
+    await popup.getByTitle('Tùy chọn').click()
+    await popup.getByRole('button', { name: 'Chuyển tiếp', exact: true }).click()
+    await popup.locator('.chat-forward-target', { hasText: 'Thành viên B' }).click()
+    await expect(popup.locator('.chat-forwarded-label')).toHaveCount(1)
+  })
+
   test('19. typing indicator expires', async ({ page }) => {
     let sendEvent: ((envelope: any) => void) | null = null
     await setupMockChatRoutes(page, {
@@ -892,6 +1066,18 @@ test.describe('SmartLab Realtime Chat Automation Suite', () => {
 
     await expect(popupHost).toBeHidden()
     await expect(dock).toBeHidden()
+  })
+
+  test('20b. mobile conversation opens the full chat route, not a hidden popup', async ({ page }) => {
+    await setupMockChatRoutes(page)
+    await page.setViewportSize({ width: 375, height: 667 })
+    await page.goto('/')
+
+    await openConvFromHeader(page, 'Thành viên B')
+
+    await expect(page).toHaveURL(/\/chat\?id=conv-a$/)
+    await expect(page.getByRole('main').getByText('Thành viên B').first()).toBeVisible()
+    await expect(page.locator('.chat-popup-host')).toBeHidden()
   })
 
   test('21. unauthenticated: chat UI/socket inactive', async ({ page }) => {

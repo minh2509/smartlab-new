@@ -308,7 +308,9 @@ public class ChatServiceImpl implements ChatService {
         if (request == null) throw badRequest("Message request is required");
         ChatConversationEntity conversation = conversationRepository.findByConversationIdForUpdate(conversationId)
                 .orElseThrow(() -> notFound("Conversation not found"));
-        requireActiveMembership(conversation.getConversationId(), currentUser.getId());
+        ChatConversationMemberEntity senderMembership = requireActiveMembershipForUpdate(
+                conversation.getConversationId(), currentUser.getId());
+        requireOpen(conversation);
 
         String clientMessageId = normalizeClientMessageId(request.clientMessageId());
         ChatMessageEntity existing = messageRepository
@@ -324,7 +326,7 @@ public class ChatServiceImpl implements ChatService {
         validateMessagePayload(request.messageType(), request.content(), request.fileIds());
         validateMetadata(request.messageType(), request.metadataJson());
         ChatMessageEntity replyTo = resolveReply(conversation, request.replyToMessageId());
-        List<StoredFileEntity> files = resolveAttachments(request.fileIds(), authentication);
+        List<StoredFileEntity> files = resolveAttachments(request.fileIds(), currentUser, authentication);
         long messageSeq = conversation.nextMessageSequence();
         ChatMessageEntity message = ChatMessageEntity.create(
                 conversation,
@@ -338,6 +340,8 @@ public class ChatServiceImpl implements ChatService {
                 normalizeMetadata(request.metadataJson())
         );
         messageRepository.saveAndFlush(message);
+        senderMembership.markRead(messageSeq);
+        memberRepository.saveAndFlush(senderMembership);
         for (int index = 0; index < files.size(); index++) {
             messageFileRepository.save(ChatMessageFileEntity.create(message, files.get(index), index));
         }
@@ -392,6 +396,7 @@ public class ChatServiceImpl implements ChatService {
         ChatConversationMemberEntity actor = requireActiveMembershipForUpdate(
                 conversation.getConversationId(), currentUser.getId());
         requireGroup(conversation);
+        requireOpen(conversation);
         requireManager(actor);
         conversation.rename(normalizeTitle(request == null ? null : request.title()));
         conversationRepository.saveAndFlush(conversation);
@@ -411,6 +416,7 @@ public class ChatServiceImpl implements ChatService {
         ChatConversationMemberEntity actor = requireActiveMembershipForUpdate(
                 conversation.getConversationId(), currentUser.getId());
         requireGroup(conversation);
+        requireOpen(conversation);
         requireManager(actor);
         String userId = normalizeUserId(request == null ? null : request.userId(), "User id is required");
         UserEntity target = userRepository.findByUserId(userId)
@@ -440,19 +446,71 @@ public class ChatServiceImpl implements ChatService {
         ChatConversationMemberEntity actor = requireActiveMembershipForUpdate(
                 conversation.getConversationId(), currentUser.getId());
         requireGroup(conversation);
-        requireManager(actor);
+        requireOpen(conversation);
         UserEntity target = userRepository.findByUserId(normalizeUserId(userId, "User id is required"))
                 .orElseThrow(() -> notFound("Conversation member not found"));
         ChatConversationMemberEntity member = memberRepository.findMembershipForUpdate(
                         conversation.getConversationId(), target.getId())
                 .orElseThrow(() -> notFound("Conversation member not found"));
+        boolean removingSelf = Objects.equals(currentUser.getId(), target.getId());
         if (member.getMembershipRole() == ChatMembershipRole.OWNER) {
-            throw conflict("The conversation owner cannot be removed");
+            throw conflict(removingSelf
+                    ? "The conversation owner cannot leave the group"
+                    : "The conversation owner cannot be removed");
         }
         if (!member.isActive()) return;
+        if (!removingSelf) {
+            requireManager(actor);
+            if (actor.getMembershipRole() == ChatMembershipRole.ADMIN
+                    && member.getMembershipRole() != ChatMembershipRole.MEMBER) {
+                throw forbidden("Conversation admins can only remove members");
+            }
+        }
         member.leave();
         memberRepository.saveAndFlush(member);
         publishMember("chat.member.removed", conversation, toMemberResponse(member), List.of(target.getEmail()));
+    }
+
+    @Override
+    @Transactional
+    public void leaveGroupWithSuccessor(String conversationId, String successorUserId,
+                                        Authentication authentication) {
+        UserEntity currentUser = currentUser(authentication);
+        ChatConversationEntity conversation = lockedConversation(conversationId);
+        requireGroup(conversation);
+        requireOpen(conversation);
+        ChatConversationMemberEntity owner = requireActiveMembershipForUpdate(conversationId, currentUser.getId());
+        requireOwner(owner);
+        String successorId = normalizeUserId(successorUserId, "Successor user id is required");
+        if (successorId.equals(currentUser.getUserId())) throw badRequest("Choose another active member");
+        UserEntity successorUser = userRepository.findByUserId(successorId)
+                .orElseThrow(() -> notFound("Successor not found"));
+        ChatConversationMemberEntity successor = requireActiveMembershipForUpdate(
+                conversationId, successorUser.getId());
+        requireActiveAccount(successorUser, "Successor account is inactive");
+        // DB partial unique index prevents two active owners even during a concurrent write.
+        owner.changeRole(ChatMembershipRole.MEMBER);
+        owner.leave();
+        memberRepository.saveAndFlush(owner);
+        successor.changeRole(ChatMembershipRole.OWNER);
+        memberRepository.saveAndFlush(successor);
+        publishMember("chat.member.role_changed", conversation, toMemberResponse(successor), List.of());
+        publishMember("chat.member.removed", conversation, toMemberResponse(owner), List.of(currentUser.getEmail()));
+    }
+
+    @Override
+    @Transactional
+    public ChatConversationResponse closeGroup(String conversationId, Authentication authentication) {
+        UserEntity currentUser = currentUser(authentication);
+        ChatConversationEntity conversation = lockedConversation(conversationId);
+        requireGroup(conversation);
+        requireOwner(requireActiveMembershipForUpdate(conversationId, currentUser.getId()));
+        if (conversation.getClosedAt() == null) {
+            conversation.close();
+            conversationRepository.saveAndFlush(conversation);
+            publishConversation("chat.conversation.updated", conversation);
+        }
+        return toConversationResponse(conversation, currentUser.getId());
     }
 
     @Override
@@ -468,7 +526,8 @@ public class ChatServiceImpl implements ChatService {
         ChatConversationMemberEntity actor = requireActiveMembershipForUpdate(
                 conversation.getConversationId(), currentUser.getId());
         requireGroup(conversation);
-        requireManager(actor);
+        requireOpen(conversation);
+        requireOwner(actor);
         if (request == null || request.role() == null || request.role() == ChatMembershipRole.OWNER) {
             throw badRequest("Only MEMBER or ADMIN can be assigned to a member");
         }
@@ -499,11 +558,16 @@ public class ChatServiceImpl implements ChatService {
     ) {
         UserEntity currentUser = currentUser(authentication);
         ChatConversationEntity conversation = lockedConversation(conversationId);
-        ChatConversationMemberEntity actor = requireActiveMembershipForUpdate(
+        requireActiveMembershipForUpdate(
                 conversation.getConversationId(), currentUser.getId());
+        requireOpen(conversation);
         ChatMessageEntity message = requireMessage(conversation, messageId);
         if (message.getDeletedAt() != null) throw conflict("Deleted messages cannot be edited");
-        if (!canChangeMessage(message, actor, currentUser)) {
+        if (message.getMessageType() != ChatMessageType.TEXT
+                && message.getMessageType() != ChatMessageType.MIXED) {
+            throw conflict("Only text messages can be edited");
+        }
+        if (!isMessageSender(message, currentUser)) {
             throw forbidden("You can only edit your own messages");
         }
         String content = normalizeContent(request == null ? null : request.content());
@@ -522,9 +586,10 @@ public class ChatServiceImpl implements ChatService {
         ChatConversationEntity conversation = lockedConversation(conversationId);
         ChatConversationMemberEntity actor = requireActiveMembershipForUpdate(
                 conversation.getConversationId(), currentUser.getId());
+        requireOpen(conversation);
         ChatMessageEntity message = requireMessage(conversation, messageId);
-        if (!canChangeMessage(message, actor, currentUser)) {
-            throw forbidden("You can only delete your own messages");
+        if (!canDeleteMessage(message, actor, currentUser)) {
+            throw forbidden("You do not have permission to delete this message");
         }
         if (message.getDeletedAt() != null) return;
         message.softDelete();
@@ -579,8 +644,9 @@ public class ChatServiceImpl implements ChatService {
             Authentication authentication
     ) {
         UserEntity currentUser = currentUser(authentication);
-        ChatConversationEntity conversation = requireConversation(conversationId);
+        ChatConversationEntity conversation = lockedConversation(conversationId);
         requireActiveMembership(conversationId, currentUser.getId());
+        requireOpen(conversation);
         ChatMessageEntity message = requireMessage(conversation, messageId);
         if (message.getDeletedAt() != null) throw conflict("Deleted messages cannot be reacted to");
         String emoji = request == null || request.emoji() == null ? "" : request.emoji().trim();
@@ -604,20 +670,46 @@ public class ChatServiceImpl implements ChatService {
             Authentication authentication
     ) {
         UserEntity currentUser = currentUser(authentication);
-        ChatConversationEntity source = requireConversation(sourceConversationId);
+        requireConversation(sourceConversationId);
         requireActiveMembership(sourceConversationId, currentUser.getId());
+        if (targetConversationId == null || targetConversationId.isBlank()) {
+            throw notFound("Target conversation not found");
+        }
+        // Lock both conversations in a stable order: closure of either one must
+        // serialize with forwarding, without deadlocking cross-forwards.
+        boolean sourceFirst = sourceConversationId.compareTo(targetConversationId) <= 0;
+        ChatConversationEntity first = lockedConversation(sourceFirst ? sourceConversationId : targetConversationId);
+        ChatConversationEntity second = sourceConversationId.equals(targetConversationId)
+                ? first : lockedConversation(sourceFirst ? targetConversationId : sourceConversationId);
+        ChatConversationEntity source = sourceFirst ? first : second;
+        ChatConversationEntity target = sourceFirst ? second : first;
+        requireOpen(source);
+        ChatConversationMemberEntity senderMembership = requireActiveMembershipForUpdate(
+                targetConversationId, currentUser.getId());
+        requireOpen(target);
         ChatMessageEntity original = requireMessage(source, messageId);
         if (original.getDeletedAt() != null || original.getMessageType() == ChatMessageType.SYSTEM) {
             throw conflict("This message cannot be forwarded");
         }
-        ChatConversationEntity target = conversationRepository.findByConversationIdForUpdate(targetConversationId)
-                .orElseThrow(() -> notFound("Target conversation not found"));
-        requireActiveMembership(targetConversationId, currentUser.getId());
         String clientMessageId = normalizeClientMessageId(request == null ? null : request.clientMessageId());
+        ChatMessageEntity existing = messageRepository
+                .findBySender_IdAndClientMessageId(currentUser.getId(), clientMessageId)
+                .orElse(null);
+        if (existing != null) {
+            if (!Objects.equals(existing.getConversation().getId(), target.getId())
+                    || existing.getForwardedFrom() == null
+                    || !Objects.equals(existing.getForwardedFrom().getId(), original.getId())) {
+                throw conflict("Client message id was already used for another message");
+            }
+            return toMessageResponse(existing, messageFiles(existing));
+        }
+        long messageSeq = target.nextMessageSequence();
         ChatMessageEntity forwarded = ChatMessageEntity.create(
-                target, target.nextMessageSequence(), currentUser, clientMessageId,
+                target, messageSeq, currentUser, clientMessageId,
                 original.getMessageType(), original.getContent(), null, original, original.getMetadataJson());
         messageRepository.saveAndFlush(forwarded);
+        senderMembership.markRead(messageSeq);
+        memberRepository.saveAndFlush(senderMembership);
         List<ChatMessageFileEntity> originalFiles = messageFiles(original);
         for (int i = 0; i < originalFiles.size(); i++) {
             messageFileRepository.save(ChatMessageFileEntity.create(forwarded, originalFiles.get(i).getFile(), i));
@@ -637,8 +729,9 @@ public class ChatServiceImpl implements ChatService {
             Authentication authentication
     ) {
         UserEntity currentUser = currentUser(authentication);
-        ChatConversationEntity conversation = requireConversation(conversationId);
+        ChatConversationEntity conversation = lockedConversation(conversationId);
         requireActiveMembership(conversationId, currentUser.getId());
+        requireOpen(conversation);
         ChatMessageEntity message = messageRepository.findByIdForUpdate(messageId)
                 .orElseThrow(() -> notFound("Poll not found"));
         if (!Objects.equals(message.getConversation().getId(), conversation.getId())
@@ -686,6 +779,7 @@ public class ChatServiceImpl implements ChatService {
         UserEntity currentUser = currentUser(authentication);
         ChatConversationEntity conversation = requireConversation(conversationId);
         requireActiveMembership(conversation.getConversationId(), currentUser.getId());
+        requireOpen(conversation);
         if (request == null) throw badRequest("Typing request is required");
         ChatTypingEventData data = new ChatTypingEventData(
                 conversation.getConversationId(), userSummary(currentUser));
@@ -748,10 +842,20 @@ public class ChatServiceImpl implements ChatService {
         }
     }
 
+    private void requireOpen(ChatConversationEntity conversation) {
+        if (conversation.getClosedAt() != null) throw conflict("This group is closed and read-only");
+    }
+
     private void requireManager(ChatConversationMemberEntity member) {
         if (member.getMembershipRole() != ChatMembershipRole.OWNER
                 && member.getMembershipRole() != ChatMembershipRole.ADMIN) {
             throw forbidden("Conversation management permission is required");
+        }
+    }
+
+    private void requireOwner(ChatConversationMemberEntity member) {
+        if (member.getMembershipRole() != ChatMembershipRole.OWNER) {
+            throw forbidden("Conversation owner permission is required");
         }
     }
 
@@ -765,12 +869,19 @@ public class ChatServiceImpl implements ChatService {
         return message;
     }
 
-    private boolean canChangeMessage(
+    private boolean isMessageSender(
+            ChatMessageEntity message,
+            UserEntity currentUser
+    ) {
+        return message.getSender() != null && Objects.equals(message.getSender().getId(), currentUser.getId());
+    }
+
+    private boolean canDeleteMessage(
             ChatMessageEntity message,
             ChatConversationMemberEntity actor,
             UserEntity currentUser
     ) {
-        return message.getSender() != null && Objects.equals(message.getSender().getId(), currentUser.getId())
+        return isMessageSender(message, currentUser)
                 || actor.getMembershipRole() == ChatMembershipRole.OWNER
                 || actor.getMembershipRole() == ChatMembershipRole.ADMIN;
     }
@@ -787,6 +898,7 @@ public class ChatServiceImpl implements ChatService {
 
     private List<StoredFileEntity> resolveAttachments(
             List<Long> fileIds,
+            UserEntity currentUser,
             Authentication authentication
     ) {
         if (fileIds == null || fileIds.isEmpty()) return List.of();
@@ -800,8 +912,20 @@ public class ChatServiceImpl implements ChatService {
             if (!fileService.canRead(fileId, authentication)) {
                 throw forbidden("You do not have access to attachment file " + fileId);
             }
+            if (file.getOwnerUser() == null
+                    || !Objects.equals(file.getOwnerUser().getId(), currentUser.getId())) {
+                throw forbidden("Chat attachments must be uploaded by the message sender");
+            }
+            if (!"PRIVATE".equals(file.getAccessScope())) {
+                throw conflict("Chat attachments must have PRIVATE scope before sending");
+            }
+            if (storedFileRepository.hasNonChatReference(fileId)) {
+                throw conflict("A file already referenced outside chat cannot be attached to a message");
+            }
+            file.setAccessScope("CHAT");
             files.add(file);
         }
+        if (!files.isEmpty()) storedFileRepository.saveAll(files);
         return files;
     }
 
@@ -961,7 +1085,8 @@ public class ChatServiceImpl implements ChatService {
                 Math.max(0L, lastMessageSeq - lastReadSeq),
                 Boolean.TRUE.equals(currentMember.getPinned()),
                 Boolean.TRUE.equals(currentMember.getMuted()),
-                currentMember.getArchivedAt() != null,
+                currentMember.getArchivedAt() != null || conversation.getClosedAt() != null,
+                conversation.getClosedAt(),
                 conversation.getCreatedAt(),
                 conversation.getUpdatedAt()
         );
@@ -977,6 +1102,7 @@ public class ChatServiceImpl implements ChatService {
                         .map(this::toMemberResponse)
                         .toList(),
                 latestSequence(conversation),
+                conversation.getClosedAt(),
                 conversation.getUpdatedAt()
         );
     }
@@ -1040,9 +1166,11 @@ public class ChatServiceImpl implements ChatService {
                 message.getDeletedAt() == null ? message.getMetadataJson() : null,
                 grouped.entrySet().stream().map(entry -> new ChatReactionResponse(entry.getKey(), entry.getValue().size(),
                         entry.getValue().stream().map(r -> r.getUser().getUserId()).toList())).toList(),
-                files.stream().map(file -> new ChatMessageFileResponse(file.getFile().getId(),
-                        file.getFile().getOriginalName(), file.getFile().getMimeType(), file.getFile().getSizeBytes(),
-                        file.getFile().getAccessScope())).toList(), message.getCreatedAt(), message.getEditedAt(),
+                message.getDeletedAt() == null
+                        ? files.stream().map(file -> new ChatMessageFileResponse(file.getFile().getId(),
+                                file.getFile().getOriginalName(), file.getFile().getMimeType(), file.getFile().getSizeBytes(),
+                                file.getFile().getAccessScope())).toList()
+                        : List.of(), message.getCreatedAt(), message.getEditedAt(),
                 message.getDeletedAt());
     }
 

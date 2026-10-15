@@ -19,6 +19,7 @@ public record ChatConversationResponse(
         boolean pinned,
         boolean muted,
         boolean archived,
+        Instant closedAt,
         Instant createdAt,
         Instant updatedAt
 ) {

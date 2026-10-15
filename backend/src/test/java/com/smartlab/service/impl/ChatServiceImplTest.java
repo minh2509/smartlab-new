@@ -1,7 +1,9 @@
 package com.smartlab.service.impl;
 
+import com.smartlab.dto.request.ChangeChatMemberRoleRequest;
 import com.smartlab.dto.request.ChatReadRequest;
 import com.smartlab.dto.request.ChatSendMessageRequest;
+import com.smartlab.dto.request.EditChatMessageRequest;
 import com.smartlab.dto.response.ChatMessagePageResponse;
 import com.smartlab.dto.response.ChatMessageResponse;
 import com.smartlab.entity.ChatConversationEntity;
@@ -84,7 +86,7 @@ class ChatServiceImplTest {
         aliceMember = ChatConversationMemberEntity.create(conversation, alice, ChatMembershipRole.MEMBER);
         when(authentication.isAuthenticated()).thenReturn(true);
         when(authentication.getName()).thenReturn(alice.getEmail());
-        when(projectAccess.requireAuthenticatedUser(alice.getEmail())).thenReturn(alice);
+        lenient().when(projectAccess.requireAuthenticatedUser(alice.getEmail())).thenReturn(alice);
         lenient().when(permissions.hasInactiveAssignedRole(any(UserEntity.class))).thenReturn(false);
         lenient().when(messages.findLatest(anyLong(), any())).thenReturn(List.of());
         lenient().when(messageFiles.findByMessageIdOrderByPositionAscIdAsc(any())).thenReturn(List.of());
@@ -133,7 +135,7 @@ class ChatServiceImplTest {
         ReflectionTestUtils.setField(existing, "id", 101L);
         when(conversations.findByConversationIdForUpdate(conversation.getConversationId()))
                 .thenReturn(Optional.of(conversation));
-        when(members.findMembership(conversation.getConversationId(), alice.getId()))
+        when(members.findMembershipForUpdate(conversation.getConversationId(), alice.getId()))
                 .thenReturn(Optional.of(aliceMember));
         when(messages.findBySender_IdAndClientMessageId(alice.getId(), "client-1"))
                 .thenReturn(Optional.of(existing));
@@ -155,7 +157,7 @@ class ChatServiceImplTest {
                 conversation, bob, ChatMembershipRole.MEMBER);
         when(conversations.findByConversationIdForUpdate(conversation.getConversationId()))
                 .thenReturn(Optional.of(conversation));
-        when(members.findMembership(conversation.getConversationId(), alice.getId()))
+        when(members.findMembershipForUpdate(conversation.getConversationId(), alice.getId()))
                 .thenReturn(Optional.of(aliceMember));
         when(members.findActiveMembers(anyString())).thenReturn(List.of(aliceMember, bobMember));
         when(messages.findBySender_IdAndClientMessageId(alice.getId(), "client-2"))
@@ -189,7 +191,7 @@ class ChatServiceImplTest {
         aliceMember.leave();
         when(conversations.findByConversationIdForUpdate(conversation.getConversationId()))
                 .thenReturn(Optional.of(conversation));
-        when(members.findMembership(conversation.getConversationId(), alice.getId()))
+        when(members.findMembershipForUpdate(conversation.getConversationId(), alice.getId()))
                 .thenReturn(Optional.of(aliceMember));
 
         assertThatThrownBy(() -> service.sendMessage(
@@ -252,10 +254,10 @@ class ChatServiceImplTest {
         StoredFileEntity file = StoredFileEntity.builder()
                 .id(55L).originalName("report.pdf").mimeType("application/pdf")
                 .sizeBytes(10L).accessScope("PRIVATE").storageProvider("TEST")
-                .storageKey("report").ownerUser(bob).build();
+                .storageKey("report").ownerUser(alice).build();
         when(conversations.findByConversationIdForUpdate(conversation.getConversationId()))
                 .thenReturn(Optional.of(conversation));
-        when(members.findMembership(conversation.getConversationId(), alice.getId()))
+        when(members.findMembershipForUpdate(conversation.getConversationId(), alice.getId()))
                 .thenReturn(Optional.of(aliceMember));
         when(messages.findBySender_IdAndClientMessageId(anyLong(), eq("file-1")))
                 .thenReturn(Optional.empty());
@@ -270,6 +272,14 @@ class ChatServiceImplTest {
                 error -> assertThat(error.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN));
 
         when(fileService.canRead(55L, authentication)).thenReturn(true);
+        when(files.hasNonChatReference(55L)).thenReturn(true, false);
+        assertThatThrownBy(() -> service.sendMessage(
+                conversation.getConversationId(),
+                new ChatSendMessageRequest("file-shared", ChatMessageType.FILE, null, null, List.of(55L)),
+                authentication
+        )).isInstanceOfSatisfying(ResponseStatusException.class,
+                error -> assertThat(error.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+        assertThat(file.getAccessScope()).isEqualTo("PRIVATE");
         when(messages.saveAndFlush(any(ChatMessageEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
         ChatMessageResponse response = service.sendMessage(
                 conversation.getConversationId(),
@@ -277,7 +287,106 @@ class ChatServiceImplTest {
                 authentication
         );
         assertThat(response.messageType()).isEqualTo(ChatMessageType.FILE);
+        assertThat(file.getAccessScope()).isEqualTo("CHAT");
+        verify(files).saveAll(List.of(file));
         verify(messageFiles).save(any());
+    }
+
+    @Test
+    void regularMemberCanLeaveGroupButOwnerCannotLeaveWithoutTransferFeature() {
+        ChatConversationEntity group = groupConversation();
+        ChatConversationMemberEntity bobMember = ChatConversationMemberEntity.create(
+                group, bob, ChatMembershipRole.MEMBER);
+        authenticateAs(bob);
+        when(conversations.findByConversationIdForUpdate(group.getConversationId())).thenReturn(Optional.of(group));
+        when(members.findMembershipForUpdate(group.getConversationId(), bob.getId()))
+                .thenReturn(Optional.of(bobMember));
+        when(users.findByUserId(bob.getUserId())).thenReturn(Optional.of(bob));
+        when(members.findActiveMembers(group.getConversationId())).thenReturn(List.of());
+
+        service.removeMember(group.getConversationId(), bob.getUserId(), authentication);
+
+        assertThat(bobMember.isActive()).isFalse();
+
+        ChatConversationMemberEntity owner = ChatConversationMemberEntity.create(
+                group, alice, ChatMembershipRole.OWNER);
+        authenticateAs(alice);
+        when(members.findMembershipForUpdate(group.getConversationId(), alice.getId()))
+                .thenReturn(Optional.of(owner));
+        when(users.findByUserId(alice.getUserId())).thenReturn(Optional.of(alice));
+
+        assertThatThrownBy(() -> service.removeMember(
+                group.getConversationId(), alice.getUserId(), authentication))
+                .isInstanceOfSatisfying(ResponseStatusException.class, error -> {
+                    assertThat(error.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+                    assertThat(error.getReason()).contains("owner cannot leave");
+                });
+    }
+
+    @Test
+    void groupAdminCannotRemovePeerAdminOrChangeMemberRoles() {
+        UserEntity carol = user(3L, "carol", "carol@example.test");
+        ChatConversationEntity group = groupConversation();
+        ChatConversationMemberEntity bobAdmin = ChatConversationMemberEntity.create(
+                group, bob, ChatMembershipRole.ADMIN);
+        ChatConversationMemberEntity carolAdmin = ChatConversationMemberEntity.create(
+                group, carol, ChatMembershipRole.ADMIN);
+        authenticateAs(bob);
+        when(conversations.findByConversationIdForUpdate(group.getConversationId())).thenReturn(Optional.of(group));
+        when(members.findMembershipForUpdate(group.getConversationId(), bob.getId()))
+                .thenReturn(Optional.of(bobAdmin));
+        when(members.findMembershipForUpdate(group.getConversationId(), carol.getId()))
+                .thenReturn(Optional.of(carolAdmin));
+        when(users.findByUserId(carol.getUserId())).thenReturn(Optional.of(carol));
+
+        assertThatThrownBy(() -> service.removeMember(
+                group.getConversationId(), carol.getUserId(), authentication))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        error -> assertThat(error.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN));
+
+        assertThatThrownBy(() -> service.changeMemberRole(
+                group.getConversationId(), carol.getUserId(),
+                new ChangeChatMemberRoleRequest(ChatMembershipRole.MEMBER), authentication))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        error -> assertThat(error.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN));
+    }
+
+    @Test
+    void groupManagerMayDeleteButNeverEditAnotherUsersMessage() {
+        ChatConversationEntity group = groupConversation();
+        ChatConversationMemberEntity owner = ChatConversationMemberEntity.create(
+                group, alice, ChatMembershipRole.OWNER);
+        ChatMessageEntity message = ChatMessageEntity.create(
+                group, 1L, bob, "bob-message", ChatMessageType.TEXT, "original", null);
+        ReflectionTestUtils.setField(message, "id", 201L);
+        when(conversations.findByConversationIdForUpdate(group.getConversationId())).thenReturn(Optional.of(group));
+        when(members.findMembershipForUpdate(group.getConversationId(), alice.getId()))
+                .thenReturn(Optional.of(owner));
+        when(messages.findById(message.getId())).thenReturn(Optional.of(message));
+
+        assertThatThrownBy(() -> service.editMessage(
+                group.getConversationId(), message.getId(),
+                new EditChatMessageRequest("tampered"), authentication))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        error -> assertThat(error.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN));
+        assertThat(message.getContent()).isEqualTo("original");
+
+        service.deleteMessage(group.getConversationId(), message.getId(), authentication);
+
+        assertThat(message.getDeletedAt()).isNotNull();
+        verify(messages).saveAndFlush(message);
+    }
+
+    private ChatConversationEntity groupConversation() {
+        ChatConversationEntity group = ChatConversationEntity.createGroup("Research group", alice, null);
+        ReflectionTestUtils.setField(group, "id", 20L);
+        ReflectionTestUtils.setField(group, "conversationId", "group-1");
+        return group;
+    }
+
+    private void authenticateAs(UserEntity user) {
+        when(authentication.getName()).thenReturn(user.getEmail());
+        when(projectAccess.requireAuthenticatedUser(user.getEmail())).thenReturn(user);
     }
 
     private ChatMessageEntity message(long sequence, String content) {

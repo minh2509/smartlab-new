@@ -12,6 +12,7 @@ public record ChatConversationEventData(
         Long projectId,
         List<ChatMemberResponse> members,
         long lastMessageSeq,
+        Instant closedAt,
         Instant updatedAt
 ) {
 }

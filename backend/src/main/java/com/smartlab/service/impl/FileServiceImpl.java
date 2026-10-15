@@ -4,6 +4,7 @@ import com.smartlab.dto.response.FileResponse;
 import com.smartlab.entity.StoredFileEntity;
 import com.smartlab.entity.UserEntity;
 import com.smartlab.enums.FileAccessScope;
+import com.smartlab.repo.ChatMessageFileRepository;
 import com.smartlab.repo.DocumentRepository;
 import com.smartlab.repo.DocumentVersionRepository;
 import com.smartlab.repo.GalleryItemRepository;
@@ -76,6 +77,7 @@ public class FileServiceImpl implements FileService, PostContentFileService {
             (byte) 0xA1, (byte) 0xB1, 0x1A, (byte) 0xE1};
 
     private final StoredFileRepository storedFileRepository;
+    private final ChatMessageFileRepository chatMessageFileRepository;
     private final UserRepository userRepository;
     private final FileStorage fileStorage;
     private final MemberProfileRepository memberProfileRepository;
@@ -239,7 +241,8 @@ public class FileServiceImpl implements FileService, PostContentFileService {
                 || taskAttachmentRepository.existsByFile_IdAndTask_DeletedAtIsNull(fileId)
                 || researchFieldRepository.existsByCoverFile_Id(fileId)
                 || achievementFileRepository.existsActiveReferenceForActiveAchievement(fileId)
-                || galleryItemRepository.existsByFile_IdAndDeletedAtIsNull(fileId);
+                || galleryItemRepository.existsByFile_IdAndDeletedAtIsNull(fileId)
+                || chatMessageFileRepository.existsByFile_Id(fileId);
     }
 
     @Override
@@ -294,6 +297,9 @@ public class FileServiceImpl implements FileService, PostContentFileService {
         }
         if (galleryItemRepository.existsByFile_IdAndDeletedAtIsNull(id)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "File is currently owned by a gallery item");
+        }
+        if (chatMessageFileRepository.existsByFile_Id(id)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "File is retained by a chat message");
         }
         String storageKey = entity.getStorageKey();
         try {
@@ -369,6 +375,10 @@ public class FileServiceImpl implements FileService, PostContentFileService {
         }
         if (!isAuthenticated(authentication)) return false;
         if (scope == FileAccessScope.LAB) return true;
+        if (scope == FileAccessScope.CHAT) {
+            return chatMessageFileRepository.countActiveMembershipsForFile(
+                    entity.getId(), authentication.getName()) > 0;
+        }
         if (isAdmin(authentication)) return true;
         if (scope == FileAccessScope.PRIVATE) {
             return entity.getOwnerUser() != null
@@ -412,6 +422,12 @@ public class FileServiceImpl implements FileService, PostContentFileService {
 
     private String normalizeScope(String accessScope, Long projectId) {
         FileAccessScope normalized = FileAccessScope.from(accessScope, FileAccessScope.PRIVATE);
+        if (normalized == FileAccessScope.CHAT) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "CHAT scope is assigned automatically when a private upload is attached to a message"
+            );
+        }
         if (normalized == FileAccessScope.PROJECT && projectId == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "PROJECT files require a project id");
         }

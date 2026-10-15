@@ -259,6 +259,35 @@ class RealtimeChatWebSocketPostgresIntegrationTest {
     }
 
     @Test
+    void alreadyConnectedRevokedSessionCannotReceiveFurtherChatEvents() throws Exception {
+        SessionProbe aliceProbe = new SessionProbe();
+        SessionProbe bobProbe = new SessionProbe();
+        StompSession aliceSession = connect(alice, aliceProbe);
+        StompSession bobSession = connect(bob, bobProbe);
+        subscribe(aliceSession, aliceProbe);
+        subscribe(bobSession, bobProbe);
+
+        sendText(aliceSession, "before-revocation");
+        assertThat(messageData(awaitEvent(bobProbe, "chat.message.created")).path("content").asText())
+                .isEqualTo("before-revocation");
+        userSessionService.revokeSession(bob.sessionId());
+        assertThat(bobSession.isConnected()).isTrue();
+
+        sendText(aliceSession, "after-revocation");
+        assertThat(messageData(awaitEvent(aliceProbe, "chat.message.created")).path("content").asText())
+                .isEqualTo("before-revocation");
+        assertThat(messageData(awaitEvent(aliceProbe, "chat.message.created")).path("content").asText())
+                .isEqualTo("after-revocation");
+        assertThat(bobProbe.events.poll(NO_EVENT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)).isNull();
+
+        sendText(bobSession, "revoked-sender");
+        assertThat(aliceProbe.events.poll(NO_EVENT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)).isNull();
+        assertThat(jdbc.queryForObject(
+                "select last_message_seq from chat_conversations where conversation_id = ?",
+                Long.class, conversation.conversationId())).isEqualTo(2L);
+    }
+
+    @Test
     void readWatermarkAndWebSocketAuthenticationAreVerifiedAtRuntime() throws Exception {
         for (int index = 0; index < 10; index++) {
             HttpResponse<String> response = request(
@@ -270,15 +299,18 @@ class RealtimeChatWebSocketPostgresIntegrationTest {
             assertThat(response.statusCode()).isEqualTo(201);
         }
 
+        // Sending advances the sender's watermark; the recipient remains unread.
+        assertReadState(alice, 10L, 0L);
+        assertReadState(bob, 0L, 10L);
         assertThat(request("PATCH", "/chat/conversations/" + conversation.conversationId() + "/read",
-                alice.token(), "{\"lastReadSeq\":5}").statusCode()).isEqualTo(200);
-        assertReadState(5L, 5L);
+                bob.token(), "{\"lastReadSeq\":5}").statusCode()).isEqualTo(200);
+        assertReadState(bob, 5L, 5L);
         assertThat(request("PATCH", "/chat/conversations/" + conversation.conversationId() + "/read",
-                alice.token(), "{\"lastReadSeq\":3}").statusCode()).isEqualTo(200);
-        assertReadState(5L, 5L);
+                bob.token(), "{\"lastReadSeq\":3}").statusCode()).isEqualTo(200);
+        assertReadState(bob, 5L, 5L);
         assertThat(request("PATCH", "/chat/conversations/" + conversation.conversationId() + "/read",
-                alice.token(), "{\"lastReadSeq\":10}").statusCode()).isEqualTo(200);
-        assertReadState(10L, 0L);
+                bob.token(), "{\"lastReadSeq\":10}").statusCode()).isEqualTo(200);
+        assertReadState(bob, 10L, 0L);
         assertThat(request("PATCH", "/chat/conversations/" + conversation.conversationId() + "/read",
                 alice.token(), "{\"lastReadSeq\":11}").statusCode()).isEqualTo(400);
 
@@ -292,8 +324,8 @@ class RealtimeChatWebSocketPostgresIntegrationTest {
         expectConnectFailure(outsider.token());
     }
 
-    private void assertReadState(long lastReadSeq, long unreadCount) throws Exception {
-        HttpResponse<String> response = request("GET", "/chat/conversations", alice.token(), null);
+    private void assertReadState(TestUser user, long lastReadSeq, long unreadCount) throws Exception {
+        HttpResponse<String> response = request("GET", "/chat/conversations", user.token(), null);
         assertThat(response.statusCode()).isEqualTo(200);
         JsonNode item = objectMapper.readTree(response.body()).get(0);
         assertThat(item.path("lastMessageSeq").asLong()).isEqualTo(10L);
@@ -418,8 +450,11 @@ class RealtimeChatWebSocketPostgresIntegrationTest {
         String userId = label + "-" + suffix;
         String email = userId + "@smartlab.test";
         Long id = jdbc.queryForObject("""
-                insert into tbl_user (user_id, name, email, password, is_active, is_account_verified)
-                values (?, ?, ?, ?, true, true)
+                insert into tbl_user (
+                    user_id, name, email, password, is_active, is_account_verified,
+                    created_at, updated_at
+                )
+                values (?, ?, ?, ?, true, true, now(), now())
                 returning id
                 """, Long.class, userId, label, email, "not-used");
         userIds.add(id);

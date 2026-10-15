@@ -21,6 +21,7 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
 @Entity
@@ -57,6 +58,9 @@ public class ChatConversationEntity {
 
     @Column(name = "last_message_seq", nullable = false)
     private Long lastMessageSeq;
+
+    @Column(name = "closed_at")
+    private Instant closedAt;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -95,6 +99,10 @@ public class ChatConversationEntity {
 
     public void rename(String title) {
         this.title = title;
+    }
+
+    public void close() {
+        if (closedAt == null) closedAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
     }
 
     public static String buildDirectKey(Long firstUserId, Long secondUserId) {

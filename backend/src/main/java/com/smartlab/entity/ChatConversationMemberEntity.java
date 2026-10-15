@@ -102,6 +102,10 @@ public class ChatConversationMemberEntity {
         }
     }
 
+    public void changeRole(ChatMembershipRole role) {
+        this.membershipRole = role;
+    }
+
     public void rejoin(ChatMembershipRole role) {
         this.membershipRole = role;
         this.leftAt = null;

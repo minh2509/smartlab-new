@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ArrowRight, MessageSquarePlus, Search, X } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../auth/authContext'
 import { searchLabMembers } from '../api'
 import { useChat } from '../chatContext'
@@ -13,6 +13,7 @@ type ConversationPopoverProps = {
 }
 
 export function ConversationPopover({ isOpen, onClose }: ConversationPopoverProps) {
+  const navigate = useNavigate()
   const { token, profile } = useAuth()
   const { conversations, loadingConversations, openConversation, createDirectChat, createGroupChat } = useChat()
 
@@ -72,9 +73,17 @@ export function ConversationPopover({ isOpen, onClose }: ConversationPopoverProp
     }
   }
 
-  const handleSelectConversation = (conv: ChatConversationResponse) => {
-    openConversation(conv.conversationId)
+  const openSelectedConversation = (convId: string) => {
+    if (window.matchMedia('(max-width: 768px)').matches) {
+      navigate(`/chat?id=${encodeURIComponent(convId)}`)
+    } else {
+      openConversation(convId)
+    }
     onClose()
+  }
+
+  const handleSelectConversation = (conv: ChatConversationResponse) => {
+    openSelectedConversation(conv.conversationId)
   }
 
   const handleStartDirect = async (targetUserId: string) => {
@@ -83,8 +92,7 @@ export function ConversationPopover({ isOpen, onClose }: ConversationPopoverProp
     try {
       const conv = await createDirectChat(targetUserId)
       setShowNewModal(false)
-      openConversation(conv.conversationId)
-      onClose()
+      openSelectedConversation(conv.conversationId)
     } catch (err) {
       console.error('Failed to create direct chat:', err)
     } finally {

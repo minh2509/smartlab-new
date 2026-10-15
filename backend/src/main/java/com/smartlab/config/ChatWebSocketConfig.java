@@ -17,6 +17,7 @@ import java.util.List;
 public class ChatWebSocketConfig implements WebSocketMessageBrokerConfigurer {
     private final ChatHandshakeInterceptor handshakeInterceptor;
     private final ChatStompAuthInterceptor stompAuthInterceptor;
+    private final ChatStompOutboundAuthInterceptor outboundAuthInterceptor;
 
     @Value("${smartlab.cors.allowed-origins:http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173}")
     private List<String> allowedOrigins;
@@ -33,6 +34,11 @@ public class ChatWebSocketConfig implements WebSocketMessageBrokerConfigurer {
         registry.addEndpoint("/ws/chat")
                 .addInterceptors(handshakeInterceptor)
                 .setAllowedOrigins(allowedOrigins.toArray(String[]::new));
+    }
+
+    @Override
+    public void configureClientOutboundChannel(ChannelRegistration registration) {
+        registration.interceptors(outboundAuthInterceptor);
     }
 
     @Override

@@ -8,6 +8,7 @@ import java.util.Locale;
 public enum FileAccessScope {
     PUBLIC,
     LAB,
+    CHAT,
     PROJECT,
     PRIVATE;
 

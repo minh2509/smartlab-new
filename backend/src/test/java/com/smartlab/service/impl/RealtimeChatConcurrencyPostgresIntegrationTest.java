@@ -1,12 +1,16 @@
 package com.smartlab.service.impl;
 
 import com.smartlab.dto.request.ChatSendMessageRequest;
+import com.smartlab.dto.request.CreateGroupChatRequest;
+import com.smartlab.dto.request.ForwardChatMessageRequest;
 import com.smartlab.dto.response.ChatConversationResponse;
 import com.smartlab.dto.response.ChatMessageResponse;
 import com.smartlab.entity.UserEntity;
 import com.smartlab.enums.ChatMessageType;
 import com.smartlab.repo.UserRepository;
+import com.smartlab.repo.StoredFileRepository;
 import com.smartlab.service.ChatService;
+import com.smartlab.service.FileService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -15,6 +19,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.Authentication;
 import org.springframework.test.context.TestPropertySource;
 
@@ -31,6 +36,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 @TestPropertySource(properties = {
@@ -50,11 +56,18 @@ class RealtimeChatConcurrencyPostgresIntegrationTest {
     @Autowired
     private ChatService chatService;
 
+    @Autowired
+    private FileService fileService;
+
+    @Autowired
+    private StoredFileRepository storedFileRepository;
+
     @Value("${smartlab.test.target-database:smartlab_chat_it}")
     private String targetDatabase;
 
     private final Set<Long> userIds = new java.util.LinkedHashSet<>();
     private final Set<String> conversationIds = new java.util.LinkedHashSet<>();
+    private final Set<Long> fileIds = new java.util.LinkedHashSet<>();
     private UserEntity alice;
     private UserEntity bob;
     private Authentication aliceAuthentication;
@@ -84,11 +97,18 @@ class RealtimeChatConcurrencyPostgresIntegrationTest {
             jdbc.update("delete from chat_conversations where conversation_id = ?", conversationId);
         }
         for (Long userId : userIds) {
+            jdbc.update("delete from member_profiles where user_id = ?", userId);
+        }
+        for (Long fileId : fileIds) {
+            jdbc.update("delete from files where id = ?", fileId);
+        }
+        for (Long userId : userIds) {
             jdbc.update("delete from user_roles where user_id = ?", userId);
             jdbc.update("delete from user_permission_overrides where user_id = ?", userId);
             jdbc.update("delete from tbl_user where id = ?", userId);
         }
         conversationIds.clear();
+        fileIds.clear();
         userIds.clear();
     }
 
@@ -231,6 +251,300 @@ class RealtimeChatConcurrencyPostgresIntegrationTest {
         }
     }
 
+    @Test
+    void forwardingIsRetrySafeAndSenderReadWatermarkAdvances() {
+        ChatConversationResponse conversation = chatService.createDirect(bob.getUserId(), aliceAuthentication);
+        conversationIds.add(conversation.conversationId());
+        ChatMessageResponse original = chatService.sendMessage(conversation.conversationId(),
+                new ChatSendMessageRequest("source-" + UUID.randomUUID(),
+                        ChatMessageType.TEXT, "source", null, null), aliceAuthentication);
+        ChatMessageResponse other = chatService.sendMessage(conversation.conversationId(),
+                new ChatSendMessageRequest("other-" + UUID.randomUUID(),
+                        ChatMessageType.TEXT, "other", null, null), aliceAuthentication);
+        String clientId = "forward-" + UUID.randomUUID();
+        ForwardChatMessageRequest request = new ForwardChatMessageRequest(clientId);
+
+        ChatMessageResponse first = chatService.forwardMessage(conversation.conversationId(),
+                original.id(), conversation.conversationId(), request, bobAuthentication);
+        ChatMessageResponse retried = chatService.forwardMessage(conversation.conversationId(),
+                original.id(), conversation.conversationId(), request, bobAuthentication);
+        assertThat(retried.id()).isEqualTo(first.id());
+        assertThat(first.messageSeq()).isEqualTo(3L);
+        assertThat(jdbc.queryForObject(
+                "select count(*) from chat_messages where conversation_id = "
+                        + "(select id from chat_conversations where conversation_id = ?) "
+                        + "and client_message_id = ?",
+                Long.class, conversation.conversationId(), clientId)).isEqualTo(1L);
+        assertThat(jdbc.queryForObject(
+                "select last_read_seq from chat_conversation_members where conversation_id = "
+                        + "(select id from chat_conversations where conversation_id = ?) and user_id = ?",
+                Long.class, conversation.conversationId(), bob.getId())).isEqualTo(3L);
+        assertThatThrownBy(() -> chatService.forwardMessage(conversation.conversationId(),
+                other.id(), conversation.conversationId(), request, bobAuthentication))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                .hasMessageContaining("409 CONFLICT");
+    }
+
+    @Test
+    void chatAttachmentScopeFollowsActiveConversationMembershipAndRevokesLeaver() {
+        ChatConversationResponse group = chatService.createGroup(
+                new CreateGroupChatRequest("Attachment isolation", List.of(bob.getUserId()), null),
+                aliceAuthentication);
+        conversationIds.add(group.conversationId());
+        Long fileId = jdbc.queryForObject("""
+                insert into files (
+                    owner_user_id, storage_provider, storage_key, original_name,
+                    mime_type, size_bytes, access_scope, created_at
+                )
+                values (?, 'TEST', ?, 'private-notes.txt', 'text/plain', 5, 'PRIVATE', now())
+                returning id
+                """, Long.class, alice.getId(), "chat-test-" + UUID.randomUUID());
+        fileIds.add(fileId);
+        Authentication unrelatedAdmin = new UsernamePasswordAuthenticationToken(
+                "unrelated-admin@smartlab.test", null,
+                List.of(new SimpleGrantedAuthority("ROLE_ADMIN")));
+
+        assertThat(fileService.canRead(fileId, aliceAuthentication)).isTrue();
+        assertThat(fileService.canRead(fileId, bobAuthentication)).isFalse();
+        ChatMessageResponse message = chatService.sendMessage(
+                group.conversationId(),
+                new ChatSendMessageRequest("file-" + UUID.randomUUID(),
+                        ChatMessageType.FILE, null, null, List.of(fileId)),
+                aliceAuthentication);
+
+        assertThat(message.files()).hasSize(1);
+        assertThat(message.files().get(0).accessScope()).isEqualTo("CHAT");
+        assertThat(jdbc.queryForObject("select access_scope from files where id = ?", String.class, fileId))
+                .isEqualTo("CHAT");
+        assertThat(fileService.canRead(fileId, aliceAuthentication)).isTrue();
+        assertThat(fileService.canRead(fileId, bobAuthentication)).isTrue();
+        assertThat(fileService.canRead(fileId, unrelatedAdmin)).isFalse();
+
+        chatService.removeMember(group.conversationId(), bob.getUserId(), bobAuthentication);
+
+        assertThat(fileService.canRead(fileId, bobAuthentication)).isFalse();
+        assertThat(fileService.canRead(fileId, aliceAuthentication)).isTrue();
+
+        chatService.deleteMessage(group.conversationId(), message.id(), aliceAuthentication);
+        assertThat(fileService.canRead(fileId, aliceAuthentication)).isFalse();
+        assertThat(chatService.listMessages(group.conversationId(), null, null, 50, aliceAuthentication)
+                .messages()).singleElement().satisfies(deleted -> {
+                    assertThat(deleted.deletedAt()).isNotNull();
+                    assertThat(deleted.files()).isEmpty();
+                });
+    }
+
+    @Test
+    void sharedPrivateFileIsNotReclassifiedOrAttachedToChat() {
+        ChatConversationResponse conversation = chatService.createDirect(bob.getUserId(), aliceAuthentication);
+        conversationIds.add(conversation.conversationId());
+        Long fileId = jdbc.queryForObject("""
+                insert into files (
+                    owner_user_id, storage_provider, storage_key, original_name,
+                    mime_type, size_bytes, access_scope, created_at
+                ) values (?, 'TEST', ?, 'shared-private.txt', 'text/plain', 5, 'PRIVATE', now())
+                returning id
+                """, Long.class, alice.getId(), "shared-chat-test-" + UUID.randomUUID());
+        fileIds.add(fileId);
+        jdbc.update("""
+                insert into member_profiles(id, user_id, avatar_file_id, active_status, is_featured, created_at)
+                values (nextval('member_profiles_id_seq'), ?, ?, 'ACTIVE', false, now())
+                """, alice.getId(), fileId);
+
+        assertThat(storedFileRepository.hasNonChatReference(fileId)).isTrue();
+        assertThatThrownBy(() -> chatService.sendMessage(conversation.conversationId(),
+                new ChatSendMessageRequest("shared-" + UUID.randomUUID(),
+                        ChatMessageType.FILE, null, null, List.of(fileId)), aliceAuthentication))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                .hasMessageContaining("409 CONFLICT");
+        assertThat(jdbc.queryForObject("select access_scope from files where id = ?", String.class, fileId))
+                .isEqualTo("PRIVATE");
+        assertThat(jdbc.queryForObject("select count(*) from chat_message_files where file_id = ?", Long.class, fileId))
+                .isZero();
+    }
+    @Test
+    void ownerExplicitlyHandsOverThenLosesAccessWhileSuccessorCanManage() {
+        ChatConversationResponse group = chatService.createGroup(
+                new CreateGroupChatRequest("Handover", List.of(bob.getUserId()), null), aliceAuthentication);
+        conversationIds.add(group.conversationId());
+        chatService.sendMessage(group.conversationId(),
+                new ChatSendMessageRequest("handover-" + UUID.randomUUID(), ChatMessageType.TEXT,
+                        "before leaving", null, null), aliceAuthentication);
+
+        assertThatThrownBy(() -> chatService.leaveGroupWithSuccessor(group.conversationId(),
+                alice.getUserId(), aliceAuthentication)).hasMessageContaining("400 BAD_REQUEST");
+        assertThatThrownBy(() -> chatService.leaveGroupWithSuccessor(group.conversationId(),
+                "not-a-member", aliceAuthentication)).hasMessageContaining("404 NOT_FOUND");
+        assertThatThrownBy(() -> chatService.leaveGroupWithSuccessor(group.conversationId(),
+                alice.getUserId(), bobAuthentication)).hasMessageContaining("403 FORBIDDEN");
+        assertThat(jdbc.queryForObject("select count(*) from chat_conversation_members m "
+                + "join chat_conversations c on c.id=m.conversation_id where c.conversation_id=? "
+                + "and m.left_at is null and m.membership_role='OWNER'", Long.class,
+                group.conversationId())).isEqualTo(1L);
+
+        chatService.leaveGroupWithSuccessor(group.conversationId(), bob.getUserId(), aliceAuthentication);
+        assertThatThrownBy(() -> chatService.listMessages(group.conversationId(), null, null, 50,
+                aliceAuthentication)).hasMessageContaining("404 NOT_FOUND");
+        assertThatThrownBy(() -> chatService.closeGroup(group.conversationId(), aliceAuthentication))
+                .hasMessageContaining("404 NOT_FOUND");
+        assertThat(chatService.listMessages(group.conversationId(), null, null, 50, bobAuthentication)
+                .messages()).hasSize(1);
+        assertThat(chatService.listConversations(bobAuthentication).stream()
+                .filter(c -> c.conversationId().equals(group.conversationId())).findFirst().orElseThrow()
+                .members()).filteredOn(m -> m.role() == com.smartlab.enums.ChatMembershipRole.OWNER)
+                .singleElement().satisfies(m -> assertThat(m.userId()).isEqualTo(bob.getUserId()));
+        assertThat(jdbc.queryForObject("select count(*) from chat_conversation_members m "
+                + "join chat_conversations c on c.id=m.conversation_id where c.conversation_id=? "
+                + "and m.left_at is null and m.membership_role='OWNER'", Long.class,
+                group.conversationId())).isEqualTo(1L);
+    }
+
+    @Test
+    void concurrentSuccessorExitAndOwnerHandoverNeverLeavesGroupOwnerless() throws Exception {
+        ChatConversationResponse group = chatService.createGroup(
+                new CreateGroupChatRequest("Transfer race", List.of(bob.getUserId()), null),
+                aliceAuthentication);
+        conversationIds.add(group.conversationId());
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            Future<Boolean> transfer = executor.submit(task(() -> {
+                try {
+                    chatService.leaveGroupWithSuccessor(group.conversationId(), bob.getUserId(),
+                            aliceAuthentication);
+                    return true;
+                } catch (org.springframework.web.server.ResponseStatusException expected) {
+                    assertThat(expected.getStatusCode().value()).isEqualTo(404);
+                    return false;
+                }
+            }, ready, start));
+            Future<Boolean> exit = executor.submit(task(() -> {
+                try {
+                    chatService.removeMember(group.conversationId(), bob.getUserId(), bobAuthentication);
+                    return true;
+                } catch (org.springframework.web.server.ResponseStatusException expected) {
+                    assertThat(expected.getStatusCode().value()).isEqualTo(409);
+                    return false;
+                }
+            }, ready, start));
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            boolean transferred = transfer.get(10, TimeUnit.SECONDS);
+            boolean exited = exit.get(10, TimeUnit.SECONDS);
+            assertThat(transferred).isNotEqualTo(exited);
+            assertThat(jdbc.queryForObject("select count(*) from chat_conversation_members m "
+                    + "join chat_conversations c on c.id=m.conversation_id where c.conversation_id=? "
+                    + "and m.left_at is null and m.membership_role='OWNER'", Long.class,
+                    group.conversationId())).isEqualTo(1L);
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void dissolutionRetainsHistoryAndFilesForMembersButRejectsAllWritesAndFormerMembers() {
+        UserEntity carol = insertUser("chat-former-member");
+        Authentication carolAuth = new UsernamePasswordAuthenticationToken(carol.getEmail(), null, List.of());
+        ChatConversationResponse group = chatService.createGroup(new CreateGroupChatRequest(
+                "Closed history", List.of(bob.getUserId(), carol.getUserId()), null), aliceAuthentication);
+        conversationIds.add(group.conversationId());
+        Long fileId = jdbc.queryForObject("""
+                insert into files (owner_user_id, storage_provider, storage_key, original_name,
+                    mime_type, size_bytes, access_scope, created_at)
+                values (?, 'TEST', ?, 'archive.txt', 'text/plain', 5, 'PRIVATE', now()) returning id
+                """, Long.class, alice.getId(), "closed-chat-" + UUID.randomUUID());
+        fileIds.add(fileId);
+        ChatMessageResponse message = chatService.sendMessage(group.conversationId(),
+                new ChatSendMessageRequest("archive-" + UUID.randomUUID(), ChatMessageType.FILE,
+                        null, null, List.of(fileId)), aliceAuthentication);
+        chatService.removeMember(group.conversationId(), carol.getUserId(), carolAuth);
+        assertThatThrownBy(() -> chatService.closeGroup(group.conversationId(), bobAuthentication))
+                .hasMessageContaining("403 FORBIDDEN");
+        ChatConversationResponse closed = chatService.closeGroup(group.conversationId(), aliceAuthentication);
+        assertThat(closed.closedAt()).isNotNull();
+        assertThat(closed.archived()).isTrue();
+        assertThat(chatService.closeGroup(group.conversationId(), aliceAuthentication).closedAt())
+                .isEqualTo(closed.closedAt());
+        assertThat(chatService.listMessages(group.conversationId(), null, null, 50, bobAuthentication)
+                .messages()).singleElement().satisfies(m -> assertThat(m.id()).isEqualTo(message.id()));
+        assertThat(chatService.searchMessages(group.conversationId(), "nonexistent", 10, bobAuthentication))
+                .isEmpty();
+        assertThat(fileService.canRead(fileId, bobAuthentication)).isTrue();
+        assertThat(fileService.canRead(fileId, carolAuth)).isFalse();
+        assertThatThrownBy(() -> chatService.listMessages(group.conversationId(), null, null, 50,
+                carolAuth)).hasMessageContaining("404 NOT_FOUND");
+        assertThatThrownBy(() -> chatService.sendMessage(group.conversationId(),
+                new ChatSendMessageRequest("closed-" + UUID.randomUUID(), ChatMessageType.TEXT,
+                        "blocked", null, null), bobAuthentication)).hasMessageContaining("409 CONFLICT");
+        assertThatThrownBy(() -> chatService.editMessage(group.conversationId(), message.id(),
+                new com.smartlab.dto.request.EditChatMessageRequest("blocked"), aliceAuthentication))
+                .hasMessageContaining("409 CONFLICT");
+        assertThatThrownBy(() -> chatService.deleteMessage(group.conversationId(), message.id(),
+                aliceAuthentication)).hasMessageContaining("409 CONFLICT");
+        assertThatThrownBy(() -> chatService.toggleReaction(group.conversationId(), message.id(),
+                new com.smartlab.dto.request.ChatReactionRequest("👍"), bobAuthentication))
+                .hasMessageContaining("409 CONFLICT");
+        assertThatThrownBy(() -> chatService.addMember(group.conversationId(),
+                new com.smartlab.dto.request.AddChatMemberRequest(carol.getUserId()), aliceAuthentication))
+                .hasMessageContaining("409 CONFLICT");
+        assertThatThrownBy(() -> chatService.removeMember(group.conversationId(), bob.getUserId(),
+                bobAuthentication)).hasMessageContaining("409 CONFLICT");
+        assertThatThrownBy(() -> chatService.leaveGroupWithSuccessor(group.conversationId(),
+                bob.getUserId(), aliceAuthentication)).hasMessageContaining("409 CONFLICT");
+        ChatConversationResponse direct = chatService.createDirect(alice.getUserId(), bobAuthentication);
+        conversationIds.add(direct.conversationId());
+        ChatMessageResponse directMessage = chatService.sendMessage(direct.conversationId(),
+                new ChatSendMessageRequest("open-" + UUID.randomUUID(), ChatMessageType.TEXT,
+                        "still open", null, null), bobAuthentication);
+        assertThatThrownBy(() -> chatService.forwardMessage(group.conversationId(), message.id(),
+                direct.conversationId(), new ForwardChatMessageRequest("blocked-source-" + UUID.randomUUID()),
+                bobAuthentication)).hasMessageContaining("409 CONFLICT");
+        assertThatThrownBy(() -> chatService.forwardMessage(direct.conversationId(), directMessage.id(),
+                group.conversationId(), new ForwardChatMessageRequest("blocked-target-" + UUID.randomUUID()),
+                bobAuthentication)).hasMessageContaining("409 CONFLICT");
+        assertThat(jdbc.queryForObject("select count(*) from chat_messages where conversation_id="
+                + "(select id from chat_conversations where conversation_id=?)", Long.class,
+                group.conversationId())).isEqualTo(1L);
+    }
+
+    @Test
+    void concurrentCloseAndSendCannotPersistAWriteAfterClosure() throws Exception {
+        ChatConversationResponse group = chatService.createGroup(
+                new CreateGroupChatRequest("Race", List.of(bob.getUserId()), null), aliceAuthentication);
+        conversationIds.add(group.conversationId());
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            Future<?> closing = executor.submit(task(() -> chatService.closeGroup(group.conversationId(),
+                    aliceAuthentication), ready, start));
+            Future<?> sending = executor.submit(task(() -> {
+                try {
+                    chatService.sendMessage(group.conversationId(), new ChatSendMessageRequest(
+                            "race-" + UUID.randomUUID(), ChatMessageType.TEXT, "race", null, null),
+                            bobAuthentication);
+                } catch (org.springframework.web.server.ResponseStatusException expected) {
+                    assertThat(expected.getStatusCode().value()).isEqualTo(409);
+                }
+                return null;
+            }, ready, start));
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            closing.get(10, TimeUnit.SECONDS);
+            sending.get(10, TimeUnit.SECONDS);
+            assertThatThrownBy(() -> chatService.sendMessage(group.conversationId(),
+                    new ChatSendMessageRequest("later-" + UUID.randomUUID(), ChatMessageType.TEXT,
+                            "later", null, null), bobAuthentication)).hasMessageContaining("409 CONFLICT");
+            assertThat(jdbc.queryForObject("select count(*) from chat_messages m "
+                    + "join chat_conversations c on c.id=m.conversation_id "
+                    + "where c.conversation_id=? and m.created_at > c.closed_at", Long.class,
+                    group.conversationId())).isZero();
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
     private <T> Callable<T> task(Callable<T> action, CountDownLatch ready, CountDownLatch start) {
         return () -> {
             ready.countDown();
@@ -244,8 +558,11 @@ class RealtimeChatConcurrencyPostgresIntegrationTest {
         String userId = label + "-" + suffix;
         String email = userId + "@smartlab.test";
         Long id = jdbc.queryForObject("""
-                insert into tbl_user (user_id, name, email, password, is_active, is_account_verified)
-                values (?, ?, ?, ?, true, true)
+                insert into tbl_user (
+                    user_id, name, email, password, is_active, is_account_verified,
+                    created_at, updated_at
+                )
+                values (?, ?, ?, ?, true, true, now(), now())
                 returning id
                 """, Long.class, userId, label, email, "not-used");
         userIds.add(id);
