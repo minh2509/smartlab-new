@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { useAuth } from '../../auth/authContext'
 import { downloadFile } from '../../files/api'
-import { listProjectMembers, listProjects } from '../../projects/api'
+import { listMyProjectMemberships, listProjectMembers, listProjects } from '../../projects/api'
 import type { Project, ProjectMember } from '../../projects/types'
 import { createEvaluation, createEvaluationCriterion, listEvaluationCriteria, updateEvaluationCriterion } from '../../evaluations/api'
 import type { EvaluationCriterion } from '../../evaluations/types'
@@ -50,7 +50,20 @@ export function TasksPage() {
   const safeMembers = members.filter((member) => Number.isInteger(Number(member.userId)) && Number(member.userId) > 0)
   const selectedEvaluationMember = members.find((member) => member.userId === evaluationMember)
 
-  useEffect(() => { if (!token) return; listProjects(token).then((items) => { setProjects(items); setProjectId((current) => current ?? items[0]?.id ?? null) }).catch((error: Error) => setLoadError(error.message)) }, [token])
+  useEffect(() => {
+    if (!token) return
+    void Promise.all([
+      listProjects(token),
+      isAdmin ? Promise.resolve(null) : listMyProjectMemberships(token),
+    ]).then(([items, memberships]) => {
+      const visible = memberships
+        ? items.filter((item) => memberships.some((membership) =>
+            membership.projectId === item.id && membership.status === 'ACTIVE'))
+        : items
+      setProjects(visible)
+      setProjectId((current) => visible.some((item) => item.id === current) ? current : visible[0]?.id ?? null)
+    }).catch((error: Error) => setLoadError(error.message))
+  }, [isAdmin, token])
   const refreshTasks = useCallback(async () => { if (!token || !projectId) return; setLoading(true); setLoadError(''); try { setTasks((await listTasks(token, projectId, { status: statusFilter || undefined, priority: priorityFilter || undefined, size: 100 })).content) } catch (error) { setLoadError(error instanceof Error ? error.message : 'Không thể tải danh sách nhiệm vụ.') } finally { setLoading(false) } }, [token, projectId, statusFilter, priorityFilter])
   const refreshCriteria = useCallback(async () => { if (!token || !projectId || !canManageEvaluations) return; try { setCriteria(await listEvaluationCriteria(token, projectId)) } catch (error) { setLoadError(error instanceof Error ? error.message : 'Không thể tải tiêu chí đánh giá.') } }, [token, projectId, canManageEvaluations])
   const refreshMembers = useCallback(async () => { if (!token || !projectId) return; try { setMembers(await listProjectMembers(token, projectId, 'ACTIVE')) } catch (error) { setLoadError(error instanceof Error ? error.message : 'Không thể tải thành viên dự án.') } }, [token, projectId])

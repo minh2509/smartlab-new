@@ -1,12 +1,7 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
 import { authToken, hasMemberCredentials, loginAsMember } from './support/auth'
 import { env, missing } from './support/env'
-import {
-  apiPathEndsWith,
-  apiPathMatches,
-  expectOk,
-  isExternalDependencyUnavailable,
-} from './support/http'
+import { apiPathEndsWith, apiPathMatches, expectOk, isExternalDependencyUnavailable } from './support/http'
 
 test.describe('final MEMBER dependency journey', () => {
   test.skip(!hasMemberCredentials(), 'Set E2E_MEMBER_EMAIL and E2E_MEMBER_PASSWORD for MEMBER tests.')
@@ -54,9 +49,14 @@ test.describe('final MEMBER dependency journey', () => {
       await page.goto('/my-posts')
       const response = await responsePromise
       await expectOk(response, 'GET /posts/mine')
-      expect(JSON.stringify(await response.json())).toContain(env.journey.reviewedPostTitle as string)
+      const posts = await response.json() as Array<{ title: string; status: string }>
+      expect(posts.some((post) => post.title === env.journey.reviewedPostTitle && post.status === 'PUBLISHED')).toBeTruthy()
 
       const postCard = page.getByRole('article').filter({ hasText: env.journey.reviewedPostTitle as string })
+      await expect(page.getByRole('article').first()).toBeVisible()
+      for (let remaining = posts.length; remaining > 0 && await postCard.count() === 0; remaining--) {
+        await page.getByRole('navigation', { name: 'Phân trang' }).getByRole('button', { name: 'Trang sau' }).click()
+      }
       await expect(postCard).toBeVisible()
       await expect(postCard).toContainText(env.journey.reviewedPostStatus)
     })
@@ -72,82 +72,77 @@ test.describe('final MEMBER dependency journey', () => {
     })
   })
 
-  test('submits an assigned task result and sends a project post for review', async ({ page }) => {
+  test('submits an assigned task result', async ({ page }) => {
     test.skip(
       !env.journey.mutate,
-      'Set E2E_RUN_MUTATING_JOURNEY=true only when the task/post fixture is reset before this run.',
+      'Set E2E_RUN_MUTATING_JOURNEY=true only when the task fixture is reset before this run.',
     )
     const missingFixtures = missing({
       E2E_MEMBER_PROJECT_ID: env.journey.projectId,
+      E2E_MEMBER_PROJECT_NAME: env.journey.projectName,
       E2E_MEMBER_TASK_ID: env.journey.taskId,
       E2E_MEMBER_TASK_TITLE: env.journey.taskTitle,
     })
     test.skip(missingFixtures.length > 0, `Missing mutable journey fixtures: ${missingFixtures.join(', ')}`)
 
-    const projectId = env.journey.projectId as number
     const taskId = env.journey.taskId as number
-    const taskTitle = env.journey.taskTitle as string
+    await openAssignedTask(page, env.journey.projectId as number, env.journey.taskTitle as string)
+    await page.getByRole('button', { name: 'Nộp kết quả', exact: true }).first().click()
 
-    await test.step('member submits the assigned task result', async () => {
-      await openAssignedTask(page, projectId, taskTitle)
-      await page.getByRole('button', { name: /Nộp kết quả nhiệm vụ/i }).click()
-
-      const modal = page.locator('.modal-card').filter({ hasText: 'Nộp kết quả nhiệm vụ' })
-      await modal.locator('input[type="file"]').setInputFiles({
-        name: `task-${taskId}-result.txt`,
-        mimeType: 'text/plain',
-        buffer: Buffer.from(`Playwright result for task ${taskId}\n`, 'utf8'),
-      })
-      await modal.getByPlaceholder('Ghi chú kết quả hoàn thành...').fill('Submitted by the MEMBER browser E2E journey.')
-
-      const uploadResponsePromise = page.waitForResponse((response) => apiPathEndsWith(response, '/files/upload', 'POST'))
-      const submitResponsePromise = page.waitForResponse((response) =>
-        apiPathEndsWith(response, `/tasks/${taskId}/submit`, 'POST'))
-      await modal.getByRole('button', { name: 'Nộp báo cáo' }).click()
-      const uploadResponse = await uploadResponsePromise
-      if (!uploadResponse.ok()) {
-        void submitResponsePromise.catch(() => undefined)
-      }
-      test.skip(
-        isExternalDependencyUnavailable(uploadResponse),
-        `File storage is unavailable (HTTP ${uploadResponse.status()}).`,
-      )
-      await expectOk(uploadResponse, 'task result POST /files/upload')
-
-      const submitResponse = await submitResponsePromise
-      await expectOk(submitResponse, `POST /tasks/${taskId}/submit`)
-      expect((await submitResponse.json() as { status: string }).status).toBe('REVIEW')
-      await expect(page.getByText(/Nộp kết quả nhiệm vụ thành công/i)).toBeVisible()
+    const modal = page.getByRole('dialog', { name: 'Nộp kết quả' })
+    await modal.locator('input[type="file"]').setInputFiles({
+      name: `task-${taskId}-result.txt`,
+      mimeType: 'text/plain',
+      buffer: Buffer.from(`Playwright result for task ${taskId}\n`, 'utf8'),
     })
+    await modal.getByLabel('Giải thích hỗ trợ').fill('Submitted by the MEMBER browser E2E journey.')
 
-    await test.step('member creates a project post and sends it for review', async () => {
-      const title = `MEMBER E2E review ${Date.now()}`
-      await page.goto('/posts/new')
-      await expect(page.getByRole('heading', { level: 1, name: 'Tạo bài viết' })).toBeVisible()
-      await page.getByLabel(/Tiêu đề/).fill(title)
-      await page.getByLabel('Tóm tắt').fill('Cross-domain MEMBER journey verification.')
-      await page.getByLabel('Nội dung bài viết').fill('Task result completed; this post is ready for reviewer validation.')
-      await page.getByLabel('Phạm vi hiển thị').selectOption('PROJECT')
-      await page.getByLabel(/Dự án/).selectOption(String(projectId))
+    const submitResponsePromise = page.waitForResponse((response) =>
+      apiPathEndsWith(response, `/tasks/${taskId}/submit/upload`, 'POST'))
+    await modal.getByRole('button', { name: 'Nộp kết quả' }).click()
+    const submitResponse = await submitResponsePromise
+    test.skip(
+      isExternalDependencyUnavailable(submitResponse),
+      `File storage is unavailable (HTTP ${submitResponse.status()}); task submission was not verified.`,
+    )
+    await expectOk(submitResponse, `POST /tasks/${taskId}/submit/upload`)
+    expect((await submitResponse.json() as { status: string }).status).toBe('REVIEW')
+    await expect(page.getByText('Đã nộp kết quả')).toBeVisible()
+  })
 
-      const createResponsePromise = page.waitForResponse((response) => apiPathEndsWith(response, '/posts', 'POST'))
-      await page.getByRole('button', { name: 'Tạo bài viết' }).click()
-      const createResponse = await createResponsePromise
-      await expectOk(createResponse, 'POST /posts')
-      const created = await createResponse.json() as { id: number; slug: string; status: string }
-      expect(created.status).toBe('DRAFT')
-      await expect(page).toHaveURL(new RegExp(`/posts/${escapeRegex(created.slug)}$`))
-      await expect(page.getByRole('heading', { level: 1, name: title })).toBeVisible()
+  test('creates a project post and sends it for review', async ({ page }) => {
+    const missingFixtures = missing({ E2E_MEMBER_PROJECT_ID: env.journey.projectId })
+    test.skip(missingFixtures.length > 0, `Missing project fixture: ${missingFixtures.join(', ')}`)
+    const projectId = env.journey.projectId as number
+    const title = `MEMBER E2E review ${Date.now()}`
 
-      const submitResponsePromise = page.waitForResponse((response) =>
-        apiPathEndsWith(response, `/posts/${created.id}/submit`, 'POST'))
-      await page.getByRole('button', { name: 'Gửi duyệt' }).click()
-      const submitResponse = await submitResponsePromise
-      await expectOk(submitResponse, `POST /posts/${created.id}/submit`)
-      expect((await submitResponse.json() as { status: string }).status).toBe('PENDING_REVIEW')
-      await expect(page.getByText('Đã gửi bài viết để duyệt.')).toBeVisible()
-      await expect(page.locator('.post-page-status-visibility')).toContainText('Chờ duyệt')
-    })
+    await page.goto('/posts/new')
+    await expect(page.getByRole('heading', { level: 1, name: 'Tạo bài viết' })).toBeVisible()
+    await page.getByRole('textbox', { name: 'Tiêu đề' }).fill(title)
+    await page.getByLabel('Tóm tắt').fill('Cross-domain MEMBER journey verification.')
+    await page.locator('#post-content[contenteditable="true"]').fill('This project post is ready for reviewer validation.')
+    await page.getByLabel('Phạm vi hiển thị').selectOption('PROJECT')
+    await page.locator('#post-project').selectOption(String(projectId))
+    const category = await page.locator('#post-category option:not([value=""])').first().getAttribute('value')
+    expect(category, 'Submitting a post requires an existing content category.').toBeTruthy()
+    await page.locator('#post-category').selectOption(category as string)
+
+    const createResponsePromise = page.waitForResponse((response) => apiPathEndsWith(response, '/posts', 'POST'))
+    await page.getByRole('button', { name: 'Lưu nháp' }).click()
+    const createResponse = await createResponsePromise
+    await expectOk(createResponse, 'POST /posts')
+    const created = await createResponse.json() as { id: number; slug: string; status: string }
+    expect(created.status).toBe('DRAFT')
+    await expect(page).toHaveURL(new RegExp(`/posts/${escapeRegex(created.slug)}$`))
+    await expect(page.getByRole('heading', { level: 1, name: title })).toBeVisible()
+
+    const submitResponsePromise = page.waitForResponse((response) =>
+      apiPathEndsWith(response, `/posts/${created.id}/submit`, 'POST'))
+    await page.getByRole('button', { name: 'Gửi duyệt' }).click()
+    const submitResponse = await submitResponsePromise
+    await expectOk(submitResponse, `POST /posts/${created.id}/submit`)
+    expect((await submitResponse.json() as { status: string }).status).toBe('PENDING_REVIEW')
+    await expect(page.locator('.post-page-status-visibility')).toContainText('Chờ duyệt')
   })
 })
 
@@ -160,8 +155,8 @@ async function assertProjectMembership(page: Page, projectId: number, projectNam
 
   await page.goto('/admin/projects')
   await page.getByLabel('Tìm dự án theo tên hoặc mã').fill(projectName)
-  const openButton = page.getByRole('button', {
-    name: new RegExp(`(?:Xem|Chỉnh sửa) dự án ${escapeRegex(projectName)}`, 'i'),
+  const openButton = page.locator('.project-management-row-actions').getByRole('button', {
+    name: `Chi tiết dự án ${projectName}`,
   })
   await expect(openButton).toBeVisible()
   await openButton.click()
@@ -176,17 +171,24 @@ async function assertProjectMembership(page: Page, projectId: number, projectNam
 }
 
 async function openAssignedTask(page: Page, projectId: number, taskTitle: string) {
-  const tasksResponsePromise = page.waitForResponse((response) => {
+  const initialTasksPromise = page.waitForResponse((response) => {
     const url = new URL(response.url())
     return response.request().method() === 'GET'
-      && url.pathname.endsWith(`/projects/${projectId}/tasks`)
+      && /\/projects\/\d+\/tasks$/.test(url.pathname)
   })
 
   await page.goto('/admin/tasks')
   await expect(page.getByRole('heading', { level: 1, name: /Nhiệm vụ.*Đánh giá/i })).toBeVisible()
-  await page.locator('select').first().selectOption(String(projectId))
-  await expectOk(await tasksResponsePromise, `GET /projects/${projectId}/tasks`)
-
+  const initialTasks = await initialTasksPromise
+  await expectOk(initialTasks, 'initial MEMBER project tasks')
+  if (!new URL(initialTasks.url()).pathname.endsWith(`/projects/${projectId}/tasks`)) {
+    const tasksResponsePromise = page.waitForResponse((response) =>
+      apiPathEndsWith(response, `/projects/${projectId}/tasks`))
+    await page.getByRole('button', { name: 'Chọn dự án' }).click()
+    await page.getByRole('listbox', { name: 'Chọn dự án' })
+      .getByRole('option', { name: new RegExp(escapeRegex(env.journey.projectName as string), 'i') }).click()
+    await expectOk(await tasksResponsePromise, `GET /projects/${projectId}/tasks`)
+  }
   await page.getByRole('button', { name: 'Bảng' }).click()
   const row = page.getByRole('row').filter({ hasText: taskTitle })
   await expect(row).toBeVisible()
