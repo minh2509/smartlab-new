@@ -61,10 +61,16 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.HexFormat;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -234,6 +240,9 @@ public class ChatServiceImpl implements ChatService {
         for (String requestedId : request.memberUserIds()) {
             requestedIds.add(normalizeUserId(requestedId, "Member user id is required"));
         }
+        if (requestedIds.size() > MAX_GROUP_MEMBERS) {
+            throw badRequest("A group cannot have more than 100 active members");
+        }
         List<UserEntity> lockedUsers = userRepository.findAllByUserIdInForUpdate(requestedIds);
         Map<String, UserEntity> users = indexUsers(lockedUsers);
         List<UserEntity> members = new ArrayList<>();
@@ -326,6 +335,9 @@ public class ChatServiceImpl implements ChatService {
         requireOpen(conversation);
 
         String clientMessageId = normalizeClientMessageId(request.clientMessageId());
+        validateMessagePayload(request.messageType(), request.content(), request.fileIds());
+        String metadata = normalizeMetadata(request.messageType(), request.metadataJson());
+        String fingerprint = payloadFingerprint(request, metadata);
         ChatMessageEntity existing = messageRepository
                 .findBySender_IdAndClientMessageId(currentUser.getId(), clientMessageId)
                 .orElse(null);
@@ -333,11 +345,13 @@ public class ChatServiceImpl implements ChatService {
             if (!Objects.equals(existing.getConversation().getId(), conversation.getId())) {
                 throw conflict("Client message id was already used in another conversation");
             }
+            if (existing.getForwardedFrom() != null || !(existing.getOriginalPayloadFingerprint() == null
+                    ? matchesLegacyPayload(existing, request, metadata)
+                    : existing.getOriginalPayloadFingerprint().equals(fingerprint))) {
+                throw conflict("Client message id was already used for another message");
+            }
             return toMessageResponse(existing, messageFiles(existing));
         }
-
-        validateMessagePayload(request.messageType(), request.content(), request.fileIds());
-        String metadata = normalizeMetadata(request.messageType(), request.metadataJson());
         ChatMessageEntity replyTo = resolveReply(conversation, request.replyToMessageId());
         List<StoredFileEntity> files = resolveAttachments(request.fileIds(), currentUser, authentication);
         long messageSeq = conversation.nextMessageSequence();
@@ -352,6 +366,7 @@ public class ChatServiceImpl implements ChatService {
                 null,
                 metadata
         );
+        message.recordOriginalPayload(fingerprint);
         messageRepository.saveAndFlush(message);
         senderMembership.markRead(messageSeq);
         memberRepository.saveAndFlush(senderMembership);
@@ -439,6 +454,9 @@ public class ChatServiceImpl implements ChatService {
                 conversation.getConversationId(), target.getId()).orElse(null);
         if (member != null && member.isActive()) {
             throw conflict("User is already an active conversation member");
+        }
+        if (memberRepository.findActiveMembers(conversationId).size() >= MAX_GROUP_MEMBERS) {
+            throw conflict("A group cannot have more than 100 active members");
         }
         if (member == null) {
             member = ChatConversationMemberEntity.create(conversation, target, ChatMembershipRole.MEMBER);
@@ -960,6 +978,51 @@ public class ChatServiceImpl implements ChatService {
             case SYSTEM -> false;
         };
         if (!valid) throw badRequest("Message content and attachments do not match the message type");
+        if (type == ChatMessageType.GIF) validateGifUrl(content);
+    }
+
+    private void validateGifUrl(String value) {
+        try {
+            if (value == null || !value.equals(value.trim()) || value.indexOf('\\') >= 0) {
+                throw badRequest("GIF source must be a valid HTTPS URL");
+            }
+            URI uri = new URI(value);
+            if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null
+                    || uri.getHost().isBlank() || uri.getRawUserInfo() != null) {
+                throw badRequest("GIF source must be a valid HTTPS URL");
+            }
+        } catch (URISyntaxException exception) {
+            throw badRequest("GIF source must be a valid HTTPS URL");
+        }
+    }
+
+    private String payloadFingerprint(ChatSendMessageRequest request, String metadata) {
+        ArrayNode payload = objectMapper.createArrayNode();
+        payload.add(request.messageType().name());
+        payload.add(normalizeContent(request.content()));
+        if (request.replyToMessageId() == null) payload.addNull();
+        else payload.add(request.replyToMessageId());
+        ArrayNode fileIds = payload.addArray();
+        if (request.fileIds() != null) request.fileIds().forEach(fileId -> fileIds.add(fileId));
+        payload.add(metadata);
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(payload.toString().getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is unavailable", exception);
+        }
+    }
+
+    // Pre-migration messages have no immutable original request; compare only unedited state.
+    private boolean matchesLegacyPayload(ChatMessageEntity existing, ChatSendMessageRequest request, String metadata) {
+        return existing.getDeletedAt() == null && existing.getEditedAt() == null
+                && existing.getMessageType() == request.messageType()
+                && Objects.equals(existing.getContent(), normalizeContent(request.content()))
+                && Objects.equals(existing.getMetadataJson(), metadata)
+                && Objects.equals(existing.getReplyTo() == null ? null : existing.getReplyTo().getId(),
+                        request.replyToMessageId())
+                && messageFiles(existing).stream().map(file -> file.getFile().getId()).toList()
+                        .equals(request.fileIds() == null ? List.of() : request.fileIds());
     }
 
     private String normalizeMetadata(ChatMessageType type, String metadataJson) {

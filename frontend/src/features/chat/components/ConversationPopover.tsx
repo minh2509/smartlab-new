@@ -109,8 +109,7 @@ export function ConversationPopover({ isOpen, onClose }: ConversationPopoverProp
         memberUserIds: selectedUserIds,
       })
       setShowNewModal(false)
-      openConversation(conv.conversationId)
-      onClose()
+      openSelectedConversation(conv.conversationId)
     } catch (err) {
       console.error('Failed to create group chat:', err)
     } finally {

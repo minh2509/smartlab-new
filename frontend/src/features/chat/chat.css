@@ -4,6 +4,7 @@
    ========================================================================== */
 
 /* ------------------------------------------------------------- 1. HEADER & POPOVER */
+.nav-act .chat-popover-panel .btn { display: inline-flex; }
 .chat-header-btn {
   position: relative;
 }

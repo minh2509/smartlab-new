@@ -71,6 +71,9 @@ public class ChatMessageEntity {
     @Column(name = "metadata_json", columnDefinition = "TEXT")
     private String metadataJson;
 
+    @Column(name = "original_payload_fingerprint", length = 64)
+    private String originalPayloadFingerprint;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -129,5 +132,9 @@ public class ChatMessageEntity {
     public void updateMetadata(String metadataJson) {
         this.metadataJson = metadataJson;
         this.editedAt = Instant.now();
+    }
+
+    public void recordOriginalPayload(String fingerprint) {
+        this.originalPayloadFingerprint = fingerprint;
     }
 }

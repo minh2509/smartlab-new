@@ -62,7 +62,7 @@ async function ensureDirectConversation(auth: AuthenticatedUser, peerUserId: str
 test.describe('Live Realtime Chat E2E (real backend on isolated smartlab_chat_it)', () => {
   test.describe.configure({ mode: 'serial', timeout: 90_000 })
 
-  test('1. A -> B realtime message & persistence & refresh persistence', async ({ browser }) => {
+  test('1. A -> B socket delivery while thread is open, then persistence after refresh', async ({ browser }) => {
     const authA = await loginUser('alice@smartlab.test')
     const authB = await loginUser('bob@smartlab.test')
     await ensureDirectConversation(authA, authB.userId)
@@ -78,6 +78,12 @@ test.describe('Live Realtime Chat E2E (real backend on isolated smartlab_chat_it
     // Context B (Bob)
     const contextB = await browser.newContext()
     const pageB = await contextB.newPage()
+    const sentFrames: string[] = []
+    const receivedFrames: string[] = []
+    pageB.on('websocket', (socket) => {
+      socket.on('framesent', (frame) => sentFrames.push(String(frame.payload)))
+      socket.on('framereceived', (frame) => receivedFrames.push(String(frame.payload)))
+    })
     await pageB.addInitScript(({ token, sessionId }) => {
       localStorage.setItem('smartlab.token', token)
       localStorage.setItem('smartlab.sessionId', sessionId)
@@ -106,6 +112,16 @@ test.describe('Live Realtime Chat E2E (real backend on isolated smartlab_chat_it
     await expect(popupA).toBeVisible()
     await expect(popupA.locator('.chat-popup-title')).toHaveText('Bob Builder')
 
+    // Subscribe before Alice sends, so a later REST history load cannot masquerade as realtime delivery.
+    await pageB.locator('.chat-header-btn').click()
+    const popoverB = pageB.locator('#chat-popover-panel')
+    await expect(popoverB).toBeVisible()
+    await popoverB.locator('.chat-conv-item', { hasText: 'Alice Wonder' }).click()
+    const popupB = pageB.locator('.chat-popup-window')
+    await expect(popupB).toBeVisible()
+    await expect.poll(() => sentFrames.some((frame) => frame.includes('SUBSCRIBE')
+      && frame.includes('/user/queue/chat'))).toBe(true)
+
     // Alice types and sends a realtime message
     const uniqueText = `Live message from Alice ${Date.now()}`
     const inputA = popupA.getByRole('textbox', { name: /soạn tin nhắn/i })
@@ -115,32 +131,15 @@ test.describe('Live Realtime Chat E2E (real backend on isolated smartlab_chat_it
     // Alice sees message sent
     await expect(popupA.getByText(uniqueText)).toBeVisible()
 
-    // Bob receives realtime notification / popup / dock in Bob's browser!
-    // Bob's header unread counter should increase or chat head appear
-    await expect.poll(async () => {
-      // Bob opens popover to check
-      const unreadBadgeB = pageB.locator('.chat-header-btn .notification-count')
-      const count = await unreadBadgeB.count()
-      return count > 0
-    }, { timeout: 15_000 }).toBeTruthy()
-
-    // Bob opens conversation
-    await pageB.locator('.chat-header-btn').click()
-    const popoverB = pageB.locator('#chat-popover-panel')
-    await expect(popoverB).toBeVisible()
-    const aliceItemB = popoverB.locator('.chat-conv-item', { hasText: 'Alice Wonder' })
-    await expect(aliceItemB).toBeVisible()
-    await aliceItemB.click()
-
-    // Bob's popup opens and receives the exact uniqueText
-    const popupB = pageB.locator('.chat-popup-window')
-    await expect(popupB).toBeVisible()
+    // Verify an incoming STOMP frame, not merely a post-send history request.
+    await expect.poll(() => receivedFrames.some((frame) => frame.includes('chat.message.created')
+      && frame.includes(uniqueText)), { timeout: 15_000 }).toBe(true)
     await expect(popupB.getByText(uniqueText)).toBeVisible()
 
     // Refresh Bob => message remains
     await pageB.reload()
     await pageB.locator('.chat-header-btn').click()
-    await popoverB.locator('.chat-conv-item', { hasText: 'Alice Wonder' }).click()
+    await pageB.locator('#chat-popover-panel .chat-conv-item', { hasText: 'Alice Wonder' }).click()
     await expect(popupB.getByText(uniqueText)).toBeVisible()
 
     await contextA.close()

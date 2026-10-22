@@ -206,7 +206,7 @@ objects in `public` are not included.
 ## Verification workflow
 
 Use a new disposable PostgreSQL database for a migration rehearsal. Apply the
-approved applicable migrations through `022` in order, then inspect the resulting
+approved applicable migrations through `023` in order, then inspect the resulting
 schema, enum checks, role seed, permission count, role-permission count, grants,
 and affected endpoint health. Re-run only migrations whose source explicitly
 documents idempotent behavior. Do not point a rehearsal at an existing
@@ -232,7 +232,8 @@ database or interpret those database guards as chat failures.
 ## Complete local backend test matrix
 
 After separately backing up and bringing each disposable test database to the
-current migration level, run `./scripts/test-local-matrix.ps1` from PowerShell.
+current migration level (including `023_chat_message_retry_fingerprint.sql`), run
+`./scripts/test-local-matrix.ps1` from PowerShell.
 The script routes tests to their guarded databases (`smartlab_chat_it`,
 `smartlab_d1_auth_it`, `smartlab_rich_editor_it`, and
 `smartlab_rich_editor_deploy_rehearsal`), runs non-DB tests, and reports the

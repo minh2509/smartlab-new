@@ -21,10 +21,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.Authentication;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -238,6 +240,14 @@ class RealtimeChatConcurrencyPostgresIntegrationTest {
 
             assertThat(retryResponse.id()).isEqualTo(firstResponse.id());
             assertThat(retryResponse.messageSeq()).isEqualTo(firstResponse.messageSeq());
+            assertThat(jdbc.queryForObject(
+                    "select original_payload_fingerprint from chat_messages where id = ?",
+                    String.class, firstResponse.id())).matches("[0-9a-f]{64}");
+            assertThatThrownBy(() -> chatService.sendMessage(conversation.conversationId(),
+                    new ChatSendMessageRequest(clientMessageId, ChatMessageType.TEXT,
+                            "changed payload", null, null), aliceAuthentication))
+                    .isInstanceOfSatisfying(ResponseStatusException.class,
+                            error -> assertThat(error.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
             assertThat(jdbc.queryForObject(
                     """
                     select count(*)

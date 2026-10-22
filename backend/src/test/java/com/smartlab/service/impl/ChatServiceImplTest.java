@@ -1,7 +1,9 @@
 package com.smartlab.service.impl;
 
+import com.smartlab.dto.request.AddChatMemberRequest;
 import com.smartlab.dto.request.ChangeChatMemberRoleRequest;
 import com.smartlab.dto.request.ChatReadRequest;
+import com.smartlab.dto.request.CreateGroupChatRequest;
 import com.smartlab.dto.request.ChatSendMessageRequest;
 import com.smartlab.dto.request.EditChatMessageRequest;
 import com.smartlab.dto.response.ChatConversationResponse;
@@ -9,6 +11,7 @@ import com.smartlab.dto.response.ChatMessagePageResponse;
 import com.smartlab.dto.response.ChatMessageResponse;
 import com.smartlab.entity.ChatConversationEntity;
 import com.smartlab.entity.ChatConversationMemberEntity;
+import com.smartlab.entity.ChatMessageFileEntity;
 import com.smartlab.entity.ChatMessageEntity;
 import com.smartlab.entity.StoredFileEntity;
 import com.smartlab.entity.UserEntity;
@@ -36,9 +39,11 @@ import org.springframework.security.core.Authentication;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
-import java.util.Collection;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -178,12 +183,16 @@ class ChatServiceImplTest {
 
         ChatMessageResponse response = service.sendMessage(
                 conversation.getConversationId(),
-                new ChatSendMessageRequest("client-1", ChatMessageType.TEXT, "retry", null, null),
+                new ChatSendMessageRequest("client-1", ChatMessageType.TEXT, "hello", null, null),
                 authentication
         );
 
         assertThat(response.id()).isEqualTo(101L);
         assertThat(response.content()).isEqualTo("hello");
+        assertThatThrownBy(() -> service.sendMessage(conversation.getConversationId(),
+                new ChatSendMessageRequest("client-1", ChatMessageType.TEXT, "different", null, null),
+                authentication)).isInstanceOfSatisfying(ResponseStatusException.class,
+                error -> assertThat(error.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
         verify(messages, never()).saveAndFlush(any());
     }
 
@@ -209,7 +218,9 @@ class ChatServiceImplTest {
 
         assertThat(response.messageSeq()).isEqualTo(1L);
         assertThat(conversation.getLastMessageSeq()).isEqualTo(1L);
-        verify(messages).saveAndFlush(any(ChatMessageEntity.class));
+        ArgumentCaptor<ChatMessageEntity> savedMessage = ArgumentCaptor.forClass(ChatMessageEntity.class);
+        verify(messages).saveAndFlush(savedMessage.capture());
+        assertThat(savedMessage.getValue().getOriginalPayloadFingerprint()).hasSize(64);
 
         ArgumentCaptor<Collection<String>> recipients = ArgumentCaptor.forClass(Collection.class);
         verify(publisher).publishAfterCommit(
@@ -436,6 +447,103 @@ class ChatServiceImplTest {
 
         assertThat(message.getDeletedAt()).isNotNull();
         verify(messages).saveAndFlush(message);
+    }
+
+    @Test
+    void groupCapIncludesCreatorAndRejectsAnAdditionalActiveMember() {
+        List<String> hundredInvitees = IntStream.range(0, 100).mapToObj(i -> "member-" + i).toList();
+        assertThatThrownBy(() -> service.createGroup(
+                new CreateGroupChatRequest("Full", hundredInvitees, null), authentication))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        error -> assertThat(error.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+        verify(conversations, never()).saveAndFlush(any());
+
+        ChatConversationEntity group = groupConversation();
+        ChatConversationMemberEntity owner = ChatConversationMemberEntity.create(group, alice, ChatMembershipRole.OWNER);
+        when(conversations.findByConversationIdForUpdate(group.getConversationId())).thenReturn(Optional.of(group));
+        when(members.findMembershipForUpdate(group.getConversationId(), alice.getId())).thenReturn(Optional.of(owner));
+        when(users.findByUserId(bob.getUserId())).thenReturn(Optional.of(bob));
+        when(members.findActiveMembers(group.getConversationId()))
+                .thenReturn(Collections.nCopies(100, owner), Collections.nCopies(99, owner));
+
+        assertThatThrownBy(() -> service.addMember(group.getConversationId(),
+                new AddChatMemberRequest(bob.getUserId()), authentication))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        error -> assertThat(error.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+        verify(members, never()).saveAndFlush(any());
+
+        assertThat(service.addMember(group.getConversationId(),
+                new AddChatMemberRequest(bob.getUserId()), authentication).userId()).isEqualTo(bob.getUserId());
+        verify(members).saveAndFlush(any(ChatConversationMemberEntity.class));
+    }
+
+    @Test
+    void exactRetrySurvivesEditAndComparesReplyFileOrderAndMetadata() {
+        ChatMessageEntity reply = ChatMessageEntity.create(conversation, 1L, bob, "reply", ChatMessageType.TEXT,
+                "previous", null);
+        ReflectionTestUtils.setField(reply, "id", 300L);
+        ChatSendMessageRequest original = new ChatSendMessageRequest("same-id", ChatMessageType.MIXED,
+                "hello", 300L, List.of(55L, 56L), "{\"a\":1}");
+        ChatMessageEntity existing = ChatMessageEntity.create(conversation, 2L, alice, "same-id",
+                ChatMessageType.MIXED, "hello", reply, null, original.metadataJson());
+        ReflectionTestUtils.setField(existing, "id", 101L);
+        existing.recordOriginalPayload(ReflectionTestUtils.invokeMethod(service, "payloadFingerprint",
+                original, original.metadataJson()));
+        StoredFileEntity first = StoredFileEntity.builder().id(55L).accessScope("CHAT").build();
+        StoredFileEntity second = StoredFileEntity.builder().id(56L).accessScope("CHAT").build();
+        when(messageFiles.findByMessageIdOrderByPositionAscIdAsc(101L)).thenReturn(List.of(
+                ChatMessageFileEntity.create(existing, first, 0), ChatMessageFileEntity.create(existing, second, 1)));
+        when(conversations.findByConversationIdForUpdate(conversation.getConversationId()))
+                .thenReturn(Optional.of(conversation));
+        when(members.findMembershipForUpdate(conversation.getConversationId(), alice.getId()))
+                .thenReturn(Optional.of(aliceMember));
+        when(messages.findBySender_IdAndClientMessageId(alice.getId(), "same-id"))
+                .thenReturn(Optional.of(existing));
+
+        existing.edit("edited since send");
+        assertThat(service.sendMessage(conversation.getConversationId(), original, authentication).id())
+                .isEqualTo(101L);
+        List<ChatSendMessageRequest> changed = List.of(
+                new ChatSendMessageRequest("same-id", ChatMessageType.MIXED, "different", 300L,
+                        List.of(55L, 56L), original.metadataJson()),
+                new ChatSendMessageRequest("same-id", ChatMessageType.MIXED, "hello", 301L,
+                        List.of(55L, 56L), original.metadataJson()),
+                new ChatSendMessageRequest("same-id", ChatMessageType.MIXED, "hello", 300L,
+                        List.of(56L, 55L), original.metadataJson()),
+                new ChatSendMessageRequest("same-id", ChatMessageType.MIXED, "hello", 300L,
+                        List.of(55L, 56L), "{\"a\":2}"),
+                new ChatSendMessageRequest("same-id", ChatMessageType.TEXT, "hello", 300L,
+                        null, original.metadataJson()));
+        for (ChatSendMessageRequest request : changed) {
+            assertThatThrownBy(() -> service.sendMessage(conversation.getConversationId(), request, authentication))
+                    .isInstanceOfSatisfying(ResponseStatusException.class,
+                            error -> assertThat(error.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+        }
+        existing.softDelete();
+        assertThat(service.sendMessage(conversation.getConversationId(), original, authentication).id())
+                .isEqualTo(101L);
+        verify(messages, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void gifSourceMustBeAWellFormedHttpsUrlWithoutCredentials() {
+        when(conversations.findByConversationIdForUpdate(conversation.getConversationId()))
+                .thenReturn(Optional.of(conversation));
+        when(members.findMembershipForUpdate(conversation.getConversationId(), alice.getId()))
+                .thenReturn(Optional.of(aliceMember));
+        for (String source : List.of("http://example.test/a.gif", "//example.test/a.gif",
+                "javascript:alert(1)", "https://user@example.test/a.gif", "https://example.test\\@evil.test/a.gif",
+                "https://example.test/a gif", "https://example.test/a.gif\n", "https:///a.gif")) {
+            assertThatThrownBy(() -> service.sendMessage(conversation.getConversationId(),
+                    new ChatSendMessageRequest("gif", ChatMessageType.GIF, source, null, null), authentication))
+                    .isInstanceOfSatisfying(ResponseStatusException.class,
+                            error -> assertThat(error.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+        }
+        verify(messages, never()).saveAndFlush(any());
+        service.sendMessage(conversation.getConversationId(),
+                new ChatSendMessageRequest("valid-gif", ChatMessageType.GIF,
+                        "https://example.test/a.gif?size=2", null, null), authentication);
+        verify(messages).saveAndFlush(any(ChatMessageEntity.class));
     }
 
     private ChatConversationEntity groupConversation() {

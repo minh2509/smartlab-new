@@ -592,6 +592,31 @@ test.describe('SmartLab Realtime Chat Automation Suite', () => {
     await expect(unreadBadge).toHaveText('1')
   })
 
+  test('13b. redelivered background message does not increment unread twice', async ({ page }) => {
+    let sendEvent: ((envelope: any) => void) | null = null
+    await setupMockChatRoutes(page, { onWebSocketConnected: (sender) => { sendEvent = sender } })
+    await page.goto('/')
+    await expect.poll(() => sendEvent !== null).toBeTruthy()
+
+    const envelope = {
+      event: 'chat.message.created', eventId: 'evt-redelivery',
+      occurredAt: new Date().toISOString(), conversationId: 'conv-b',
+      data: {
+        id: 606, conversationId: 'conv-b', messageSeq: 3,
+        sender: { userId: 'user-03', name: 'Thành viên C' },
+        clientMessageId: 'cmsg-redelivery', messageType: 'TEXT',
+        content: 'Chỉ một tin nhắn', replyToMessageId: null, files: [],
+        createdAt: new Date().toISOString(), editedAt: null, deletedAt: null,
+      },
+    }
+    sendEvent!(envelope)
+    await expect(page.locator('.chat-header-btn .notification-count')).toHaveText('1')
+    sendEvent!(envelope)
+    await expect(page.locator('.chat-header-btn .notification-count')).toHaveText('1')
+    await openConvFromHeader(page, 'Thành viên C')
+    await expect(page.locator('.chat-popup-window[data-conversation-id="conv-b"]').getByText('Chỉ một tin nhắn')).toHaveCount(1)
+  })
+
   test('14. viewed conversation advances read state', async ({ page }) => {
     await setupMockChatRoutes(page, { initialUnread: 2 })
     await page.goto('/')
@@ -1118,6 +1143,77 @@ test.describe('SmartLab Realtime Chat Automation Suite', () => {
     await expect(page).toHaveURL(/\/chat\?id=conv-a$/)
     await expect(page.getByRole('main').getByText('Thành viên B').first()).toBeVisible()
     await expect(page.locator('.chat-popup-host')).toBeHidden()
+  })
+
+  test('20c. mobile group created from header opens the full chat route', async ({ page }) => {
+    await setupMockChatRoutes(page)
+    await page.route('**/api/v1.0/members*', (route) => route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify([{ userId: 'user-02', name: 'Thành viên B' }]),
+    }))
+    await page.route('**/api/v1.0/chat/conversations/group', (route) => route.fulfill({
+      status: 201, contentType: 'application/json',
+      body: JSON.stringify({ ...MOCK_CONVERSATIONS[2], conversationId: 'conv-mobile-group',
+        title: 'Nhóm di động', displayName: 'Nhóm di động' }),
+    }))
+    await page.setViewportSize({ width: 375, height: 667 })
+    await page.goto('/')
+
+    await page.locator('.chat-header-btn').click()
+    const popover = page.locator('#chat-popover-panel')
+    await popover.getByRole('button', { name: 'Tạo đoạn chat mới' }).click()
+    await popover.getByRole('button', { name: 'Tạo nhóm nhiều người' }).click()
+    await popover.getByPlaceholder('Tên nhóm chat...').fill('Nhóm di động')
+    await popover.getByRole('button', { name: 'Thành viên B' }).click()
+    await popover.getByRole('button', { name: 'Tạo nhóm (1 thành viên)' }).click()
+
+    await expect(page).toHaveURL(/\/chat\?id=conv-mobile-group$/)
+    await expect(page.locator('.chat-page-main .chat-composer-input')).toBeVisible()
+    await expect(page.locator('.chat-popup-window[data-conversation-id="conv-mobile-group"]')).toHaveCount(0)
+  })
+
+  test('20d. late history response cannot restore a revoked group cache', async ({ page }) => {
+    let sendEvent: ((envelope: any) => void) | null = null
+    let active = true
+    let historyRequests = 0
+    let releaseFirst: (() => void) | null = null
+    let releaseSecond: (() => void) | null = null
+    await setupMockChatRoutes(page, { onWebSocketConnected: (sender) => { sendEvent = sender } })
+    await page.route('**/api/v1.0/chat/conversations', (route) => route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify(active ? MOCK_CONVERSATIONS : MOCK_CONVERSATIONS.filter((c) => c.conversationId !== 'conv-c')),
+    }))
+    await page.route('**/api/v1.0/chat/conversations/conv-c/messages*', async (route) => {
+      const requestNumber = ++historyRequests
+      if (requestNumber === 1) await new Promise<void>((resolve) => { releaseFirst = resolve })
+      if (requestNumber === 2) await new Promise<void>((resolve) => { releaseSecond = resolve })
+      await route.fulfill({
+        status: 200, contentType: 'application/json',
+        body: JSON.stringify({ messages: requestNumber === 1 ? [{
+          ...MOCK_CONVERSATIONS[2].lastMessage, id: 777, content: 'Lịch sử đã bị thu hồi',
+        }] : [], nextBeforeSeq: null, nextAfterSeq: null, hasMore: false }),
+      })
+    })
+    await page.goto('/')
+    await expect.poll(() => sendEvent !== null).toBeTruthy()
+    await openConvFromHeader(page, 'Nhóm AI Robotics')
+    await expect.poll(() => historyRequests).toBe(1)
+
+    active = false
+    sendEvent!({ event: 'chat.member.removed', eventId: 'revoked', occurredAt: new Date().toISOString(),
+      conversationId: 'conv-c', data: { userId: MOCK_PROFILE.userId } })
+    await expect(page.locator('.chat-popup-window[data-conversation-id="conv-c"]')).toHaveCount(0)
+    active = true
+    sendEvent!({ event: 'chat.member.added', eventId: 'rejoined', occurredAt: new Date().toISOString(),
+      conversationId: 'conv-c', data: { userId: MOCK_PROFILE.userId } })
+    await openConvFromHeader(page, 'Nhóm AI Robotics')
+    await expect.poll(() => historyRequests).toBe(2)
+    const firstResponse = page.waitForResponse((response) => response.url().includes('/conv-c/messages') && response.status() === 200)
+    releaseFirst!()
+    await firstResponse
+    await expect(page.locator('.chat-popup-window[data-conversation-id="conv-c"]')
+      .getByText('Lịch sử đã bị thu hồi')).toHaveCount(0)
+    releaseSecond!()
   })
 
   test('21. unauthenticated: chat UI/socket inactive', async ({ page }) => {
